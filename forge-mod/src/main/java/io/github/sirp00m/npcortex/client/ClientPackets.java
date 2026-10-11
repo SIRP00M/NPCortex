@@ -7,8 +7,8 @@ import net.minecraft.network.chat.Component;
 public final class ClientPackets {
     private ClientPackets() {}
 
-    public static void openDialogue(int entityId, String characterId) {
-        Minecraft.getInstance().setScreen(new DialogueScreen(entityId, characterId));
+    public static void openDialogue(int entityId, String characterId, String displayName) {
+        Minecraft.getInstance().setScreen(new DialogueScreen(entityId, characterId, displayName));
     }
 
     public static void receiveReply(int entityId, String reply, boolean success) {

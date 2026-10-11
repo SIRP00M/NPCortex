@@ -118,3 +118,26 @@ The backend binds to `127.0.0.1` by default and has no authentication; **do not 
 ## License
 
 MIT for the original starter code; dependencies and bundled character assets may have separate licenses. Minecraft, Forge, Ollama and Qwen are owned by their respective authors; no model weights are included.
+
+## Phase 5 (v0.3.0-alpha): Custom Characters & Local Skins
+
+Phase 5 adds metadata loading from Character Packs, wide/slim 64x64 PNG skins,
+`/npcortex list`, `/npcortex sync`, and per-NPC in-memory chat session isolation.
+Read [Phase 5 guide](docs/phase-5-character-skins.md) before installing.
+
+```powershell
+cd F:\AI\NPCortex
+.\scripts\install-character.ps1 -Id yui
+.\scripts\install-character.ps1 -Id guide
+.\scripts\phase5-check.ps1
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
+```
+
+The backend must be restarted after upgrading. It provides new endpoints:
+`GET /v1/characters`, `GET /v1/characters/<id>` and optional `session_id`
+on `POST /v1/chat`. With two different NPC entities of the same character,
+conversation history no longer mixes between them; histories remain in RAM.
+
+This source update has Python tests, but **the Java mod still needs a Forge build
+and in-game test on a development machine**. Existing world backups are recommended.

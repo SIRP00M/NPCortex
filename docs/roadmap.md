@@ -48,3 +48,11 @@ Legend: [x] starter source exists; [ ] not implemented/verified.
 ## October 2026: Phase 4 source delivered
 
 Phase 3 has passed live in-game chat testing. Phase 4 adds source for spawn, player-shaped rendering, click-to-chat, follow/stay, NBT persistence. This update still requires a ForgeGradle build and in-game testing before these features may be marked done. See `docs/phase-4-npc.md`.
+
+## Phase 5 source update — v0.3.0-alpha
+
+- Character Pack metadata (display name / skin ID / wide or slim model)
+- Local PNG skin loading via `config/npcortex/skins` (64x64)
+- `/npcortex list` and `/npcortex sync`
+- Per-instance NPC session separation (RAM only)
+- Pending: Forge compile/runClient verification and custom skin runtime test

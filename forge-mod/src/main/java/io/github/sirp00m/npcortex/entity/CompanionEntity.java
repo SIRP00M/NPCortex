@@ -30,6 +30,11 @@ public class CompanionEntity extends PathfinderMob {
     private static final EntityDataAccessor<Boolean> FOLLOWING = SynchedEntityData.defineId(
             CompanionEntity.class, EntityDataSerializers.BOOLEAN);
 
+    private static final EntityDataAccessor<String> SKIN_ID = SynchedEntityData.defineId(
+            CompanionEntity.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Boolean> SLIM_MODEL = SynchedEntityData.defineId(
+            CompanionEntity.class, EntityDataSerializers.BOOLEAN);
+
     @Nullable private UUID ownerUUID;
 
     public CompanionEntity(EntityType<? extends PathfinderMob> type, Level level) {
@@ -49,6 +54,8 @@ public class CompanionEntity extends PathfinderMob {
         super.defineSynchedData();
         entityData.define(CHARACTER_ID, "guide");
         entityData.define(FOLLOWING, true);
+        entityData.define(SKIN_ID, "guide");
+        entityData.define(SLIM_MODEL, false);
     }
 
     @Override
@@ -63,7 +70,26 @@ public class CompanionEntity extends PathfinderMob {
     public void setCharacterId(String id) {
         if (!id.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("Invalid character ID");
         entityData.set(CHARACTER_ID, id);
+        entityData.set(SKIN_ID, id);
         setCustomName(Component.literal(id.substring(0, 1).toUpperCase() + id.substring(1)));
+        setCustomNameVisible(true);
+    }
+
+    public String getSkinId() { return entityData.get(SKIN_ID); }
+    public boolean isSlimModel() { return entityData.get(SLIM_MODEL); }
+
+    /** Profile comes from trusted backend metadata, never from a client packet. */
+    public void applyProfile(String displayName, String skinId, String model) {
+        if (displayName == null || displayName.isBlank() || displayName.length() > 80
+                || skinId == null || !skinId.matches("[a-z][a-z0-9_-]{0,39}")) {
+            throw new IllegalArgumentException("Invalid NPC appearance metadata");
+        }
+        if (!model.equals("slim") && !model.equals("wide")) {
+            throw new IllegalArgumentException("Invalid NPC model");
+        }
+        entityData.set(SKIN_ID, skinId);
+        entityData.set(SLIM_MODEL, model.equals("slim"));
+        setCustomName(Component.literal(displayName));
         setCustomNameVisible(true);
     }
 
@@ -80,7 +106,7 @@ public class CompanionEntity extends PathfinderMob {
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
         if (!level().isClientSide && player instanceof ServerPlayer serverPlayer) {
             NpcNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> serverPlayer),
-                    new OpenDialoguePacket(getId(), getCharacterId()));
+                    new OpenDialoguePacket(getId(), getCharacterId(), getName().getString()));
         }
         return InteractionResult.sidedSuccess(level().isClientSide);
     }
@@ -96,6 +122,8 @@ public class CompanionEntity extends PathfinderMob {
         super.addAdditionalSaveData(tag);
         tag.putString("NPCortexCharacterId", getCharacterId());
         tag.putBoolean("NPCortexFollowing", isFollowing());
+        tag.putString("NPCortexSkinId", getSkinId());
+        tag.putBoolean("NPCortexSlimModel", isSlimModel());
         if (ownerUUID != null) tag.putUUID("NPCortexOwner", ownerUUID);
     }
 
@@ -106,6 +134,11 @@ public class CompanionEntity extends PathfinderMob {
             String id = tag.getString("NPCortexCharacterId");
             if (id.matches("[a-zA-Z0-9_-]{1,64}")) setCharacterId(id);
         }
+        if (tag.contains("NPCortexSkinId")) {
+            String skin = tag.getString("NPCortexSkinId");
+            if (skin.matches("[a-z][a-z0-9_-]{0,39}")) entityData.set(SKIN_ID, skin);
+        }
+        entityData.set(SLIM_MODEL, tag.getBoolean("NPCortexSlimModel"));
         setFollowing(!tag.contains("NPCortexFollowing") || tag.getBoolean("NPCortexFollowing"));
         ownerUUID = tag.hasUUID("NPCortexOwner") ? tag.getUUID("NPCortexOwner") : null;
     }

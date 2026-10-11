@@ -15,15 +15,17 @@ import org.lwjgl.glfw.GLFW;
 public final class DialogueScreen extends Screen {
     private final int npcEntityId;
     private final String characterId;
+    private final String displayName;
     private EditBox input;
     private Button sendButton;
     private String answer = "Say hello to your companion.";
     private boolean waiting = false;
 
-    public DialogueScreen(int npcEntityId, String characterId) {
+    public DialogueScreen(int npcEntityId, String characterId, String displayName) {
         super(Component.literal("NPCortex Dialogue"));
         this.npcEntityId = npcEntityId;
         this.characterId = characterId;
+        this.displayName = displayName;
     }
 
     @Override
@@ -82,7 +84,7 @@ public final class DialogueScreen extends Screen {
         int top = (height - 194) / 2;
         graphics.fill(left, top, left + panelWidth, top + 194, 0xEE181F27);
         graphics.fill(left, top, left + panelWidth, top + 2, 0xFF829B68);
-        graphics.drawString(font, "NPCortex / " + characterId, left + 12, top + 14, 0xFFE0E7D4, false);
+        graphics.drawString(font, "NPCortex / " + displayName, left + 12, top + 14, 0xFFE0E7D4, false);
         graphics.drawString(font, "Right-click a companion to talk. Esc closes.",
                 left + 12, top + 29, 0xFFB6B9AD, false);
         List<FormattedCharSequence> lines = font.split(Component.literal(answer), panelWidth - 26);

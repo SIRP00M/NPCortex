@@ -71,6 +71,29 @@ public final class NPCortex {
                                             }));
                                             return 1;
                                         }))))
+                .then(Commands.literal("list").executes(context -> {
+                    var source = context.getSource();
+                    source.sendSuccess(() -> Component.literal("NPCortex: Loading character packs..."), false);
+                    ChatBridge.characters().whenComplete((items, error) -> source.getServer().execute(() -> {
+                        if (error != null) {
+                            source.sendFailure(Component.literal("NPCortex: Cannot load character list from backend."));
+                        } else {
+                            source.sendSuccess(() -> Component.literal(
+                                    "NPCortex characters: " + (items.isEmpty() ? "(none)" : String.join(", ", items))), false);
+                        }
+                    }));
+                    return 1;
+                }))
+                .then(Commands.literal("sync").executes(context -> {
+                    ServerPlayer player = context.getSource().getPlayerOrException();
+                    CompanionEntity npc = nearestCompanion(player);
+                    if (npc == null) {
+                        player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
+                        return 0;
+                    }
+                    refreshCharacter(player, npc);
+                    return 1;
+                }))
                 .then(Commands.literal("spawn")
                         .then(Commands.argument("character", StringArgumentType.word())
                                 .executes(context -> {
@@ -101,18 +124,38 @@ public final class NPCortex {
                                     }
                                     context.getSource().sendSuccess(() -> Component.literal(
                                             "NPCortex: Spawned " + id + ". Right-click to chat."), false);
+                                    refreshCharacter(player, npc);
                                     return 1;
                                 })))
                 .then(Commands.literal("follow").executes(context -> setFollow(context.getSource().getPlayerOrException(), true)))
                 .then(Commands.literal("stay").executes(context -> setFollow(context.getSource().getPlayerOrException(), false))));
     }
 
-    private static int setFollow(ServerPlayer player, boolean following) {
-        List<CompanionEntity> nearby = player.serverLevel().getEntitiesOfClass(
-                CompanionEntity.class, player.getBoundingBox().inflate(12.0D),
-                npc -> player.getUUID().equals(npc.getOwnerUUID()));
-        CompanionEntity npc = nearby.stream()
+    /** The backend is authoritative for display metadata. Never block the game tick waiting for it. */
+    private static void refreshCharacter(ServerPlayer player, CompanionEntity npc) {
+        String id = npc.getCharacterId();
+        ChatBridge.character(id).whenComplete((profile, error) -> player.getServer().execute(() -> {
+            if (npc.isRemoved()) return;
+            if (error != null) {
+                player.sendSystemMessage(Component.literal(
+                        "NPCortex: Cannot load character '" + id + "'; keeping fallback appearance. Check backend pack."));
+                return;
+            }
+            npc.applyProfile(profile.name(), profile.skin(), profile.model());
+            player.sendSystemMessage(Component.literal(
+                    "NPCortex: Loaded " + profile.name() + " | skin=" + profile.skin() + " | model=" + profile.model()));
+        }));
+    }
+
+    private static CompanionEntity nearestCompanion(ServerPlayer player) {
+        return player.serverLevel().getEntitiesOfClass(
+                        CompanionEntity.class, player.getBoundingBox().inflate(12.0D),
+                        npc -> player.getUUID().equals(npc.getOwnerUUID())).stream()
                 .min(Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+    }
+
+    private static int setFollow(ServerPlayer player, boolean following) {
+        CompanionEntity npc = nearestCompanion(player);
         if (npc == null) {
             player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
             return 0;

@@ -24,3 +24,8 @@ To add a character:
 The backend currently supports only a name, language label and system prompt; adding JSON fields alone does not create movement, inventory, skin, relationships or abilities. Those features require explicit implementation and validation.
 
 Future format: metadata, portraits/skins, language assets, behavior capabilities, optional event hooks, import/export checks and documented schema migrations.
+
+## v0.3 Phase 5: skins and name metadata
+
+See [Phase 5 character and skin guide](phase-5-character-skins.md) for JSON format,
+64x64 PNG placement, wide/slim model selection, and the install script.

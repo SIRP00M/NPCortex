@@ -50,7 +50,7 @@ public record DialogueRequestPacket(int entityId, String message) {
             player.getPersistentData().putLong("NPCortexLastChatTick", now);
             String characterId = npc.getCharacterId(); // never accept character IDs from client packets
             try {
-                ChatBridge.ask(characterId, userId.toString(), text)
+                ChatBridge.ask(characterId, userId.toString(), text, npc.getUUID().toString())
                         .whenComplete((reply, error) -> player.getServer().execute(() -> {
                             IN_FLIGHT.remove(userId);
                             ServerPlayer online = player.getServer().getPlayerList().getPlayer(userId);

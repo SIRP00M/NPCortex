@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.env
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# Forge / Gradle
+.gradle/
+**/build/
+**/run/
+**/runs/
+**/out/
+# NPCortex local generated data (do not commit player data)
+data/
+logs/
+# models should never be committed
+*.gguf
+*.safetensors

@@ -1,4 +1,4 @@
-"""Local, no-dependency prototype HTTP API. Not a public internet server."""
+"""Local-only HTTP backend; not safe to expose on the public internet."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
@@ -13,7 +13,7 @@ MAX_BODY = 8192
 
 def make_handler(service):
     class Handler(BaseHTTPRequestHandler):
-        def _json(self, status: int, payload: dict):
+        def _json(self, status: int, payload):
             raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -24,9 +24,16 @@ def make_handler(service):
 
         def do_GET(self):
             if self.path == "/health":
-                self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
-            else:
-                self._json(404, {"error": "Not found"})
+                return self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
+            if self.path == "/v1/characters":
+                return self._json(200, {"characters": service.characters()})
+            if self.path.startswith("/v1/characters/"):
+                character_id = self.path[len("/v1/characters/"):]
+                try:
+                    return self._json(200, service.character(character_id))
+                except CharacterError as exc:
+                    return self._json(404, {"error": str(exc)})
+            return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
             if self.path != "/v1/chat":
@@ -46,12 +53,15 @@ def make_handler(service):
             character_id = data.get("character_id")
             player_id = data.get("player_id")
             message = data.get("message")
+            session_id = data.get("session_id")
             if not isinstance(character_id, str) or not isinstance(player_id, str) or not ID_PATTERN.fullmatch(player_id):
                 return self._json(400, {"error": "Invalid character_id or player_id"})
+            if session_id is not None and (not isinstance(session_id, str) or not ID_PATTERN.fullmatch(session_id)):
+                return self._json(400, {"error": "Invalid session_id"})
             if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
                 return self._json(400, {"error": "Message must contain 1–2000 characters"})
             try:
-                return self._json(200, service.chat(character_id, player_id, message.strip()))
+                return self._json(200, service.chat(character_id, player_id, message.strip(), session_id))
             except CharacterError as exc:
                 return self._json(400, {"error": str(exc)})
             except ModelError:
