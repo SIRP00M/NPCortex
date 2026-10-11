@@ -1,6 +1,8 @@
 package io.github.sirp00m.npcortex.network;
 
 import io.github.sirp00m.npcortex.ChatBridge;
+import io.github.sirp00m.npcortex.WorldActions;
+import io.github.sirp00m.npcortex.WorldObservation;
 import io.github.sirp00m.npcortex.entity.CompanionEntity;
 import java.util.Set;
 import java.util.UUID;
@@ -50,7 +52,8 @@ public record DialogueRequestPacket(int entityId, String message) {
             player.getPersistentData().putLong("NPCortexLastChatTick", now);
             String characterId = npc.getCharacterId(); // never accept character IDs from client packets
             try {
-                ChatBridge.ask(characterId, userId.toString(), text, npc.getUUID().toString())
+                ChatBridge.agent(characterId, userId.toString(), text,
+                                npc.getUUID().toString(), WorldObservation.capture(player, npc))
                         .whenComplete((reply, error) -> player.getServer().execute(() -> {
                             IN_FLIGHT.remove(userId);
                             ServerPlayer online = player.getServer().getPlayerList().getPlayer(userId);
@@ -59,8 +62,19 @@ public record DialogueRequestPacket(int entityId, String message) {
                                 send(online, packet.entityId,
                                         "AI unavailable. Verify the NPCortex Backend and Ollama are running.", false);
                             } else {
-                                send(online, packet.entityId,
-                                        reply.length() > 4096 ? reply.substring(0, 4096) : reply, true);
+                                Entity current = online.level().getEntity(packet.entityId);
+                                String actionResult;
+                                if (!(current instanceof CompanionEntity currentNpc)
+                                        || !current.getUUID().equals(npc.getUUID())) {
+                                    actionResult = "[Action skipped: NPC no longer available.]";
+                                } else {
+                                    actionResult = WorldActions.execute(online, currentNpc, reply.action());
+                                }
+                                // For a denied action do not display any claim of successful execution.
+                                String textReply = actionResult.startsWith("[Action blocked")
+                                        || actionResult.startsWith("[Action skipped")
+                                        ? actionResult : reply.reply() + (actionResult.isEmpty() ? "" : "\n" + actionResult);
+                                send(online, packet.entityId, textReply, true);
                             }
                         }));
             } catch (RuntimeException error) {

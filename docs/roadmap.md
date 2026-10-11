@@ -56,3 +56,15 @@ Phase 3 has passed live in-game chat testing. Phase 4 adds source for spawn, pla
 - `/npcortex list` and `/npcortex sync`
 - Per-instance NPC session separation (RAM only)
 - Pending: Forge compile/runClient verification and custom skin runtime test
+
+## Phase 6 — v0.4.0-alpha source update
+
+- [x] Minecraft server-side one-shot world observation when NPC dialogue is sent
+- [x] Backend `/v1/agent` JSON-schema response + output allowlist validation
+- [x] Minecraft owner/range/entity checks for `follow`, `stay`, `look_at_player`
+- [x] Debug commands `/npcortex observe`, `/npcortex actions`
+- [x] Python HTTP/unit regression tests
+- [ ] Phase 6 Forge build and Minecraft gameplay verified by developer
+- [ ] Continuous perception, autonomy, item gathering, combat (not included)
+
+- **v0.4.2-alpha:** ESC/Pause In-Game Manager for client-local skin import, hot reload, and companion appearance selection. Backend personality editing remains manual until a permissioned management API is designed.

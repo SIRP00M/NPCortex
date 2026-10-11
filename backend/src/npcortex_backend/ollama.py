@@ -11,7 +11,14 @@ class OllamaProvider:
         self.base_url = base_url.rstrip("/")
         self.model = model
 
+    def chat_structured(self, messages: list[dict[str, str]], schema: dict) -> str:
+        """Ask Ollama for a validated JSON result; strict parsing lives in agent.py."""
+        return self._request(messages, schema)
+
     def chat(self, messages: list[dict[str, str]]) -> str:
+        return self._request(messages)
+
+    def _request(self, messages: list[dict[str, str]], schema: dict | None = None) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
@@ -19,6 +26,9 @@ class OllamaProvider:
             "think": False,
             "options": {"num_ctx": 4096, "num_predict": 160},
         }
+        if schema is not None:
+            payload["format"] = schema
+            payload["options"]["num_predict"] = 240
         req = Request(
             self.base_url + "/api/chat",
             data=json.dumps(payload).encode("utf-8"),

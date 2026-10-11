@@ -36,6 +36,7 @@ public class CompanionEntity extends PathfinderMob {
             CompanionEntity.class, EntityDataSerializers.BOOLEAN);
 
     @Nullable private UUID ownerUUID;
+    private int lookAtOwnerTicks;
 
     public CompanionEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -93,12 +94,39 @@ public class CompanionEntity extends PathfinderMob {
         setCustomNameVisible(true);
     }
 
+    /** Server-authoritative local skin selection; persists in the world save. */
+    public void setAppearanceOverride(String skinId, boolean slim) {
+        if (skinId == null || !skinId.matches("[a-z][a-z0-9_-]{0,39}"))
+            throw new IllegalArgumentException("Invalid skin ID");
+        entityData.set(SKIN_ID, skinId);
+        entityData.set(SLIM_MODEL, slim);
+    }
+
     @Nullable public UUID getOwnerUUID() { return ownerUUID; }
     public void setOwnerUUID(@Nullable UUID uuid) { ownerUUID = uuid; }
     public boolean isFollowing() { return entityData.get(FOLLOWING); }
     public void setFollowing(boolean following) {
         entityData.set(FOLLOWING, following);
         if (!following) getNavigation().stop();
+    }
+
+    /** Temporary look action, independent of any LLM state. */
+    public void lookAtPlayerFor(int ticks) {
+        lookAtOwnerTicks = Math.max(0, Math.min(ticks, 200));
+    }
+
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        if (!level().isClientSide && lookAtOwnerTicks > 0) {
+            --lookAtOwnerTicks;
+            if (ownerUUID != null && level() instanceof net.minecraft.server.level.ServerLevel world) {
+                ServerPlayer owner = world.getServer().getPlayerList().getPlayer(ownerUUID);
+                if (owner != null && owner.level() == level() && distanceToSqr(owner) < 256.0D) {
+                    getLookControl().setLookAt(owner, 30.0F, getMaxHeadXRot());
+                }
+            }
+        }
     }
 
     @Override

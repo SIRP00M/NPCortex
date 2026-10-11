@@ -20,6 +20,7 @@ public final class ChatBridge {
             .connectTimeout(Duration.ofSeconds(5)).build();
 
     public record CharacterProfile(String id, String name, String skin, String model) {}
+    public record AgentReply(String reply, String action) {}
 
     private ChatBridge() {}
 
@@ -107,6 +108,35 @@ public final class ChatBridge {
                         throw new IllegalStateException("Backend reply missing");
                     }
                     return payload.get("reply").getAsString();
+                });
+    }
+
+    /** World snapshots are server-generated. Structured actions are never executed here. */
+    public static CompletableFuture<AgentReply> agent(String characterId, String playerId,
+            String message, String sessionId, JsonObject world) {
+        JsonObject body = new JsonObject();
+        body.addProperty("character_id", characterId);
+        body.addProperty("player_id", playerId);
+        body.addProperty("message", message);
+        body.addProperty("session_id", sessionId);
+        body.add("world", world);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/v1/agent"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(95))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    ensureSuccess(response.statusCode());
+                    JsonObject data = JsonParser.parseString(response.body()).getAsJsonObject();
+                    String reply = data.get("reply").getAsString();
+                    String action = data.get("action").getAsString();
+                    if (reply.isBlank() || reply.length() > 1600 ||
+                            !(action.equals("none") || action.equals("follow")
+                                || action.equals("stay") || action.equals("look_at_player"))) {
+                        throw new IllegalArgumentException("Invalid agent response");
+                    }
+                    return new AgentReply(reply, action);
                 });
     }
 

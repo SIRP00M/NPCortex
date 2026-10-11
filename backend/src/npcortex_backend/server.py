@@ -36,7 +36,7 @@ def make_handler(service):
             return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
-            if self.path != "/v1/chat":
+            if self.path not in ("/v1/chat", "/v1/agent"):
                 return self._json(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -61,6 +61,16 @@ def make_handler(service):
             if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
                 return self._json(400, {"error": "Message must contain 1–2000 characters"})
             try:
+                if self.path == "/v1/agent":
+                    if session_id is None:
+                        return self._json(400, {"error": "session_id required for agent requests"})
+                    try:
+                        from .agent import sanitize_observation
+                        world = sanitize_observation(data.get("world"))
+                    except ValueError as exc:
+                        return self._json(400, {"error": str(exc)})
+                    return self._json(200, service.agent(character_id, player_id,
+                                                         message.strip(), session_id, world))
                 return self._json(200, service.chat(character_id, player_id, message.strip(), session_id))
             except CharacterError as exc:
                 return self._json(400, {"error": str(exc)})

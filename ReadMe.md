@@ -6,7 +6,7 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.2.0-alpha` Phase 4 source update.** Phase 3 (Forge chat commands + Python backend + Qwen 3 8B) has been **tested in-game by the initial project developer**. Phase 4 now adds the source for a generic spawnable companion, vanilla player-shaped renderer, click-to-chat UI and basic follow/stay behavior. **The Phase 4 Java build and in-game behavior have not yet been verified.** No combat, TaCZ integration, advanced navigation or persistent conversation memory yet.
+**Project status: `v0.4.2-alpha` In-Game Manager source update.** The project developer has reported Phases 3–6 functioning in Minecraft (AI dialogue, spawned NPCs, custom characters, world awareness and actions), with a remaining skin display issue addressed by the manager and hot reload update. **This v0.4.2 Forge UI update still requires an on-machine Java build and game test.** No combat, TaCZ integration, autonomous scanning or persistent dialogue memory yet.
 
 ## Repository layout
 
@@ -86,7 +86,7 @@ Start the Python backend and create a **single-player test world with Allow Chea
 /npcortex ask yui Hey Yui! Want to explore the forest?
 ```
 
-The `/npcortex ask` command sends a chat request asynchronously through the backend. Phase 3 has already been verified in-game by the project developer. **Phase 4 adds a real entity and a screen that must still be built and playtested:**
+The `/npcortex ask` command sends a chat request asynchronously through the backend. Phase 3 has already been verified in-game by the project developer. **Phase 4 added real NPC entities and right-click dialogue (developer-reported working):**
 
 ```text
 /npcortex spawn yui
@@ -94,7 +94,7 @@ The `/npcortex ask` command sends a chat request asynchronously through the back
 /npcortex follow
 ```
 
-Right-click the newly spawned NPC to open a local chat screen. Read [Phase 4 Windows & test instructions](docs/phase-4-npc.md) before trying it. The renderer currently uses a vanilla player skin placeholder.
+Right-click the newly spawned NPC to open a local chat screen. Read [Phase 4 Windows & test instructions](docs/phase-4-npc.md) before trying it. Phase 5 added local custom PNG skins and character metadata, tested in-game by the developer.
 
 ## How to customize
 
@@ -103,9 +103,9 @@ Copy `character-packs/guide/` to `character-packs/my_npc/`; change the JSON fiel
 ## Roadmap
 
 - **v0.1:** Local English chat, character packs, minimal Forge command (starter implementation).
-- **v0.2:** Generic NPC entity + click-to-chat GUI + basic follow/stay (Phase 4 source update, build verification pending).
-- **v0.3:** Persistent NPC memory, relationship state and player profiles.
-- **v0.4:** Safe validated LLM action execution, improved follow/stay/pathfinding and recovery.
+- **v0.2:** Generic NPC entity + click-to-chat GUI + basic follow/stay (reported working).
+- **v0.3:** Character packs, per-NPC in-RAM chat sessions, and local PNG skins (reported working).
+- **v0.4:** Contextual world snapshots + validated follow/stay/look action proposals (source ready; gameplay verification pending).
 - **v0.5:** Optional TaCZ / other mod integrations, combat compatibility testing.
 - **Later:** Thai localization, richer behaviors, more LLM providers.
 
@@ -139,5 +139,53 @@ The backend must be restarted after upgrading. It provides new endpoints:
 on `POST /v1/chat`. With two different NPC entities of the same character,
 conversation history no longer mixes between them; histories remain in RAM.
 
-This source update has Python tests, but **the Java mod still needs a Forge build
-and in-game test on a development machine**. Existing world backups are recommended.
+The initial developer has reported Phase 5 working in Minecraft. Keep world backups before upgrading.
+
+## Phase 6 (v0.4.0-alpha): AI World Awareness & Actions
+
+A right-click dialogue now sends a bounded **real game-world snapshot** to the local
+Qwen 3 8B model. The model proposes an allowlisted action; **only the server**
+can apply it after verifying proximity, NPC identity, and player ownership.
+This does **not** add autonomous scanning, attacking, mining, or crafting.
+
+```powershell
+cd F:\AI\NPCortex
+.\scripts\dev-backend.ps1            # terminal A: restart backend after update
+# Terminal B:
+.\scripts\phase6-check.ps1
+.\scripts\test-agent.ps1            # synthetic snapshot, NOT actual in-game data
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
+```
+
+Inside a **test world with cheats on**:
+
+```text
+/npcortex spawn yui
+/npcortex observe
+/npcortex actions
+```
+
+Right-click Yui and say `What can you see nearby?`, `Please stay`, or
+`Please follow me`. Server-executed actions are tagged `[Action confirmed: ...]`.
+Read the [Phase 6 guide](docs/phase-6-world-actions.md) for the data schema,
+security rules, Windows installation, test plan and known limitations.
+
+**Verification:** Python tests passed; Phase 6 was reported working by the project developer.
+The new v0.4.2 in-game skin manager has not yet been Forge-built or game-tested in this release environment.
+
+## v0.4.2-alpha — ESC In-Game Character Manager (client skin hotfix)
+
+Adds an **NPCortex Manager** button to the in-game ESC/Pause screen, a local PNG
+importer with file-picker and drag-and-drop, a preview of the raw skin atlas,
+correct active-instance folder access, GPU texture hot-reload, nearby NPC
+selection, and server-validated skin ID / wide-or-slim model changes.
+Character Pack JSON editing remains backend-side. The Python API is unchanged.
+See [In-Game Manager guide](docs/in-game-manager.md) for limitations and install steps.
+
+```powershell
+cd F:\AI\NPCortex
+.\scripts\manager-check.ps1
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
+```

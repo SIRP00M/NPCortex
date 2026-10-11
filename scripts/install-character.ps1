@@ -43,5 +43,5 @@ New-Item -ItemType Directory -Force -Path $skinsDir | Out-Null
 Copy-Item -LiteralPath $png -Destination (Join-Path $skinsDir "$skinId.png") -Force
 Write-Host "NPCortex: Installed '$Id' skin '$skinId' to $skinsDir" -ForegroundColor Green
 Write-Host "Character metadata: $destinationPack\character.json"
-Write-Host 'If Minecraft is already open, restart it to reload the skin PNG.'
+Write-Host 'If Minecraft is running, use ESC > NPCortex Manager > Reload Skin to refresh the texture.'
 Write-Host 'To update existing NPC names/model from an edited pack, use /npcortex sync near the NPC.'
