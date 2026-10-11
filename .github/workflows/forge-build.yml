@@ -1,0 +1,31 @@
+name: Forge 1.20.1 build
+on:
+  push:
+    paths:
+      - 'forge-mod/**'
+      - 'scripts/setup-forge-wrapper.ps1'
+      - '.github/workflows/forge-build.yml'
+  pull_request:
+    paths:
+      - 'forge-mod/**'
+      - 'scripts/setup-forge-wrapper.ps1'
+      - '.github/workflows/forge-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Bootstrap verified official Forge MDK Gradle wrapper
+        shell: pwsh
+        run: ./scripts/setup-forge-wrapper.ps1
+      - name: Compile and package Forge mod
+        working-directory: forge-mod
+        shell: pwsh
+        run: ./gradlew.bat build --no-daemon

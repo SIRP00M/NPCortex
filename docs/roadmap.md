@@ -8,8 +8,8 @@ Legend: [x] starter source exists; [ ] not implemented/verified.
 - [x] Python HTTP chat endpoint with JSON validation
 - [x] Example character packs (Guide, Yui)
 - [x] In-memory per-player / per-character chat context
-- [x] Minimal Forge `/npcortex ask <character> <message>` command source
-- [x] Python unit tests and GitHub Actions configuration
+- [x] Forge `/npcortex status` and `/npcortex ask <character> <message>` command source
+- [x] Python unit tests and GitHub Actions source for Python and Forge builds (Forge job awaits first run)
 - [ ] ForgeGradle build and in-game connection verified on a developer workstation
 - [ ] Reliable timeout/recovery and logging tests under game load
 

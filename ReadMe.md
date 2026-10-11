@@ -6,7 +6,7 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.1.0-alpha` scaffold.** The Python HTTP backend, in-memory chat sessions, example character packs and a minimal Forge `/npcortex ask` command bridge are implemented as starter source. They have *not* been tested together inside Minecraft. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, persistent memory, or multiplayer authentication yet**.
+**Project status: `v0.1.1-alpha` Phase 3 scaffold.** The Python HTTP backend, in-memory chat sessions, example character packs and a Forge `/npcortex status` and `/npcortex ask` developer command bridge are implemented as starter source. They have *not* been tested together inside Minecraft. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, persistent memory, or multiplayer authentication yet**.
 
 ## Repository layout
 
@@ -23,7 +23,7 @@ NPCortex/
 ├── integrations/           # Optional integrations; nothing is active yet
 ├── docs/                   # Architecture, API contract, character packs, roadmap
 ├── scripts/                # Development commands and Forge wrapper bootstrap
-├── .github/workflows/      # CI for Python backend
+├── .github/workflows/      # Python and Forge CI (requires network)
 ├── LICENSE                 # MIT license for original code
 └── CONTRIBUTING.md
 ```
@@ -67,20 +67,22 @@ The backend communicates with Ollama at `http://127.0.0.1:11434/api/chat`. Qwen 
 
 ## Quick start — Forge mod (developer setup)
 
-The Forge sources and Gradle build files are included. The official Forge MDK Gradle wrapper binary is deliberately **not** shipped inside this scaffold. Bootstrap it from the official recommended MDK (SHA-1 checked):
+The Forge sources and Gradle build files are included. The official Forge MDK Gradle wrapper binary is deliberately **not** shipped inside this scaffold. Our launcher bootstraps it from the recommended MDK (SHA-1 checked). **Use a JDK 17 (not Java 21)**:
 
 ```powershell
-.\scripts\setup-forge-wrapper.ps1
-cd forge-mod
-.\gradlew.bat genIntellijRuns
-.\gradlew.bat runClient
+.\scripts\phase3-check.ps1
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
 ```
+
+For PowerShell script restrictions, run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` once (if permitted). See [Phase 3 Windows guide](docs/phase-3-forge.md).
 
 You need **JDK 17** selected for Gradle. Downloading Gradle and Minecraft dependencies requires internet access. The first launch can take a while. If the Forge wrapper setup cannot download from the official URL, download the MDK for `1.20.1-47.4.10` manually from [Minecraft Forge downloads](https://files.minecraftforge.net/net/minecraftforge/forge/index_1.20.1.html) and copy only the Gradle wrapper files into `forge-mod`.
 
-Start the Python backend before using this in-game command:
+Start the Python backend and create a **single-player test world with Allow Cheats ON** (developer commands require operator permission) before using:
 
 ```text
+/npcortex status
 /npcortex ask yui Hey Yui! Want to explore the forest?
 ```
 

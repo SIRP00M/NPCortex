@@ -29,7 +29,7 @@ $env:NPCORTEX_PORT = '8765'
 
 ## Forge
 
-Run `scripts/setup-forge-wrapper.ps1` from root first. This downloads the official Forge 47.4.10 MDK, verifies published SHA-1 and copies the wrapper files. Use JDK 17, then `cd forge-mod; .\gradlew.bat runClient`.
+Run `scripts/setup-forge-wrapper.ps1` from root first. This downloads the official Forge 47.4.10 MDK, verifies published SHA-1 and copies the wrapper files. Use JDK 17, then `.\scripts\phase3-check.ps1` and `.\scripts\dev-forge.ps1 -Task runClient` from the root. See [Phase 3](phase-3-forge.md).
 
 This scaffold has not been built against a live ForgeGradle environment in the generation environment. Treat the Java command as a starting implementation and report build issues via GitHub issues; do not claim it is battle tested.
 

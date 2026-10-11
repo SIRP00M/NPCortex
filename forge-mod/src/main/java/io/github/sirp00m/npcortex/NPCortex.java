@@ -10,7 +10,9 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 
-/** Minimal Forge integration: /npcortex ask <character> <message>. */
+import java.util.concurrent.CompletableFuture;
+
+/** Phase 3: developer-only command bridge. No NPC entity is spawned yet. */
 @Mod(NPCortex.MOD_ID)
 public final class NPCortex {
     public static final String MOD_ID = "npcortex";
@@ -23,6 +25,25 @@ public final class NPCortex {
     private static void registerCommands(RegisterCommandsEvent event) {
         event.getDispatcher().register(
                 Commands.literal("npcortex")
+                        // This is a developer command; limit access to operators in multiplayer.
+                        // Enable cheats in a local test world to use it.
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("status")
+                                .executes(context -> {
+                                    var source = context.getSource();
+                                    source.sendSuccess(() -> Component.literal("NPCortex: Checking backend...")
+                                            .withStyle(ChatFormatting.GRAY), false);
+                                    CompletableFuture<String> future = ChatBridge.health();
+                                    future.whenComplete((result, error) -> source.getServer().execute(() -> {
+                                        if (error != null) {
+                                            source.sendFailure(Component.literal("NPCortex: Backend unreachable. Check the Python server."));
+                                        } else {
+                                            source.sendSuccess(() -> Component.literal("NPCortex: " + result)
+                                                    .withStyle(ChatFormatting.GREEN), false);
+                                        }
+                                    }));
+                                    return 1;
+                                }))
                         .then(Commands.literal("ask")
                                 .then(Commands.argument("character", StringArgumentType.word())
                                         .then(Commands.argument("message", StringArgumentType.greedyString())
@@ -33,16 +54,17 @@ public final class NPCortex {
                                                     String message = StringArgumentType.getString(context, "message");
                                                     source.sendSuccess(() -> Component.literal("NPCortex: Thinking...")
                                                             .withStyle(ChatFormatting.GRAY), false);
-                                                    ChatBridge.ask(characterId, player.getUUID().toString(), message)
-                                                            .whenComplete((reply, error) -> source.getServer().execute(() -> {
-                                                                if (error != null) {
-                                                                    source.sendFailure(Component.literal(
-                                                                            "NPCortex backend unavailable: " + error.getClass().getSimpleName()));
-                                                                } else {
-                                                                    source.sendSuccess(() -> Component.literal(
-                                                                            characterId + ": " + reply), false);
-                                                                }
-                                                            }));
+                                                    CompletableFuture<String> future = ChatBridge.ask(
+                                                            characterId, player.getUUID().toString(), message);
+                                                    future.whenComplete((reply, error) -> source.getServer().execute(() -> {
+                                                        if (error != null) {
+                                                            source.sendFailure(Component.literal(
+                                                                    "NPCortex: Chat failed. Check backend console and character ID."));
+                                                        } else {
+                                                            source.sendSuccess(() -> Component.literal(
+                                                                    characterId + ": " + reply), false);
+                                                        }
+                                                    }));
                                                     return 1;
                                                 })))));
     }
