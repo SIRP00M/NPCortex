@@ -6,7 +6,7 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.1.1-alpha` Phase 3 scaffold.** The Python HTTP backend, in-memory chat sessions, example character packs and a Forge `/npcortex status` and `/npcortex ask` developer command bridge are implemented as starter source. They have *not* been tested together inside Minecraft. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, persistent memory, or multiplayer authentication yet**.
+**Project status: `v0.2.0-alpha` Phase 4 source update.** Phase 3 (Forge chat commands + Python backend + Qwen 3 8B) has been **tested in-game by the initial project developer**. Phase 4 now adds the source for a generic spawnable companion, vanilla player-shaped renderer, click-to-chat UI and basic follow/stay behavior. **The Phase 4 Java build and in-game behavior have not yet been verified.** No combat, TaCZ integration, advanced navigation or persistent conversation memory yet.
 
 ## Repository layout
 
@@ -86,7 +86,15 @@ Start the Python backend and create a **single-player test world with Allow Chea
 /npcortex ask yui Hey Yui! Want to explore the forest?
 ```
 
-The server sends the chat request to the local backend asynchronously and sends the reply back to the player's chat. **This command is a developer integration test, not an actual NPC dialogue UI.** The Forge command bridge is currently source-only and **not verified through a complete ForgeGradle build or game launch**.
+The `/npcortex ask` command sends a chat request asynchronously through the backend. Phase 3 has already been verified in-game by the project developer. **Phase 4 adds a real entity and a screen that must still be built and playtested:**
+
+```text
+/npcortex spawn yui
+/npcortex stay
+/npcortex follow
+```
+
+Right-click the newly spawned NPC to open a local chat screen. Read [Phase 4 Windows & test instructions](docs/phase-4-npc.md) before trying it. The renderer currently uses a vanilla player skin placeholder.
 
 ## How to customize
 
@@ -95,13 +103,13 @@ Copy `character-packs/guide/` to `character-packs/my_npc/`; change the JSON fiel
 ## Roadmap
 
 - **v0.1:** Local English chat, character packs, minimal Forge command (starter implementation).
-- **v0.2:** Real NPC entity and in-game conversation UI.
+- **v0.2:** Generic NPC entity + click-to-chat GUI + basic follow/stay (Phase 4 source update, build verification pending).
 - **v0.3:** Persistent NPC memory, relationship state and player profiles.
-- **v0.4:** Safe validated action execution, follow/stay/pathfinding.
+- **v0.4:** Safe validated LLM action execution, improved follow/stay/pathfinding and recovery.
 - **v0.5:** Optional TaCZ / other mod integrations, combat compatibility testing.
 - **Later:** Thai localization, richer behaviors, more LLM providers.
 
-See [Roadmap](docs/roadmap.md) and [Architecture](docs/architecture.md).
+See [Roadmap](docs/roadmap.md), [Phase 4 guide](docs/phase-4-npc.md) and [Architecture](docs/architecture.md).
 
 ## Security and compatibility
 

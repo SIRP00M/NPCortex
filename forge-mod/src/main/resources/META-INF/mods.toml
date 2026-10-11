@@ -4,7 +4,7 @@ license="MIT"
 
 [[mods]]
 modId="npcortex"
-version="0.1.1-alpha"
+version="0.2.0-alpha"
 displayName="NPCortex"
 authors="NPCortex contributors"
 description="Modular local-AI companion framework (early development scaffold)."

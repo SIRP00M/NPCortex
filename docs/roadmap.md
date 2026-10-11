@@ -43,3 +43,8 @@ Legend: [x] starter source exists; [ ] not implemented/verified.
 - [ ] Multiple LLM providers via plugin interface
 - [ ] Modpack installation docs, multiplayer auth/security, benchmarks
 - [ ] Stable public character pack format
+
+
+## October 2026: Phase 4 source delivered
+
+Phase 3 has passed live in-game chat testing. Phase 4 adds source for spawn, player-shaped rendering, click-to-chat, follow/stay, NBT persistence. This update still requires a ForgeGradle build and in-game testing before these features may be marked done. See `docs/phase-4-npc.md`.
