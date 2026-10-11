@@ -21,3 +21,7 @@ is in `client/SkinTextureCache.java`. Appearance changes go through the
 on the Minecraft server thread. Avoid sending files, file paths or untrusted
 backend-edit requests directly from the client. Test with
 `./scripts/test-skin-manager.ps1` on Windows before running ForgeGradle.
+
+## v0.5.4 generic plans
+
+Keep the Python action vocabulary, `ActionCatalog.java`, and `WorldActions.execute()` synchronized. Immediate actions may be sequenced automatically; asynchronous actions MUST have completion/timeout logic in `ActionPlanRunner`. Never execute free-form model strings as commands. Add regression coverage for any new action and for plans exceeding eight steps. See `docs/generic-action-planner-v0.5.4.md`.

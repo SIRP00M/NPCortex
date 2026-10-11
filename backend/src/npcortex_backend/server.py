@@ -53,7 +53,7 @@ def make_handler(service):
             return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
-            if self.path not in ("/v1/chat", "/v1/agent", "/v1/memory"):
+            if self.path not in ("/v1/chat", "/v1/agent", "/v1/action-reply", "/v1/memory"):
                 return self._json(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -92,6 +92,16 @@ def make_handler(service):
             if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
                 return self._json(400, {"error": "Message must contain 1–2000 characters"})
             try:
+                if self.path == "/v1/action-reply":
+                    if session_id is None:
+                        return self._json(400, {"error": "session_id required for action replies"})
+                    action = data.get("action")
+                    result = data.get("result")
+                    if not isinstance(action, str) or not isinstance(result, str) or len(result) > 1600:
+                        return self._json(400, {"error": "Invalid action result"})
+                    return self._json(200, service.action_reply(character_id, player_id,
+                                                                 message.strip(), session_id,
+                                                                 action, result))
                 if self.path == "/v1/agent":
                     if session_id is None:
                         return self._json(400, {"error": "session_id required for agent requests"})
@@ -105,9 +115,11 @@ def make_handler(service):
                 return self._json(200, service.chat(character_id, player_id, message.strip(), session_id))
             except CharacterError as exc:
                 return self._json(400, {"error": str(exc)})
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
             except ModelError:
-                LOG.exception("Ollama request failed")
-                return self._json(502, {"error": "Local AI provider unavailable; check Ollama logs"})
+                LOG.exception("Local AI provider or structured output validation failed")
+                return self._json(502, {"error": "Local AI request or response validation failed; check backend logs"})
             except Exception:
                 LOG.exception("Unhandled backend error")
                 return self._json(500, {"error": "Internal server error"})

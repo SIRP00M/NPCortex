@@ -29,6 +29,7 @@ public final class NPCortex {
         NpcEntities.register(FMLJavaModLoadingContext.get().getModEventBus());
         NpcNetwork.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
+        MinecraftForge.EVENT_BUS.addListener(ActionPlanRunner::tick);
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -107,10 +108,28 @@ public final class NPCortex {
                         if (!stack.isEmpty()) items.append(" [").append(i).append("] ")
                                 .append(stack.getHoverName().getString()).append(" x").append(stack.getCount());
                     }
-                    player.sendSystemMessage(Component.literal("NPCortex bag:" +
-                            (items.length() == 0 ? " (empty)" : items.toString())));
+                    var held = npc.getMainHandItem();
+                    String hand = held.isEmpty() ? "empty" : held.getHoverName().getString() + " x" + held.getCount();
+                    player.sendSystemMessage(Component.literal("NPCortex bag of " + npc.getName().getString()
+                            + " [" + npc.getUUID().toString().substring(0, 8) + "]:"
+                            + (items.length() == 0 ? " (empty)" : items.toString()) + " | hand: " + hand));
                     return 1;
                 }))
+                // Developer-only diagnostics: verify pickup / drop / give independent
+                // of Qwen so a model selection error is not confused with inventory IO.
+                .then(Commands.literal("item")
+                        .then(Commands.literal("pickup")
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "pickup_nearby", StringArgumentType.getString(context, "item_id")))))
+                        .then(Commands.literal("drop")
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "drop_stored_item", StringArgumentType.getString(context, "item_id")))))
+                        .then(Commands.literal("give")
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "give_item_to_owner", StringArgumentType.getString(context, "item_id"))))))
                 .then(Commands.literal("observe").executes(context -> {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     CompanionEntity npc = nearestCompanion(player);
@@ -124,7 +143,7 @@ public final class NPCortex {
                 }))
                 .then(Commands.literal("actions").executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal(
-                            "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, take_offered_item, give_item_to_owner. No attack/mining/crafting."), false);
+                            "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, drop_stored_item, take_offered_item, give_item_to_owner. No attack/mining/crafting."), false);
                     return 1;
                 }))
                 .then(Commands.literal("spawn")
@@ -164,6 +183,22 @@ public final class NPCortex {
                 .then(Commands.literal("stay").executes(context -> setFollow(context.getSource().getPlayerOrException(), false))));
     }
 
+    private static int debugItemAction(ServerPlayer player, String action, String itemId) {
+        CompanionEntity npc = nearestCompanion(player);
+        if (npc == null) {
+            player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
+            return 0;
+        }
+        String target = itemId.contains(":") ? itemId : "minecraft:" + itemId;
+        if (!target.matches("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,128}")) {
+            player.sendSystemMessage(Component.literal("NPCortex: Invalid item ID. Example: minecraft:emerald"));
+            return 0;
+        }
+        String result = WorldActions.execute(player, npc, action, target);
+        player.sendSystemMessage(Component.literal("NPCortex (" + npc.getName().getString() + "): " + result));
+        return result.startsWith("[Action confirmed:") ? 1 : 0;
+    }
+
     /** The backend is authoritative for display metadata. Never block the game tick waiting for it. */
     private static void refreshCharacter(ServerPlayer player, CompanionEntity npc) {
         String id = npc.getCharacterId();
@@ -193,6 +228,9 @@ public final class NPCortex {
             player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
             return 0;
         }
+        ActionPlanRunner.cancel(npc);
+        npc.getPersistentData().putInt("NPCortexRequestRevision",
+                npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
         npc.setFollowing(following);
         player.sendSystemMessage(Component.literal("NPCortex: " + npc.getCharacterId()
                 + (following ? " is following you." : " will stay here.")));

@@ -2,6 +2,7 @@
 
 World observations are ephemeral; we never silently persist claims from an LLM.
 """
+import json
 import sqlite3
 import threading
 from pathlib import Path
@@ -94,6 +95,11 @@ class MemoryStore:
         with self._lock, self._db:
             self._db.execute('DELETE FROM notes WHERE player=? AND npc=?', (player, npc))
 
+    def clear_history(self, player: str, npc: str) -> None:
+        """Remove mistaken dialogue for one player/NPC pair, preserving notes and affinity."""
+        with self._lock, self._db:
+            self._db.execute('DELETE FROM exchanges WHERE player=? AND npc=?', (player, npc))
+
     def reset_relationship(self, player: str, npc: str) -> None:
         with self._lock, self._db:
             self._db.execute('DELETE FROM relationships WHERE player=? AND npc=?', (player, npc))
@@ -102,8 +108,10 @@ class MemoryStore:
         with self._lock:
             notes = self._db.execute('SELECT text FROM notes WHERE player=? AND npc=? ORDER BY id DESC LIMIT 20',
                                      (player, npc)).fetchall()
-        # Mark memory as data, not instructions; user's notes are untrusted text.
-        return '\n'.join('- ' + str(text[0]).replace('\n',' ') for text in reversed(notes))[:3000]
+        # User-authored notes are data from the PLAYER's perspective. JSON-quote
+        # their content so a bare 'My name is Kenji' is never framed as NPC speech.
+        return '\n'.join('- PLAYER NOTE: ' + json.dumps(str(text[0]).replace('\n', ' '), ensure_ascii=False)
+                         for text in reversed(notes))[:3000]
 
     def close(self):
         with self._lock:

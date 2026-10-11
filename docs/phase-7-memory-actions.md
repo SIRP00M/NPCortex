@@ -77,3 +77,7 @@ These endpoints have **no backend HTTP authentication**, like the existing alpha
 - Use a test world or take a world backup first. World Save contains NPC entities and items; SQLite contains memories separately. Both are required to restore the entire experience.
 - Neither permanent autonomous AI nor fully human-player abilities are implemented. Multi-instance concurrency, automatic summaries, sentiment model, combat and TaCZ remain future features.
 - All character packs are English-first; Thai language support can be added later.
+
+## v0.5.1-alpha inventory awareness follow-up
+
+The original Phase 7 inventory summary sent only the occupied slot count to the model. This is fixed in [the inventory hotfix guide](phase-7-inventory-hotfix.md); `drop_stored_item` can place an item from NPC bag onto the ground without equipping it first.

@@ -28,7 +28,7 @@ class OllamaProvider:
         }
         if schema is not None:
             payload["format"] = schema
-            payload["options"]["num_predict"] = 240
+            payload["options"]["num_predict"] = 700
         req = Request(
             self.base_url + "/api/chat",
             data=json.dumps(payload).encode("utf-8"),

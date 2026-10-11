@@ -16,11 +16,13 @@ import java.util.concurrent.CompletableFuture;
 
 /** HTTP calls never block the Minecraft server thread. */
 public final class ChatBridge {
+    public static final int MAX_PLAN_STEPS = 8;
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
     public record CharacterProfile(String id, String name, String skin, String model) {}
-    public record AgentReply(String reply, String action) {}
+    public record ActionStep(String action, String targetItem) {}
+    public record AgentReply(String reply, String action, String targetItem, List<ActionStep> steps) {}
 
     private ChatBridge() {}
 
@@ -111,6 +113,32 @@ public final class ChatBridge {
                 });
     }
 
+    /** Dialogue-only reaction to an ALREADY applied game action. Does not issue actions. */
+    public static CompletableFuture<String> actionReply(String characterId, String playerId,
+            String message, String sessionId, String action, String result) {
+        JsonObject body = new JsonObject();
+        body.addProperty("character_id", characterId);
+        body.addProperty("player_id", playerId);
+        body.addProperty("message", message);
+        body.addProperty("session_id", sessionId);
+        body.addProperty("action", action);
+        body.addProperty("result", result);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/v1/action-reply"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(95))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    ensureSuccess(response.statusCode());
+                    JsonObject payload = JsonParser.parseString(response.body()).getAsJsonObject();
+                    String reply = payload.get("reply").getAsString().strip();
+                    if (reply.isEmpty() || reply.length() > 400)
+                        throw new IllegalArgumentException("Invalid action dialogue reply");
+                    return reply;
+                });
+    }
+
     /** World snapshots are server-generated. Structured actions are never executed here. */
     public static CompletableFuture<AgentReply> agent(String characterId, String playerId,
             String message, String sessionId, JsonObject world) {
@@ -132,16 +160,53 @@ public final class ChatBridge {
                     String reply = data.get("reply").getAsString();
                     String action = data.get("action").getAsString();
                     if (reply.isBlank() || reply.length() > 1600 ||
-                            !(action.equals("none") || action.equals("follow")
-                                || action.equals("stay") || action.equals("look_at_player")
-                                || action.equals("move_to_player") || action.equals("wander")
-                                || action.equals("jump") || action.equals("pickup_nearby")
-                                || action.equals("equip_item") || action.equals("drop_held_item")
-                                || action.equals("take_offered_item") || action.equals("give_item_to_owner"))) {
+                            !(action.equals("none") || ActionCatalog.allowed(action))) {
                         throw new IllegalArgumentException("Invalid agent response");
                     }
-                    return new AgentReply(reply, action);
+                    String targetItem = data.has("target_item") && !data.get("target_item").isJsonNull()
+                            ? data.get("target_item").getAsString() : "";
+                    if (!targetItem.isEmpty() && !targetItem.matches("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,128}"))
+                        throw new IllegalArgumentException("Invalid target item");
+                    // v0.5.3: a bounded list of steps from the backend, never executable text.
+                    // Older single-action backends are still supported.
+                    List<ActionStep> steps = new ArrayList<>();
+                    if (data.has("steps") && data.get("steps").isJsonArray()) {
+                        JsonArray plan = data.getAsJsonArray("steps");
+                        if (plan.size() > MAX_PLAN_STEPS) throw new IllegalArgumentException("Plan too long");
+                        for (int i = 0; i < plan.size(); ++i) {
+                            JsonObject rawStep = plan.get(i).getAsJsonObject();
+                            String stepAction = rawStep.get("action").getAsString();
+                            String stepTarget = rawStep.get("target_item").getAsString();
+                            if (!ActionCatalog.validTarget(stepAction, stepTarget))
+                                throw new IllegalArgumentException("Invalid AI plan step");
+                            steps.add(new ActionStep(stepAction, stepTarget));
+                        }
+                        // Validated steps are authoritative, not duplicated top-level fields.
+                        // This tolerates Qwen returning an out-of-sync primary action.
+                    } else if (!action.equals("none")) {
+                        steps.add(new ActionStep(action, targetItem));
+                    }
+                    if (!validPlan(steps)) throw new IllegalArgumentException("Disallowed AI action sequence");
+                    if (!steps.isEmpty()) {
+                        action = steps.get(0).action();
+                        targetItem = steps.get(0).targetItem();
+                    } else {
+                        action = "none";
+                        targetItem = "";
+                    }
+                    return new AgentReply(reply, action, targetItem, List.copyOf(steps));
                 });
+    }
+
+    /** Generic bounded validation delegated to the action registry. */
+    private static boolean validPlan(List<ActionStep> steps) {
+        if (steps.size() > MAX_PLAN_STEPS) return false;
+        for (ActionStep step : steps) {
+            if (!ActionCatalog.validTarget(step.action(), step.targetItem())) return false;
+            if (steps.size() > 1 && ActionCatalog.itemAction(step.action())
+                    && step.targetItem().isEmpty()) return false;
+        }
+        return true;
     }
 
     /** Scoped persistent memory; only the server constructs owner/player identifiers. */

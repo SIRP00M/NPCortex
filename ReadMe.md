@@ -1,216 +1,350 @@
+<div align="center">
+
 # NPCortex
 
-**An open-source, modular AI NPC framework for Minecraft.**
+### An Open-Source AI NPC Framework for Minecraft
 
-> Bring intelligence, personality, and life to Minecraft NPCs.
+**Bring intelligence, personality, memory, and interaction to your Minecraft companions.**
 
-NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
+**Minecraft 1.20.1** · **Forge 47.4.10** · **Java 17** · **Python 3.10+** · **Ollama / Qwen 3 8B**
 
-**Project status: `v0.5.0-alpha` Phase 7 source update.** The project developer confirmed v0.4.2 worked in-game. Phase 7 adds SQLite persistent dialogue history and manual memory notes, a memory UI, friendship activity score, and bounded item/movement actions. **Phase 7 Forge Java compilation and gameplay remain unverified until built on Windows.** No combat, TaCZ integration, or autonomous scanning yet.
+**v0.6.0-alpha — Intelligent Companions Update**
 
-## Repository layout
+[Features](#features) · [Quick Start](#quick-start) · [Custom NPCs](#create-your-own-npc) · [Actions](#supported-actions) · [Architecture](#architecture) · [Documentation](#documentation)
 
-```text
-NPCortex/
-├── backend/                # Python server; model adapter, SQLite memory, character loader
-│   ├── src/npcortex_backend/
-│   └── tests/
-├── forge-mod/              # Forge 1.20.1 mod (Java 17)
-│   └── src/main/
-├── character-packs/        # Copyable JSON-based NPC definitions
-│   ├── guide/
-│   └── yui/
-├── integrations/           # Optional integrations; nothing is active yet
-├── docs/                   # Architecture, API contract, character packs, roadmap
-├── scripts/                # Development commands and Forge wrapper bootstrap
-├── .github/workflows/      # Python and Forge CI (requires network)
-├── LICENSE                 # MIT license for original code
-└── CONTRIBUTING.md
-```
+</div>
 
-## Prerequisites
+> [!IMPORTANT]
+> **Alpha software.** NPCortex is an experimental framework, not a finished autonomous player. Back up Minecraft worlds and NPC memory before upgrading. The current development workflow is Windows PowerShell and a local AI backend.
 
-- Minecraft **1.20.1**, Minecraft Forge **47.4.10** (recommended release), **JDK 17** for Forge development.
-- Python **3.10+** on the computer hosting the AI backend.
-- [Ollama](https://ollama.com/) running locally with `qwen3:8b` downloaded:
+## What is NPCortex?
+
+NPCortex is a modular, open-source Minecraft Forge mod plus a Python AI backend. It lets you create companions with their own **character profiles, local skins, dialogue, persistent memories, and server-validated actions**.
+
+The goal is to give modpack creators and developers a reusable foundation for custom NPCs, rather than locking characters or AI models behind a particular hosted service. The default setup uses **Ollama with Qwen 3 8B locally**, with **no separate cloud API subscription required**. Your computer supplies the processing power.
+
+Character packs define *who the NPC is*. The AI helps interpret *what the player wants*. Minecraft server code decides *what the NPC is actually allowed to do*.
+
+## Features
+
+| System | Current capability |
+| --- | --- |
+| **AI conversations** | English-first, personality-driven dialogue through Ollama + Qwen 3 8B |
+| **Spawnable companions** | NPC entities with click-to-chat, Follow / Stay, and basic navigation |
+| **Custom character packs** | JSON names, prompts, languages, and wide/slim skin configuration |
+| **In-game manager** | ESC menu for selecting NPCs, importing/reloading PNG skins, and managing memory |
+| **World awareness** | Dialogue-time observations of nearby entities, blocks, player status, and environment |
+| **Natural-language commands** | Common direct intents plus AI interpretation of other allowed requests |
+| **Multi-step action plans** | Up to **8 sequential, validated steps** per request, with failure handling |
+| **Inventory & equipment** | Small NPC inventory, item pickup/transfer, equip, and drop operations |
+| **Persistent memory** | SQLite conversation history and player-written memory notes, scoped to player and NPC |
+| **Relationship activity** | Simple friendship/activity score, not a simulated emotional relationship |
+| **Action dialogue** | Character-specific reactions generated after Minecraft reports action outcomes |
+
+A companion can respond to a request such as:
+
+> **Player:** Yui, pick up that iron sword, equip it, and follow me.
+>
+> **NPCortex:** Validates and attempts **pickup → equip → follow** in order. Each step is checked by Minecraft; failed steps stop the plan. Yui can then respond in her own voice based on the actual results.
+
+This does **not** mean the NPC can automatically fight with that sword. Combat and more advanced activities need separate behavior implementations.
+
+## Quick Start
+
+### Requirements
+
+- **Minecraft Java Edition 1.20.1** and **Minecraft Forge 47.4.10**.
+- **JDK 17** for building/running the Forge development client.
+- **Python 3.10+**.
+- **Ollama**, with sufficient system RAM and GPU/CPU resources to run the selected model.
+- Windows PowerShell for the included development scripts. First-time Forge dependency downloads require internet access.
+
+### 1. Download the model
+
+Install Ollama from [ollama.com](https://ollama.com/download) and run:
 
 ```powershell
 ollama pull qwen3:8b
+ollama list
 ```
 
-## Quick start — Python backend (Windows PowerShell)
+If you keep AI models on another drive, configure Ollama's `OLLAMA_MODELS` environment variable separately. The program install directory and model-storage directory are different settings.
 
-From the **repository root**:
+### 2. Start the NPCortex backend
+
+Clone this repository or open your existing checkout, then run from the **repository root**:
 
 ```powershell
 .\scripts\dev-backend.ps1
 ```
 
-No Python third-party packages are required. You should see `NPCortex backend listening at http://127.0.0.1:8765`.
-
-In a *second* PowerShell window, test health and chat:
+Keep this terminal open. In another terminal, check the backend:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8765/health
-
-$body = @{
-  character_id = 'yui'
-  player_id    = 'local-player'
-  message      = 'Hey Yui! Want to explore the forest?'
-} | ConvertTo-Json
-
-(Invoke-RestMethod -Uri http://127.0.0.1:8765/v1/chat `
-  -Method Post -ContentType 'application/json' -Body $body).reply
 ```
 
-The backend communicates with Ollama at `http://127.0.0.1:11434/api/chat`. Qwen responses are configured with `think=false` and `stream=false`. Edit `backend/.env.example` to see environment variables. **Character packs do not need an Ollama key or OpenAI subscription.** Running an LLM still consumes your own computer resources.
+An HTTP 200 means the backend is reachable; it does **not** by itself prove the Ollama model can generate a response.
 
-## Quick start — Forge mod (developer setup)
+> [!NOTE]
+> If Windows blocks trusted `.ps1` scripts, you may set `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`. Review scripts before running them. A higher-priority organizational policy may override this setting.
 
-The Forge sources and Gradle build files are included. The official Forge MDK Gradle wrapper binary is deliberately **not** shipped inside this scaffold. Our launcher bootstraps it from the recommended MDK (SHA-1 checked). **Use a JDK 17 (not Java 21)**:
+### 3. Build and launch Forge
+
+Open **another PowerShell window** in the repository root:
 
 ```powershell
-.\scripts\phase3-check.ps1
+java -version
+javac -version
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 
-For PowerShell script restrictions, run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` once (if permitted). See [Phase 3 Windows guide](docs/phase-3-forge.md).
+The build script checks Java 17 and bootstraps the Forge MDK Gradle wrapper when missing. The development client has its own game directory under `forge-mod/run`.
 
-You need **JDK 17** selected for Gradle. Downloading Gradle and Minecraft dependencies requires internet access. The first launch can take a while. If the Forge wrapper setup cannot download from the official URL, download the MDK for `1.20.1-47.4.10` manually from [Minecraft Forge downloads](https://files.minecraftforge.net/net/minecraftforge/forge/index_1.20.1.html) and copy only the Gradle wrapper files into `forge-mod`.
+For the first in-game test, create a separate **Singleplayer world with Allow Cheats enabled** and keep the Python backend running.
 
-Start the Python backend and create a **single-player test world with Allow Cheats ON** (developer commands require operator permission) before using:
+### 4. Spawn and talk to your NPC
 
 ```text
 /npcortex status
-/npcortex ask yui Hey Yui! Want to explore the forest?
+/npcortex list
+/npcortex spawn yui
 ```
 
-The `/npcortex ask` command sends a chat request asynchronously through the backend. Phase 3 has already been verified in-game by the project developer. **Phase 4 added real NPC entities and right-click dialogue (developer-reported working):**
+**Right-click Yui** to open the conversation screen. Try:
 
 ```text
-/npcortex spawn yui
-/npcortex stay
-/npcortex follow
+Yui, follow me!
+Yui, wait for me here.
+Yui, pick up that emerald and give it to me.
 ```
 
-Right-click the newly spawned NPC to open a local chat screen. Read [Phase 4 Windows & test instructions](docs/phase-4-npc.md) before trying it. Phase 5 added local custom PNG skins and character metadata, tested in-game by the developer.
+Actions depend on the NPC's proximity, game state, available items, and server-side validation. Requests may fail safely rather than pretend an action succeeded.
 
-## How to customize
+## In-Game NPC Manager
 
-Copy `character-packs/guide/` to `character-packs/my_npc/`; change the JSON fields and send `character_id: "my_npc"` to `/v1/chat`. See [Character Pack Guide](docs/character-packs.md). Do not change core code just to add a new character.
+Open **ESC → NPCortex Manager** in the development client.
 
-## Roadmap
+- Choose a nearby owned NPC.
+- Import a **64×64 PNG Minecraft skin** (wide or slim), or open the active game-instance skin folder.
+- Reload a skin after replacing its PNG file; apply the skin ID/model to an NPC.
+- Open **Memory Management** to view, add, delete, or clear memory notes and inspect the friendship activity score.
+- Clear an NPC's chat history if previous dialogue keeps reinforcing a mistaken identity. This does not delete saved notes or reset friendship.
 
-- **v0.1:** Local English chat, character packs, minimal Forge command (starter implementation).
-- **v0.2:** Generic NPC entity + click-to-chat GUI + basic follow/stay (reported working).
-- **v0.3:** Character packs, per-NPC in-RAM chat sessions, and local PNG skins (reported working).
-- **v0.4:** Contextual world snapshots + validated follow/stay/look action proposals (developer-reported working).
-- **v0.5:** Persistent memory, relationships activity score, memory UI, basic item and navigation actions (Phase 7).
-- **Future:** Optional TaCZ / other mod integrations, combat compatibility testing.
-- **Later:** Thai localization, richer behaviors, more LLM providers.
+Character JSON editing is currently done in the character-pack files, **not** in the manager's UI. Skin files are local to each Minecraft client installation.
 
-See [Roadmap](docs/roadmap.md), [Phase 4 guide](docs/phase-4-npc.md) and [Architecture](docs/architecture.md).
+## Create Your Own NPC
 
-## Security and compatibility
+NPCortex is designed so you do **not** need to write Java just to add another character.
 
-The backend binds to `127.0.0.1` by default and has no authentication; **do not expose it directly to the public internet**. `127.0.0.1` from a dedicated Minecraft server means the server machine, not each connected player's computer. TaCZ and Recruits are not bundled or required; test optional integrations in a separate Forge profile.
+1. Copy `character-packs/template/` (or an example such as `character-packs/yui/`) into `character-packs/my_npc/`.
+2. Add/edit `character.json` and provide `skin.png` if you want a custom skin.
+3. Restart the backend if needed for your changes; in the development client, install or import the skin and use `/npcortex sync` to refresh existing NPC metadata.
+4. Spawn the new character with `/npcortex spawn my_npc`.
 
-## License
+Example `character-packs/my_npc/character.json`:
 
-MIT for the original starter code; dependencies and bundled character assets may have separate licenses. Minecraft, Forge, Ollama and Qwen are owned by their respective authors; no model weights are included.
+```json
+{
+  "schema_version": 2,
+  "id": "my_npc",
+  "name": "Forest Scout",
+  "language": "en",
+  "system_prompt": "You are Forest Scout, a friendly Minecraft explorer. Speak natural English. Stay in character. Never claim an in-game action succeeded unless Minecraft confirms it.",
+  "appearance": {
+    "skin": "my_npc",
+    "model": "slim"
+  }
+}
+```
 
-## Phase 5 (v0.3.0-alpha): Custom Characters & Local Skins
-
-Phase 5 adds metadata loading from Character Packs, wide/slim 64x64 PNG skins,
-`/npcortex list`, `/npcortex sync`, and per-NPC in-memory chat session isolation.
-Read [Phase 5 guide](docs/phase-5-character-skins.md) before installing.
+To copy the pack's PNG into the **development client**:
 
 ```powershell
-cd F:\AI\NPCortex
-.\scripts\install-character.ps1 -Id yui
-.\scripts\install-character.ps1 -Id guide
-.\scripts\phase5-check.ps1
-.\scripts\dev-forge.ps1 -Task build
-.\scripts\dev-forge.ps1 -Task runClient
+.\scripts\install-character.ps1 -Id my_npc
 ```
 
-The backend must be restarted after upgrading. It provides new endpoints:
-`GET /v1/characters`, `GET /v1/characters/<id>` and optional `session_id`
-on `POST /v1/chat`. With two different NPC entities of the same character,
-conversation history no longer mixes between them; histories remain in RAM.
-
-The initial developer has reported Phase 5 working in Minecraft. Keep world backups before upgrading.
-
-## Phase 6 (v0.4.0-alpha): AI World Awareness & Actions
-
-A right-click dialogue now sends a bounded **real game-world snapshot** to the local
-Qwen 3 8B model. The model proposes an allowlisted action; **only the server**
-can apply it after verifying proximity, NPC identity, and player ownership.
-This does **not** add autonomous scanning, attacking, mining, or crafting.
+For a different Minecraft instance (for example a CurseForge profile), specify its game directory:
 
 ```powershell
-cd F:\AI\NPCortex
-.\scripts\dev-backend.ps1            # terminal A: restart backend after update
-# Terminal B:
-.\scripts\phase6-check.ps1
-.\scripts\test-agent.ps1            # synthetic snapshot, NOT actual in-game data
-.\scripts\dev-forge.ps1 -Task build
-.\scripts\dev-forge.ps1 -Task runClient
+.\scripts\install-character.ps1 -Id my_npc -GameDir "F:\Minecraft\Instances\MyModpack"
 ```
 
-Inside a **test world with cheats on**:
+The in-game manager can also import skin PNGs. **Adding a JSON field does not automatically create a new gameplay ability.** For the exact file schema and loading behavior, read [Character Packs](docs/phase-5-character-skins.md).
+
+## Supported Actions
+
+NPCortex currently supports these **server-side action types**:
+
+| Group | Action IDs |
+| --- | --- |
+| Companion control | `follow`, `stay`, `look_at_player` |
+| Movement | `move_to_player`, `wander`, `jump` |
+| Inventory & equipment | `pickup_nearby`, `take_offered_item`, `give_item_to_owner`, `equip_item`, `drop_held_item`, `drop_stored_item` |
+
+`none` is a no-action response for normal dialogue. The exact allowlist is implemented by `ActionCatalog.java` and the backend action schema.
+
+### How multi-step execution works
 
 ```text
-/npcortex spawn yui
-/npcortex observe
-/npcortex actions
+Player request
+    |
+    v
+Natural-language intent / Qwen action plan
+    |
+    v
+Validated action list (maximum 8 steps)
+    |
+    v
+Minecraft server executes step 1
+    |
+    +-- failed / blocked / timed out --> STOP + report failure
+    |
+    v
+Verify result --> step 2 --> ... --> complete
+    |
+    v
+NPC reaction grounded in confirmed game results
 ```
 
-Right-click Yui and say `What can you see nearby?`, `Please stay`, or
-`Please follow me`. Server-executed actions are tagged `[Action confirmed: ...]`.
-Read the [Phase 6 guide](docs/phase-6-world-actions.md) for the data schema,
-security rules, Windows installation, test plan and known limitations.
+Direct commands such as **“Wait for me here”** are interpreted without waiting for the LLM when recognized. More complex requests use the AI planner, but **Minecraft validates each action**. Movement uses vanilla pathfinding and can fail. No arbitrary Java, Minecraft console commands, or filesystem operations can be executed by the model.
 
-**Verification:** Phases 3–6 and the v0.4.2 manager have been reported working in-game by the project developer. Phase 7 is not yet verified in Minecraft.
+To extend the framework with a new action, update the backend's action schema, register it in `ActionCatalog.java`, implement the server-side executor in `WorldActions.java`, and add completion handling in `ActionPlanRunner.java` for long-running actions. See [Generic Multi-Step Planner](docs/generic-action-planner-v0.5.4.md).
 
-## v0.4.2-alpha — ESC In-Game Character Manager (client skin hotfix)
+## Persistent Memory & Identity
 
-Adds an **NPCortex Manager** button to the in-game ESC/Pause screen, a local PNG
-importer with file-picker and drag-and-drop, a preview of the raw skin atlas,
-correct active-instance folder access, GPU texture hot-reload, nearby NPC
-selection, and server-validated skin ID / wide-or-slim model changes.
-Character Pack JSON editing remains backend-side. The Python API is unchanged.
-See [In-Game Manager guide](docs/in-game-manager.md) for limitations and install steps.
+The backend stores chat history and explicit notes in **SQLite**, separated by **player identity, NPC session UUID, and character ID**. The default database is:
 
-```powershell
-cd F:\AI\NPCortex
-.\scripts\manager-check.ps1
-.\scripts\dev-forge.ps1 -Task build
-.\scripts\dev-forge.ps1 -Task runClient
+```text
+backend/data/npcortex.sqlite3
 ```
 
-## Phase 7 (v0.5.0-alpha) — Persistent Memory & More Actions
+Example **player-written** note:
 
-The Python backend now persists chat history and explicit memory notes in SQLite,
-scoped by **player UUID + NPC UUID + character ID**. NPCs gain a 9-slot inventory
-and item exchange, equip, drop, pickup and several additional movement actions.
-The ESC Manager gains a Memory Manager page to add/delete notes and inspect a
-simple friendship **activity** score (not simulated emotional consent).
+> My name is Kenji.
 
-See [Phase 7 guide](docs/phase-7-memory-actions.md) for the full allowlist,
-PowerShell instructions, security constraints, and test checklist.
+This note is attributed to the **player**, not to Yui. The NPC's own identity comes from its Character Pack. The prompt includes attribution guidance, but an LLM can still misunderstand context; the manager's **Clear Chat** option can help remove reinforcing mistakes without wiping notes.
+
+Friendship is currently an **interaction-based activity score**, not a full emotional or relationship simulation. Memory is local to the configured backend; it is not automatically synchronized across computers.
+
+Back up SQLite safely with:
 
 ```powershell
-cd F:\AI\NPCortex
-.\scripts\dev-backend.ps1           # Terminal A — restart after update
-.\scripts\phase7-check.ps1          # Terminal B — unit tests
-.\scripts\dev-forge.ps1 -Task build
-.\scripts\dev-forge.ps1 -Task runClient
-# When the database exists, create a SQLite online backup:
 .\scripts\backup-memory.ps1
 ```
 
-**No network authentication yet:** The Python backend is local-only. Do not
-expose ports 8765/11434 publicly. Memory contents are locally saved and must
-never be uploaded into Git.
+Save your Minecraft world separately: NPC entity inventories and world state are **not** stored inside the SQLite memory database.
+
+## Developer Commands
+
+All `/npcortex` developer commands currently require operator permission / cheats enabled.
+
+| Command | Purpose |
+| --- | --- |
+| `/npcortex status` | Check backend reachability |
+| `/npcortex list` | List available Character Packs |
+| `/npcortex spawn yui` | Spawn an owned companion |
+| `/npcortex sync` | Refresh nearby owned NPC metadata |
+| `/npcortex follow` / `/npcortex stay` | Direct companion behavior controls |
+| `/npcortex observe` | Inspect the NPC's world snapshot |
+| `/npcortex actions` | Show server-supported action IDs |
+| `/npcortex inventory` | Inspect stored and held items |
+| `/npcortex item pickup minecraft:emerald` | Debug nearby item pickup |
+| `/npcortex item drop minecraft:emerald` | Debug item drop from NPC storage |
+| `/npcortex item give minecraft:emerald` | Debug transfer to owner |
+| `/npcortex ask yui Hello!` | Text-only AI chat test |
+
+Commands act on the relevant nearby **owned** companion when applicable. Debug commands are intended for development rather than end-user gameplay UI.
+
+## Architecture
+
+```text
+Minecraft Forge 1.20.1 (Java)
+  |-- Companion Entity & Navigation
+  |-- World Observation & Action Validation
+  |-- In-game Manager / Dialogue UI
+  |-- Inventory / Save Data
+  |
+  +-- Local HTTP --> Python Backend
+                       |-- Character Pack Loader
+                       |-- AI Intent & Action Planning
+                       |-- SQLite Memory & Activity Score
+                       |
+                       +-- Ollama API --> Qwen 3 8B
+```
+
+The game server is authoritative about **world state and action success**. The model supplies dialogue and **proposals**, not unrestricted gameplay control. In the default setup, all AI processing is local.
+
+## Repository Structure
+
+```text
+NPCortex/
+├── backend/              # Python HTTP service, LLM adapter, agent, memory, tests
+├── forge-mod/            # Forge Java mod, NPC entities, UI, actions, network
+├── character-packs/      # JSON profiles and optional example PNG skins
+├── integrations/         # Reserved extension points; no active TaCZ integration
+├── docs/                 # Architecture, APIs, guides, roadmap, history
+├── scripts/              # Windows setup, tests, build, backups
+├── tests/                # Standalone Java checks
+├── .github/workflows/    # CI workflows
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
+```
+
+## Configuration & Privacy
+
+The backend's default local endpoints are:
+
+- NPCortex: `http://127.0.0.1:8765`
+- Ollama: `http://127.0.0.1:11434`
+
+See [`backend/.env.example`](backend/.env.example) for environment variable names, including `NPCORTEX_MODEL`, `NPCORTEX_OLLAMA_URL`, and `NPCORTEX_DATA_DIR`. **The example file is documentation, not an automatically loaded `.env` file**: set the appropriate OS environment variables yourself.
+
+> [!CAUTION]
+> The alpha backend **has no HTTP authentication**. It must remain bound to loopback (`127.0.0.1`), not exposed publicly or port-forwarded. On a dedicated server, `localhost` refers to that server host, not the player's computer. Do not upload `backend/data`, game saves, personal notes, or API secrets to Git.
+
+## Current Limitations & Roadmap
+
+**Not implemented as complete player-like capabilities:** combat AI, attacking with equipped swords, mining, crafting, building, opening containers, autonomous background planning, target-specific long-distance exploration, TaCZ weapon integration, and production-ready multiplayer authentication.
+
+**Planned directions:** autonomous event-driven awareness, more validated action executors, equipment/combat behaviors, optional mod adapters, better pathfinding and recovery, multi-provider LLM support, and Thai dialogue/localization.
+
+Read [Roadmap](docs/roadmap.md) and [Architecture](docs/architecture.md). This is an evolving **alpha release**, so behavior and configuration may change.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Backend unreachable | Run `dev-backend.ps1`; check `http://127.0.0.1:8765/health` |
+| Backend online, no AI reply | Check `ollama list`, Ollama logs, and that `qwen3:8b` is available |
+| NPC skin not showing | Import a 64×64 PNG into the **active** game instance via ESC Manager, then reload it |
+| NPC says an item is missing | Use `/npcortex inventory`; item in main hand is separate from stored bag items |
+| NPC won't follow or stay | Try the direct `/npcortex follow` / `/npcortex stay` command, then inspect `/npcortex observe` |
+| Plan stops | Check the first failed step, item availability, NPC proximity, and pathfinding |
+| Memory appears missing | Verify the same backend database, player identity, and NPC session are being used |
+
+For debugging, use a test world, include the relevant backend error and Forge log output, and avoid sharing private memory data.
+
+## Documentation
+
+- [Development & Setup](docs/development.md)
+- [API Reference](docs/api.md)
+- [Character Packs & Skins](docs/phase-5-character-skins.md)
+- [In-Game Manager](docs/in-game-manager.md)
+- [Persistent Memory & Inventory](docs/phase-7-memory-actions.md)
+- [Generic Multi-Step Actions](docs/generic-action-planner-v0.5.4.md)
+- [Natural Language Intents](docs/natural-intent-hotfix-v0.5.6.md)
+- [Action Dialogue](docs/action-dialogue-v0.5.7.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Contributing
+
+Contributions, fixes, character pack examples, and documentation improvements are welcome. Please open an issue or pull request with clear reproduction steps and mention the Minecraft/Forge version used. For new actions, include both backend validation and Minecraft server-side checks.
+
+## License
+
+Original NPCortex code is provided under the [MIT License](LICENSE). Third-party libraries, models, Minecraft assets, and independently contributed character skins may have separate licenses; review them before redistributing.
+
+NPCortex is a community-created project and is not affiliated with Mojang, Microsoft, Ollama, or the Qwen developers.

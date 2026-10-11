@@ -15,7 +15,7 @@ import net.minecraftforge.network.PacketDistributor;
 /** C2S; never let clients provide the player/character/session identity. */
 public record MemoryRequestPacket(int entityId, String operation, String text, int noteId) {
     private static final Set<UUID> PENDING = ConcurrentHashMap.newKeySet();
-    private static final Set<String> OPERATIONS = Set.of("list", "add", "delete", "clear", "reset_relationship");
+    private static final Set<String> OPERATIONS = Set.of("list", "add", "delete", "clear", "clear_history", "reset_relationship");
 
     public static void encode(MemoryRequestPacket p, FriendlyByteBuf buf) {
         buf.writeVarInt(p.entityId());

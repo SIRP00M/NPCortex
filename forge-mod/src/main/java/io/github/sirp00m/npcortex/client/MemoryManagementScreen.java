@@ -26,6 +26,7 @@ public final class MemoryManagementScreen extends Screen {
     private int chats, affinity;
     private String status = "Loading NPC memory...";
     private boolean confirmClear = false;
+    private boolean confirmHistory = false;
 
     public MemoryManagementScreen(Screen parent, int entityId, String name) {
         super(Component.literal("NPCortex Memory Manager"));
@@ -41,7 +42,7 @@ public final class MemoryManagementScreen extends Screen {
         input = addRenderableWidget(new EditBox(font, x + 8, y + 47, 344, 20,
                 Component.literal("Save a memory note")));
         input.setMaxLength(300);
-        input.setHint(Component.literal("A fact this NPC should remember (up to 300 chars)"));
+        input.setHint(Component.literal("PLAYER note: My name is Kenji | NPC: Yui likes art"));
         addRenderableWidget(Button.builder(Component.literal("Save Note"), b -> {
             if (!input.getValue().isBlank()) {
                 request("add", input.getValue(), 0);
@@ -71,6 +72,15 @@ public final class MemoryManagementScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Reset Friendship"), b -> {
             request("reset_relationship", "", 0);
         }).bounds(x + 8, y + 178, 155, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Clear Chat"), b -> {
+            if (confirmHistory) {
+                request("clear_history", "", 0);
+                confirmHistory = false;
+            } else {
+                status = "Press Clear Chat again to erase chat (notes remain).";
+                confirmHistory = true;
+            }
+        }).bounds(x + 169, y + 178, 93, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> onClose())
                 .bounds(x + 268, y + 178, 84, 20).build());
         request("list", "", 0);
@@ -104,6 +114,7 @@ public final class MemoryManagementScreen extends Screen {
             current = Math.min(current, Math.max(0, notes.size() - 1));
             status = "Memory updated. Stored on the local NPCortex backend.";
             confirmClear = false;
+            confirmHistory = false;
             updateButtons();
         } catch (Exception exception) {
             status = "Invalid memory response from backend.";
