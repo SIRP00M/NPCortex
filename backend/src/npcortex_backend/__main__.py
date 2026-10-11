@@ -3,6 +3,7 @@ from .ollama import OllamaProvider
 from .service import ChatService
 from .session import SessionStore
 from .server import serve
+from .memory import MemoryStore
 
 
 def main():
@@ -12,6 +13,7 @@ def main():
         model=settings.model,
         provider=OllamaProvider(settings.ollama_url, settings.model),
         sessions=SessionStore(),
+        memory=MemoryStore(settings.data_dir / "npcortex.sqlite3"),
     )
     serve(service, settings.host, settings.port)
 

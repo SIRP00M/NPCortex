@@ -68,3 +68,13 @@ Phase 3 has passed live in-game chat testing. Phase 4 adds source for spawn, pla
 - [ ] Continuous perception, autonomy, item gathering, combat (not included)
 
 - **v0.4.2-alpha:** ESC/Pause In-Game Manager for client-local skin import, hot reload, and companion appearance selection. Backend personality editing remains manual until a permissioned management API is designed.
+
+
+## Phase 7 — v0.5.0-alpha
+
+- Implemented in source: SQLite persistent NPC-scoped chat history, explicit notes,
+  friendship activity score, ESC Memory Management UI, nine-slot NPC inventory,
+  item take/give/pickup/equip/drop, jump, approach and short wander.
+- Python tests pass. **Forge build and real-game tests remain pending**.
+- Future: generalized behavior registry, path/arrival status, armor and tool usage,
+  combat, TaCZ, mining/crafting, multiplayer authorization and sandboxing.

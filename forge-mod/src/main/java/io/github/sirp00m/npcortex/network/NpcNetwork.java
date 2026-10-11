@@ -8,7 +8,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import java.util.Optional;
 
 public final class NpcNetwork {
-    private static final String VERSION = "3";
+    private static final String VERSION = "4";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(NPCortex.MOD_ID, "dialogue"),
             () -> VERSION, VERSION::equals, VERSION::equals);
@@ -28,5 +28,11 @@ public final class NpcNetwork {
         CHANNEL.registerMessage(3, UpdateSkinPacket.class,
                 UpdateSkinPacket::encode, UpdateSkinPacket::decode, UpdateSkinPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(4, MemoryRequestPacket.class,
+                MemoryRequestPacket::encode, MemoryRequestPacket::decode, MemoryRequestPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(5, MemoryReplyPacket.class,
+                MemoryReplyPacket::encode, MemoryReplyPacket::decode, MemoryReplyPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 }

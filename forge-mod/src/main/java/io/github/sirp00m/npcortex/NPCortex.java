@@ -94,6 +94,23 @@ public final class NPCortex {
                     refreshCharacter(player, npc);
                     return 1;
                 }))
+                .then(Commands.literal("inventory").executes(context -> {
+                    ServerPlayer player = context.getSource().getPlayerOrException();
+                    CompanionEntity npc = nearestCompanion(player);
+                    if (npc == null) {
+                        player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
+                        return 0;
+                    }
+                    StringBuilder items = new StringBuilder();
+                    for (int i = 0; i < npc.bag().getContainerSize(); ++i) {
+                        var stack = npc.bag().getItem(i);
+                        if (!stack.isEmpty()) items.append(" [").append(i).append("] ")
+                                .append(stack.getHoverName().getString()).append(" x").append(stack.getCount());
+                    }
+                    player.sendSystemMessage(Component.literal("NPCortex bag:" +
+                            (items.length() == 0 ? " (empty)" : items.toString())));
+                    return 1;
+                }))
                 .then(Commands.literal("observe").executes(context -> {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     CompanionEntity npc = nearestCompanion(player);
@@ -107,7 +124,7 @@ public final class NPCortex {
                 }))
                 .then(Commands.literal("actions").executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal(
-                            "NPCortex allowed AI actions: follow, stay, look_at_player. No attack/mining/crafting."), false);
+                            "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, take_offered_item, give_item_to_owner. No attack/mining/crafting."), false);
                     return 1;
                 }))
                 .then(Commands.literal("spawn")

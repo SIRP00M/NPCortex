@@ -5,6 +5,9 @@ import io.github.sirp00m.npcortex.network.OpenDialoguePacket;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -37,6 +40,16 @@ public class CompanionEntity extends PathfinderMob {
 
     @Nullable private UUID ownerUUID;
     private int lookAtOwnerTicks;
+    private final SimpleContainer bag = new SimpleContainer(9);
+
+    public SimpleContainer bag() { return bag; }
+    public int storedSlots() {
+        int slots = 0;
+        for (int i = 0; i < bag.getContainerSize(); i++) {
+            if (!bag.getItem(i).isEmpty()) slots++;
+        }
+        return slots;
+    }
 
     public CompanionEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -153,6 +166,14 @@ public class CompanionEntity extends PathfinderMob {
         tag.putString("NPCortexSkinId", getSkinId());
         tag.putBoolean("NPCortexSlimModel", isSlimModel());
         if (ownerUUID != null) tag.putUUID("NPCortexOwner", ownerUUID);
+        ListTag stored = new ListTag();
+        for (int i = 0; i < bag.getContainerSize(); ++i) {
+            if (bag.getItem(i).isEmpty()) continue;
+            CompoundTag entry = bag.getItem(i).save(new CompoundTag());
+            entry.putByte("Slot", (byte)i);
+            stored.add(entry);
+        }
+        tag.put("NPCortexBag", stored);
     }
 
     @Override
@@ -169,5 +190,12 @@ public class CompanionEntity extends PathfinderMob {
         entityData.set(SLIM_MODEL, tag.getBoolean("NPCortexSlimModel"));
         setFollowing(!tag.contains("NPCortexFollowing") || tag.getBoolean("NPCortexFollowing"));
         ownerUUID = tag.hasUUID("NPCortexOwner") ? tag.getUUID("NPCortexOwner") : null;
+        bag.clearContent();
+        ListTag saved = tag.getList("NPCortexBag", 10);
+        for (int i = 0; i < saved.size(); ++i) {
+            CompoundTag entry = saved.getCompound(i);
+            int slot = entry.getByte("Slot") & 255;
+            if (slot < bag.getContainerSize()) bag.setItem(slot, ItemStack.of(entry));
+        }
     }
 }

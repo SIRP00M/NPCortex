@@ -3,12 +3,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import re
+from urllib.parse import urlparse, parse_qs
 from .characters import CharacterError
 from .ollama import ModelError
 
 LOG = logging.getLogger(__name__)
 ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 MAX_BODY = 8192
+
+def _memory_scope(data):
+    player = data.get("player_id")
+    npc = data.get("session_id")
+    character = data.get("character_id")
+    if not all(isinstance(x, str) and ID_PATTERN.fullmatch(x) for x in (player, npc, character)):
+        raise ValueError("Invalid player_id, session_id or character_id")
+    return player, f"{character}:{npc}"
+
 
 
 def make_handler(service):
@@ -23,6 +33,13 @@ def make_handler(service):
             self.wfile.write(raw)
 
         def do_GET(self):
+            if self.path.startswith("/v1/memory?"):
+                params = parse_qs(urlparse(self.path).query)
+                try:
+                    player, npc = _memory_scope({key: value[0] for key, value in params.items() if value})
+                    return self._json(200, service.memory_snapshot(player, npc))
+                except (ValueError, IndexError) as exc:
+                    return self._json(400, {"error": str(exc)})
             if self.path == "/health":
                 return self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
             if self.path == "/v1/characters":
@@ -36,7 +53,7 @@ def make_handler(service):
             return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
-            if self.path not in ("/v1/chat", "/v1/agent"):
+            if self.path not in ("/v1/chat", "/v1/agent", "/v1/memory"):
                 return self._json(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -50,6 +67,20 @@ def make_handler(service):
                 return self._json(400, {"error": "Invalid JSON"})
             if not isinstance(data, dict):
                 return self._json(400, {"error": "Expected JSON object"})
+            if self.path == "/v1/memory":
+                try:
+                    player, npc = _memory_scope(data)
+                    op = data.get("operation")
+                    note = data.get("text", "")
+                    ident = data.get("note_id", 0)
+                    if not isinstance(op, str) or not isinstance(note, str) or len(note) > 300 or (not isinstance(ident, int) or isinstance(ident, bool) or ident < 0):
+                        raise ValueError("Invalid memory operation")
+                    return self._json(200, service.change_memory(player, npc, op, note, ident))
+                except ValueError as exc:
+                    return self._json(400, {"error": str(exc)})
+                except Exception:
+                    LOG.exception("Memory operation failed")
+                    return self._json(500, {"error": "Memory operation failed"})
             character_id = data.get("character_id")
             player_id = data.get("player_id")
             message = data.get("message")

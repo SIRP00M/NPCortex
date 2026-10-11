@@ -133,10 +133,42 @@ public final class ChatBridge {
                     String action = data.get("action").getAsString();
                     if (reply.isBlank() || reply.length() > 1600 ||
                             !(action.equals("none") || action.equals("follow")
-                                || action.equals("stay") || action.equals("look_at_player"))) {
+                                || action.equals("stay") || action.equals("look_at_player")
+                                || action.equals("move_to_player") || action.equals("wander")
+                                || action.equals("jump") || action.equals("pickup_nearby")
+                                || action.equals("equip_item") || action.equals("drop_held_item")
+                                || action.equals("take_offered_item") || action.equals("give_item_to_owner"))) {
                         throw new IllegalArgumentException("Invalid agent response");
                     }
                     return new AgentReply(reply, action);
+                });
+    }
+
+    /** Scoped persistent memory; only the server constructs owner/player identifiers. */
+    public static CompletableFuture<JsonObject> memory(String playerId, String sessionId, String characterId,
+            String operation, String note, int noteId) {
+        JsonObject body = new JsonObject();
+        body.addProperty("player_id", playerId);
+        body.addProperty("session_id", sessionId);
+        body.addProperty("character_id", characterId);
+        HttpRequest.Builder builder;
+        if ("list".equals(operation)) {
+            String query = "?player_id=" + playerId + "&session_id=" + sessionId +
+                    "&character_id=" + characterId;
+            builder = HttpRequest.newBuilder(endpoint("/v1/memory" + query)).GET();
+        } else {
+            body.addProperty("operation", operation);
+            body.addProperty("text", note);
+            body.addProperty("note_id", noteId);
+            builder = HttpRequest.newBuilder(endpoint("/v1/memory"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        }
+        return HTTP.sendAsync(builder.timeout(Duration.ofSeconds(8)).build(),
+                        HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    ensureSuccess(response.statusCode());
+                    return JsonParser.parseString(response.body()).getAsJsonObject();
                 });
     }
 

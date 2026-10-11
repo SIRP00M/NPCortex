@@ -6,13 +6,13 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.4.2-alpha` In-Game Manager source update.** The project developer has reported Phases 3–6 functioning in Minecraft (AI dialogue, spawned NPCs, custom characters, world awareness and actions), with a remaining skin display issue addressed by the manager and hot reload update. **This v0.4.2 Forge UI update still requires an on-machine Java build and game test.** No combat, TaCZ integration, autonomous scanning or persistent dialogue memory yet.
+**Project status: `v0.5.0-alpha` Phase 7 source update.** The project developer confirmed v0.4.2 worked in-game. Phase 7 adds SQLite persistent dialogue history and manual memory notes, a memory UI, friendship activity score, and bounded item/movement actions. **Phase 7 Forge Java compilation and gameplay remain unverified until built on Windows.** No combat, TaCZ integration, or autonomous scanning yet.
 
 ## Repository layout
 
 ```text
 NPCortex/
-├── backend/                # Python server; model adapter, sessions, character loader
+├── backend/                # Python server; model adapter, SQLite memory, character loader
 │   ├── src/npcortex_backend/
 │   └── tests/
 ├── forge-mod/              # Forge 1.20.1 mod (Java 17)
@@ -105,8 +105,9 @@ Copy `character-packs/guide/` to `character-packs/my_npc/`; change the JSON fiel
 - **v0.1:** Local English chat, character packs, minimal Forge command (starter implementation).
 - **v0.2:** Generic NPC entity + click-to-chat GUI + basic follow/stay (reported working).
 - **v0.3:** Character packs, per-NPC in-RAM chat sessions, and local PNG skins (reported working).
-- **v0.4:** Contextual world snapshots + validated follow/stay/look action proposals (source ready; gameplay verification pending).
-- **v0.5:** Optional TaCZ / other mod integrations, combat compatibility testing.
+- **v0.4:** Contextual world snapshots + validated follow/stay/look action proposals (developer-reported working).
+- **v0.5:** Persistent memory, relationships activity score, memory UI, basic item and navigation actions (Phase 7).
+- **Future:** Optional TaCZ / other mod integrations, combat compatibility testing.
 - **Later:** Thai localization, richer behaviors, more LLM providers.
 
 See [Roadmap](docs/roadmap.md), [Phase 4 guide](docs/phase-4-npc.md) and [Architecture](docs/architecture.md).
@@ -171,8 +172,7 @@ Right-click Yui and say `What can you see nearby?`, `Please stay`, or
 Read the [Phase 6 guide](docs/phase-6-world-actions.md) for the data schema,
 security rules, Windows installation, test plan and known limitations.
 
-**Verification:** Python tests passed; Phase 6 was reported working by the project developer.
-The new v0.4.2 in-game skin manager has not yet been Forge-built or game-tested in this release environment.
+**Verification:** Phases 3–6 and the v0.4.2 manager have been reported working in-game by the project developer. Phase 7 is not yet verified in Minecraft.
 
 ## v0.4.2-alpha — ESC In-Game Character Manager (client skin hotfix)
 
@@ -189,3 +189,28 @@ cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient
 ```
+
+## Phase 7 (v0.5.0-alpha) — Persistent Memory & More Actions
+
+The Python backend now persists chat history and explicit memory notes in SQLite,
+scoped by **player UUID + NPC UUID + character ID**. NPCs gain a 9-slot inventory
+and item exchange, equip, drop, pickup and several additional movement actions.
+The ESC Manager gains a Memory Manager page to add/delete notes and inspect a
+simple friendship **activity** score (not simulated emotional consent).
+
+See [Phase 7 guide](docs/phase-7-memory-actions.md) for the full allowlist,
+PowerShell instructions, security constraints, and test checklist.
+
+```powershell
+cd F:\AI\NPCortex
+.\scripts\dev-backend.ps1           # Terminal A — restart after update
+.\scripts\phase7-check.ps1          # Terminal B — unit tests
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
+# When the database exists, create a SQLite online backup:
+.\scripts\backup-memory.ps1
+```
+
+**No network authentication yet:** The Python backend is local-only. Do not
+expose ports 8765/11434 publicly. Memory contents are locally saved and must
+never be uploaded into Git.

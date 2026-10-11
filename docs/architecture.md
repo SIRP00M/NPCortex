@@ -33,3 +33,11 @@ History is stored in Python process RAM by `(player_id, character_id)`, keeping 
 ## Security
 
 The local API has no auth and is bound to `127.0.0.1`. It is a development prototype, not ready for public hosting. Add authentication, authorization, rate limiting, abuse protection and structured action validation before supporting remote clients. Never accept unaudited actions from LLM text.
+
+## Phase 7 update (v0.5.0-alpha)
+
+See [Phase 7 architecture and memory scope](phase-7-memory-actions.md).
+The backend now optionally uses a SQLite MemoryStore instead of transient
+SessionStore for in-world NPC dialogues. A server-authoritative memory packet
+bridge controls what the in-game memory UI can inspect or change. The older
+RAM-only description above applies to Phase 6 and earlier.

@@ -70,8 +70,10 @@ public final class NPCortexManagerScreen extends Screen {
                 .bounds(left, panelY + 117, half, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Open Skins Folder"), btn -> openFolder())
                 .bounds(left + half + 6, panelY + 117, full - half - 6, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Memory Manager"), btn -> openMemory())
+                .bounds(left, panelY + 211, Math.min(142, full - 74), 20).build());
         addRenderableWidget(Button.builder(Component.literal("Open Character Packs"), btn -> openPacks())
-                .bounds(left, panelY + 211, Math.min(156, full - 74), 20).build());
+                .bounds(left + Math.min(142, full - 74) + 4, panelY + 211, Math.min(150, full - 225), 20).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), btn -> onClose())
                 .bounds(right - 68, panelY + 211, 68, 20).build());
         selectNearestIfAvailable();
@@ -201,6 +203,15 @@ public final class NPCortexManagerScreen extends Screen {
         SkinTextureCache.reload(id);
         status("Appearance update requested for " + npc.getName().getString()
                 + ". Server will apply only if you own this NPC and are nearby.", false);
+    }
+
+    private void openMemory() {
+        CompanionEntity npc = selectedNpc();
+        if (npc == null) {
+            status("Select an owned nearby NPC first.", true);
+            return;
+        }
+        minecraft.setScreen(new MemoryManagementScreen(this, npc.getId(), npc.getName().getString()));
     }
 
     private void openFolder() {

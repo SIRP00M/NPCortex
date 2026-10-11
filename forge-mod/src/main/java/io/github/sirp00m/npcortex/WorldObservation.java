@@ -41,6 +41,8 @@ public final class WorldObservation {
         JsonObject npcData = new JsonObject();
         npcData.addProperty("following", npc.isFollowing());
         npcData.addProperty("health", rounded(npc.getHealth()));
+        npcData.addProperty("holding", BuiltInRegistries.ITEM.getKey(npc.getMainHandItem().getItem()).toString());
+        npcData.addProperty("stored_items", npc.storedSlots());
         root.add("npc", npcData);
 
         JsonObject blocks = new JsonObject();
