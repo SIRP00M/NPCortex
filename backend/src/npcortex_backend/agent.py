@@ -12,7 +12,8 @@ from typing import Any
 from .ollama import ModelError
 
 ALLOWED_ACTIONS = frozenset(("none", "follow", "stay", "look_at_player",
-    "move_to_player", "wander", "jump", "pickup_nearby", "equip_item", "drop_held_item", "take_offered_item", "give_item_to_owner", "drop_stored_item"))
+    "move_to_player", "wander", "jump", "pickup_nearby", "equip_item", "drop_held_item", "take_offered_item", "give_item_to_owner", "drop_stored_item",
+    "mine_nearby", "place_block", "craft_item"))
 # Adding an action: add its ID here, extend AGENT_POLICY's examples,
 # and register its Java executor in WorldActions. No sequence whitelist needed.
 MAX_PLAN_STEPS = 8
@@ -23,7 +24,8 @@ ITEM_ID_RE = re.compile(r"[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,128}\Z")
 # Target optional for older single-action calls, but mandatory for multi-step
 # item operations to prevent accidentally picking/equipping the wrong thing.
 TARGETED_ITEM_ACTIONS = frozenset(("give_item_to_owner", "drop_stored_item",
-                                  "equip_item", "pickup_nearby", "take_offered_item"))
+                                  "equip_item", "pickup_nearby", "take_offered_item",
+                                  "mine_nearby", "place_block", "craft_item"))
 STEP_SCHEMA = {
     "type": "object",
     "properties": {
@@ -56,13 +58,27 @@ Do only the things the player actually requested, in their requested order.
 Each step MUST use ONE of the allowed actions:
 follow, stay, look_at_player, move_to_player, wander, jump,
 pickup_nearby, equip_item, drop_held_item, drop_stored_item,
-take_offered_item, give_item_to_owner.
+take_offered_item, give_item_to_owner,
+mine_nearby, place_block, craft_item.
 
 For item actions use exact namespaced IDs (minecraft:diamond_sword) from the
 observed npc.inventory, player.holding or ground_items. Never invent an item.
 For follow/stay/look_at_player/move_to_player/wander/jump/drop_held_item,
 target_item MUST be "". For item actions specify target_item; especially
 for a multi-step plan, all item actions MUST have a nonempty exact item ID.
+For mine_nearby select an ID listed in mineable_blocks (block type, not item drop).
+For place_block select an ID in npc.inventory AND allowed_placeable_blocks;
+placement is directly in front of NPC and only on clear supported terrain.
+For craft_item select an ID from supported_recipes, and ensure the required
+ingredients are observed in npc.inventory or produced earlier in the plan.
+CURRENT CRAFTING RECIPES, consumed from the NPC BAG ONLY:
+1 minecraft:oak_log -> 4 minecraft:oak_planks;
+2 minecraft:oak_planks -> 4 minecraft:stick;
+4 minecraft:oak_planks -> 1 minecraft:crafting_table;
+1 minecraft:coal + 1 minecraft:stick -> 4 minecraft:torch.
+No invented recipes, block IDs or coordinates; world edits require opt-in
+and singleplayer with cheats. Mining yields ground drops, so use pickup_nearby
+for the actual dropped item ID (stone produces cobblestone).
 Do not use an item unless it is present in observations or it will be produced
 by an earlier step of the same plan. Each step is individually verified again
 by the Minecraft server; subsequent steps stop when a step fails.
@@ -88,6 +104,9 @@ NATURAL-LANGUAGE INTENT EXAMPLES (meaning, not literal keyword matching):
 - "Hand me the emerald" -> give_item_to_owner, targeted to NPC hand/bag.
 - "Toss the emerald on the ground" -> drop_stored_item, targeted to NPC hand/bag.
 - "Drop what you're holding" -> drop_held_item.
+- "Mine that oak log" -> mine_nearby, minecraft:oak_log (if observed).
+- "Craft sticks" -> craft_item, minecraft:stick (supported recipe only).
+- "Place oak planks" -> place_block, minecraft:oak_planks (in NPC bag).
 - Multi-step example: "pick up the iron sword, equip it, and follow me" -> 3 steps.
 - NEGATION: "Don't follow me" means stay, not follow; "Don't drop the
   sword" means no drop action. Quoted or hypothetical phrases are not orders.
@@ -112,6 +131,9 @@ drop_stored_item: drop ONE matching bag item onto ground;
 drop_held_item: drop item in NPC main hand;
 follow: turn on NPC follow mode; stay: turn follow mode off;
 move_to_player/wander: navigate asynchronously (must finish before later steps).
+mine_nearby: break one matching visible safe block next to NPC (drops on ground);
+craft_item: consume registered recipe ingredients from NPC bag into NPC bag;
+place_block: consume one matching safe block item from NPC bag and place ahead.
 
 Example: 'Pick up that sword, equip it and follow me' with a grounded dropped sword:
 {"reply":"I'll pick up the sword, equip it and follow you.",
@@ -123,7 +145,8 @@ Example: 'Take my sword and follow me' when player.holding=iron_sword:
 steps=[{"action":"take_offered_item","target_item":"minecraft:iron_sword"},
        {"action":"equip_item","target_item":"minecraft:iron_sword"},
        {"action":"follow","target_item":""}]
-No mining, building, fighting, crafting, teleporting or executing text/commands.
+No fighting, teleporting, arbitrary coordinates, arbitrary recipes,
+freeform code or text commands. World edits are disabled by default.
 If an action is unavailable, describe that in reply; do not invent an action.
 """
 
@@ -141,6 +164,8 @@ def _parse_step(action: Any, target: Any) -> dict[str, str] | None:
     if not isinstance(target, str) or (target and not ITEM_ID_RE.fullmatch(target)):
         return None
     if target and action not in TARGETED_ITEM_ACTIONS:
+        return None
+    if action in {"mine_nearby", "place_block", "craft_item"} and not target:
         return None
     return {"action": action, "target_item": target}
 
@@ -417,6 +442,16 @@ def sanitize_observation(value: Any) -> dict:
             raise ValueError("Invalid ground item count")
         ground_items.append({"id": item_id, "count": count,
                              "distance": _bounded_number(entry.get("distance"), 3)})
+    def bounded_ids(field: str, limit: int = 16) -> list[str]:
+        raw = value.get(field, [])
+        if not isinstance(raw, list) or len(raw) > limit:
+            raise ValueError(f"world.{field} must be an array of up to {limit} IDs")
+        if any(not isinstance(v, str) or not ITEM_ID_RE.fullmatch(v) for v in raw):
+            raise ValueError(f"Invalid world.{field} resource ID")
+        return list(dict.fromkeys(raw))
+    mineable_blocks = bounded_ids("mineable_blocks")
+    allowed_placeable_blocks = bounded_ids("allowed_placeable_blocks")
+    supported_recipes = bounded_ids("supported_recipes")
     weather = value.get("weather")
     time = value.get("time")
     return {
@@ -440,6 +475,9 @@ def sanitize_observation(value: Any) -> dict:
         "blocks": {key: _bounded_text(blocks.get(key)) for key in ("below", "feet", "ahead")},
         "nearby": seen,
         "ground_items": ground_items,
+        "mineable_blocks": mineable_blocks,
+        "allowed_placeable_blocks": allowed_placeable_blocks,
+        "supported_recipes": supported_recipes,
     }
 
 

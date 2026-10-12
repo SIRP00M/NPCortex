@@ -62,6 +62,9 @@ public final class WorldActions {
             case "drop_stored_item" -> dropStored(npc, targetItem);
             case "take_offered_item" -> takeOffered(player, npc, targetItem);
             case "give_item_to_owner" -> giveBack(player, npc, targetItem);
+            case "mine_nearby" -> WorldBlockActions.mine(player, npc, targetItem);
+            case "place_block" -> WorldBlockActions.place(player, npc, targetItem);
+            case "craft_item" -> WorldCrafting.craft(npc, targetItem);
             default -> "[Action blocked: unknown action.]";
         };
     }

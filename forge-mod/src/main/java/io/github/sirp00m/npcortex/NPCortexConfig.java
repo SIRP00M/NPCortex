@@ -12,6 +12,7 @@ public final class NPCortexConfig {
     public static final ForgeConfigSpec.BooleanValue AUTONOMY_RETREAT;
     public static final ForgeConfigSpec.BooleanValue AUTONOMY_AI_SPEECH;
     public static final ForgeConfigSpec.BooleanValue AUTONOMY_FALLBACK_WARNING;
+    public static final ForgeConfigSpec.BooleanValue WORLD_EDITS_ENABLED;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -33,6 +34,11 @@ public final class NPCortexConfig {
         AUTONOMY_FALLBACK_WARNING = builder.comment(
                 "Only show a system warning if the AI reaction is unavailable or disabled; never duplicate an AI reply")
                 .define("fallback_warning_when_ai_unavailable", true);
+        builder.pop();
+        builder.comment("Safe singleplayer world editing; OFF by default. Backup your world first.")
+                .push("world_interaction");
+        WORLD_EDITS_ENABLED = builder.comment("Allow registered mining/placement actions; also requires cheats")
+                .define("enable_world_edits", false);
         builder.pop();
         SPEC = builder.build();
     }

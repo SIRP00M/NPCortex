@@ -9,7 +9,7 @@ import java.util.Set;
  *  need any special-case combination/ordering logic for immediate actions.
  */
 public final class ActionCatalog {
-    public enum TargetPolicy { NONE, OPTIONAL_ITEM }
+    public enum TargetPolicy { NONE, OPTIONAL_ITEM, REQUIRED_RESOURCE }
 
     private static final Map<String, TargetPolicy> REGISTERED = Map.ofEntries(
             Map.entry("follow", TargetPolicy.NONE),
@@ -23,7 +23,10 @@ public final class ActionCatalog {
             Map.entry("equip_item", TargetPolicy.OPTIONAL_ITEM),
             Map.entry("take_offered_item", TargetPolicy.OPTIONAL_ITEM),
             Map.entry("give_item_to_owner", TargetPolicy.OPTIONAL_ITEM),
-            Map.entry("drop_stored_item", TargetPolicy.OPTIONAL_ITEM)
+            Map.entry("drop_stored_item", TargetPolicy.OPTIONAL_ITEM),
+            Map.entry("mine_nearby", TargetPolicy.REQUIRED_RESOURCE),
+            Map.entry("place_block", TargetPolicy.REQUIRED_RESOURCE),
+            Map.entry("craft_item", TargetPolicy.REQUIRED_RESOURCE)
     );
 
     private ActionCatalog() {}
@@ -33,13 +36,14 @@ public final class ActionCatalog {
     }
 
     public static boolean itemAction(String action) {
-        return REGISTERED.get(action) == TargetPolicy.OPTIONAL_ITEM;
+        return REGISTERED.get(action) != TargetPolicy.NONE && REGISTERED.containsKey(action);
     }
 
     public static boolean validTarget(String action, String target) {
         if (!allowed(action) || target == null || (!target.isEmpty()
                 && !target.matches("[a-z0-9_.-]{1,64}:[a-z0-9_./-]{1,128}"))) return false;
-        return target.isEmpty() || itemAction(action);
+        return (target.isEmpty() && REGISTERED.get(action) != TargetPolicy.REQUIRED_RESOURCE)
+                || (!target.isEmpty() && itemAction(action));
     }
 
     public static Set<String> supported() {

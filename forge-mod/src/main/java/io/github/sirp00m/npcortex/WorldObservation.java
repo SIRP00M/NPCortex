@@ -81,6 +81,25 @@ public final class WorldObservation {
         blocks.addProperty("feet", blockName(world.getBlockState(pos)));
         blocks.addProperty("ahead", blockName(world.getBlockState(pos.relative(npc.getDirection()))));
         root.add("blocks", blocks);
+        // The model may refer only to IDs observed here; the executor re-checks
+        // physical reachability and visibility before editing anything.
+        java.util.Set<String> visibleBlocks = new java.util.LinkedHashSet<>();
+        for (int dx = -2; dx <= 2; dx++) for (int dy = 0; dy <= 2; dy++)
+            for (int dz = -2; dz <= 2; dz++) {
+                BlockPos near = pos.offset(dx, dy, dz);
+                if (!world.isLoaded(near)) continue;
+                String id = blockName(world.getBlockState(near));
+                if (WorldInteractionPolicy.breakable(id)) visibleBlocks.add(id);
+            }
+        JsonArray mineable = new JsonArray();
+        visibleBlocks.stream().limit(12).forEach(mineable::add);
+        root.add("mineable_blocks", mineable);
+        JsonArray placeable = new JsonArray();
+        WorldInteractionPolicy.placeableIds().stream().sorted().forEach(placeable::add);
+        root.add("allowed_placeable_blocks", placeable);
+        JsonArray recipes = new JsonArray();
+        WorldInteractionPolicy.recipeOutputs().stream().sorted().forEach(recipes::add);
+        root.add("supported_recipes", recipes);
 
         JsonArray nearby = new JsonArray();
         List<LivingEntity> entities = world.getEntitiesOfClass(LivingEntity.class,
@@ -128,6 +147,8 @@ public final class WorldObservation {
         }
         JsonArray groundItems = snapshot.getAsJsonArray("ground_items");
         text.append(" | ground:").append(groundItems.size());
+        text.append(" | mineable:").append(snapshot.getAsJsonArray("mineable_blocks"));
+        text.append(" | crafting:").append(snapshot.getAsJsonArray("supported_recipes"));
         JsonArray nearby = snapshot.getAsJsonArray("nearby");
         for (int i = 0; i < Math.min(5, nearby.size()); ++i) {
             JsonObject entity = nearby.get(i).getAsJsonObject();

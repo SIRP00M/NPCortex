@@ -8,7 +8,7 @@
 
 **Minecraft 1.20.1** · **Forge 47.4.10** · **Java 17** · **Python 3.10+** · **Ollama / Qwen 3 8B**
 
-**v0.7.2-alpha — Per-NPC Autonomy Manager**
+**v0.8.0-alpha — Advanced World Interaction (Experimental)**
 
 [Features](#features) · [Quick Start](#quick-start) · [Custom NPCs](#create-your-own-npc) · [Actions](#supported-actions) · [Architecture](#architecture) · [Documentation](#documentation)
 
@@ -42,6 +42,7 @@ Character packs define *who the NPC is*. The AI helps interpret *what the player
 | **Action dialogue** | Character-specific reactions generated after Minecraft reports action outcomes |
 | **Autonomous awareness** | Opt-in threat detection, bounded retreat while following, and a single Qwen in-character warning (system fallback only if AI unavailable) |
 | **Per-NPC autonomy management** | Enable/disable by Character ID or UUID, or choose owned NPCs through ESC → NPCortex Manager; server checks ownership |
+| **Bounded world interactions (experimental)** | Opt-in singleplayer mining/placement of safe blocks and bag-only crafting of four supported recipes; steps work with the existing 8-step plan runner |
 
 A companion can respond to a request such as:
 
@@ -50,6 +51,14 @@ A companion can respond to a request such as:
 > **NPCortex:** Validates and attempts **pickup → equip → follow** in order. Each step is checked by Minecraft; failed steps stop the plan. Yui can then respond in her own voice based on the actual results.
 
 This does **not** mean the NPC can automatically fight with that sword. Combat and more advanced activities need separate behavior implementations.
+
+## v0.8.0-alpha — Advanced World Interaction
+
+This version introduces **three server-authoritative actions** — `mine_nearby`, `craft_item`, and `place_block` — that can be chained with existing actions such as `pickup_nearby`. Example: mine an oak log → collect its drop → craft oak planks → place a block directly in front of the NPC. The server checks ownership, distance, inventory, resource IDs, and execution results before continuing the plan.
+
+**Important:** breaking and placing blocks are **disabled by default**, require an explicit TOML opt-in, singleplayer with cheats, and a small block allowlist. Crafting currently supports only oak planks, sticks, crafting tables and torches. This is **not** arbitrary mining, modded crafting or intelligent house construction. See the [v0.8.0 world interaction guide](docs/world-interactions-v0.8.md) for exact recipes, safety constraints, commands and setup.
+
+Use `/npcortex world status`, `/npcortex world mine minecraft:oak_log`, `/npcortex world craft minecraft:oak_planks`, and `/npcortex world place minecraft:oak_planks` to test mechanics without Qwen first.
 
 ## Phase 8 — Autonomous Behaviors
 

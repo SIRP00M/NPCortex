@@ -131,6 +131,26 @@ public final class NPCortex {
                                 .then(Commands.argument("item_id", StringArgumentType.greedyString())
                                         .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
                                                 "give_item_to_owner", StringArgumentType.getString(context, "item_id"))))))
+                .then(Commands.literal("world")
+                        .then(Commands.literal("status").executes(context -> {
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "NPCortex world edits: " + (NPCortexConfig.WORLD_EDITS_ENABLED.get()
+                                            ? "enabled (singleplayer + cheats required)" : "disabled")
+                                    + " | craft recipes: " + String.join(", ", WorldInteractionPolicy.recipeOutputs())), false);
+                            return 1;
+                        }))
+                        .then(Commands.literal("mine")
+                                .then(Commands.argument("block_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "mine_nearby", StringArgumentType.getString(context, "block_id")))))
+                        .then(Commands.literal("place")
+                                .then(Commands.argument("block_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "place_block", StringArgumentType.getString(context, "block_id")))))
+                        .then(Commands.literal("craft")
+                                .then(Commands.argument("item_id", StringArgumentType.greedyString())
+                                        .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                "craft_item", StringArgumentType.getString(context, "item_id"))))))
                 .then(Commands.literal("observe").executes(context -> {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     CompanionEntity npc = nearestCompanion(player);
@@ -144,7 +164,7 @@ public final class NPCortex {
                 }))
                 .then(Commands.literal("actions").executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal(
-                            "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, drop_stored_item, take_offered_item, give_item_to_owner. No attack/mining/crafting."), false);
+                            "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, drop_stored_item, take_offered_item, give_item_to_owner. mine_nearby, place_block, craft_item. World edits require opt-in."), false);
                     return 1;
                 }))
                 .then(Commands.literal("auto")

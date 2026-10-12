@@ -78,3 +78,11 @@ Phase 3 has passed live in-game chat testing. Phase 4 adds source for spawn, pla
 - Python tests pass. **Forge build and real-game tests remain pending**.
 - Future: generalized behavior registry, path/arrival status, armor and tool usage,
   combat, TaCZ, mining/crafting, multiplayer authorization and sandboxing.
+
+
+## v0.8.0-alpha — experimental world interaction
+
+- Added limited singleplayer, opt-in block mining/placement, with item- and block-ID allowlists and server-side verification.
+- Added four registered bag-only crafting recipes. No arbitrary workbench recipes yet.
+- General action planner can chain mine/pickup/craft/place up to eight steps.
+- Future work: actual RecipeManager support, claim/protection integration, tool-dependent block mining, navigation to targets, task precondition re-planning, and more useful world interactions.
