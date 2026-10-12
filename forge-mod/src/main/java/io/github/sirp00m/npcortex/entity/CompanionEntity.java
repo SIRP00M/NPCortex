@@ -24,6 +24,8 @@ import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.BlockPos;
 import net.minecraftforge.network.PacketDistributor;
 
 /** Server-owned, persistent, generic character. AI is not run on entity ticks. */
@@ -40,6 +42,12 @@ public class CompanionEntity extends PathfinderMob {
 
     @Nullable private UUID ownerUUID;
     private int lookAtOwnerTicks;
+    // Per-NPC opt-in: no periodic inference or autonomous movement by default.
+    private boolean autonomyEnabled;
+    private long nextAutonomyWarningTick;
+    private int retreatTicks;
+    @Nullable private Vec3 retreatDestination;
+
     private final SimpleContainer bag = new SimpleContainer(9);
 
     public SimpleContainer bag() { return bag; }
@@ -75,6 +83,7 @@ public class CompanionEntity extends PathfinderMob {
     @Override
     protected void registerGoals() {
         goalSelector.addGoal(0, new FloatGoal(this));
+        goalSelector.addGoal(1, new RetreatFromThreatGoal(this));
         goalSelector.addGoal(2, new FollowOwnerGoal(this));
         goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 8.0F));
         goalSelector.addGoal(8, new RandomLookAroundGoal(this));
@@ -120,7 +129,35 @@ public class CompanionEntity extends PathfinderMob {
     public boolean isFollowing() { return entityData.get(FOLLOWING); }
     public void setFollowing(boolean following) {
         entityData.set(FOLLOWING, following);
-        if (!following) getNavigation().stop();
+        if (!following) {
+            clearRetreat();
+            getNavigation().stop();
+        }
+    }
+
+    public boolean isAutonomyEnabled() { return autonomyEnabled; }
+    public void setAutonomyEnabled(boolean enabled) {
+        autonomyEnabled = enabled;
+        if (!enabled) clearRetreat();
+    }
+    public long nextAutonomyWarningTick() { return nextAutonomyWarningTick; }
+    public void setNextAutonomyWarningTick(long tick) { nextAutonomyWarningTick = tick; }
+    public boolean isRetreating() { return retreatDestination != null && retreatTicks > 0; }
+    @Nullable public Vec3 retreatDestination() { return isRetreating() ? retreatDestination : null; }
+    public void clearRetreat() {
+        retreatTicks = 0;
+        retreatDestination = null;
+        getNavigation().stop();
+    }
+    public boolean beginRetreat(Vec3 destination, int durationTicks) {
+        if (!isFollowing() || !autonomyEnabled || !Double.isFinite(destination.x)
+                || !Double.isFinite(destination.z)) return false;
+        // No direct teleportation. Only start if vanilla pathfinding can find a path.
+        var path = getNavigation().createPath(BlockPos.containing(destination), 0);
+        if (path == null) return false;
+        retreatDestination = destination;
+        retreatTicks = Math.min(80, Math.max(10, durationTicks));
+        return true;
     }
 
     /** Temporary look action, independent of any LLM state. */
@@ -131,6 +168,9 @@ public class CompanionEntity extends PathfinderMob {
     @Override
     public void aiStep() {
         super.aiStep();
+        if (!level().isClientSide && retreatTicks > 0 && --retreatTicks == 0) {
+            clearRetreat();
+        }
         if (!level().isClientSide && lookAtOwnerTicks > 0) {
             --lookAtOwnerTicks;
             if (ownerUUID != null && level() instanceof net.minecraft.server.level.ServerLevel world) {
@@ -163,6 +203,7 @@ public class CompanionEntity extends PathfinderMob {
         super.addAdditionalSaveData(tag);
         tag.putString("NPCortexCharacterId", getCharacterId());
         tag.putBoolean("NPCortexFollowing", isFollowing());
+        tag.putBoolean("NPCortexAutonomyEnabled", autonomyEnabled);
         tag.putString("NPCortexSkinId", getSkinId());
         tag.putBoolean("NPCortexSlimModel", isSlimModel());
         if (ownerUUID != null) tag.putUUID("NPCortexOwner", ownerUUID);
@@ -189,6 +230,8 @@ public class CompanionEntity extends PathfinderMob {
         }
         entityData.set(SLIM_MODEL, tag.getBoolean("NPCortexSlimModel"));
         setFollowing(!tag.contains("NPCortexFollowing") || tag.getBoolean("NPCortexFollowing"));
+        // Older saves have autonomy off by default, no accidental automatic behavior.
+        autonomyEnabled = tag.getBoolean("NPCortexAutonomyEnabled");
         ownerUUID = tag.hasUUID("NPCortexOwner") ? tag.getUUID("NPCortexOwner") : null;
         bag.clearContent();
         ListTag saved = tag.getList("NPCortexBag", 10);

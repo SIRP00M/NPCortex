@@ -24,6 +24,8 @@ public final class WorldActions {
                 !player.getUUID().equals(npc.getOwnerUUID())) {
             return "[Action blocked: only the nearby owner can control this NPC.]";
         }
+        // An explicit owner command always supersedes a temporary autonomous retreat.
+        npc.clearRetreat();
         return switch (action) {
             case "follow" -> {
                 npc.setFollowing(true);

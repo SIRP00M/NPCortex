@@ -22,7 +22,8 @@ final class FollowOwnerGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!npc.isFollowing() || !(npc.level() instanceof ServerLevel world)) return false;
+        if (!npc.isFollowing() || npc.isRetreating()
+                || !(npc.level() instanceof ServerLevel world)) return false;
         UUID id = npc.getOwnerUUID();
         if (id == null) return false;
         owner = world.getServer().getPlayerList().getPlayer(id);
@@ -33,7 +34,7 @@ final class FollowOwnerGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return npc.isFollowing() && owner != null && owner.isAlive()
+        return npc.isFollowing() && !npc.isRetreating() && owner != null && owner.isAlive()
                 && owner.level() == npc.level() && npc.distanceToSqr(owner) > 4.0D;
     }
 

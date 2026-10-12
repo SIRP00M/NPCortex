@@ -8,7 +8,7 @@
 
 **Minecraft 1.20.1** · **Forge 47.4.10** · **Java 17** · **Python 3.10+** · **Ollama / Qwen 3 8B**
 
-**v0.6.0-alpha — Intelligent Companions Update**
+**v0.7.2-alpha — Per-NPC Autonomy Manager**
 
 [Features](#features) · [Quick Start](#quick-start) · [Custom NPCs](#create-your-own-npc) · [Actions](#supported-actions) · [Architecture](#architecture) · [Documentation](#documentation)
 
@@ -40,6 +40,8 @@ Character packs define *who the NPC is*. The AI helps interpret *what the player
 | **Persistent memory** | SQLite conversation history and player-written memory notes, scoped to player and NPC |
 | **Relationship activity** | Simple friendship/activity score, not a simulated emotional relationship |
 | **Action dialogue** | Character-specific reactions generated after Minecraft reports action outcomes |
+| **Autonomous awareness** | Opt-in threat detection, bounded retreat while following, and a single Qwen in-character warning (system fallback only if AI unavailable) |
+| **Per-NPC autonomy management** | Enable/disable by Character ID or UUID, or choose owned NPCs through ESC → NPCortex Manager; server checks ownership |
 
 A companion can respond to a request such as:
 
@@ -48,6 +50,31 @@ A companion can respond to a request such as:
 > **NPCortex:** Validates and attempts **pickup → equip → follow** in order. Each step is checked by Minecraft; failed steps stop the plan. Yui can then respond in her own voice based on the actual results.
 
 This does **not** mean the NPC can automatically fight with that sword. Combat and more advanced activities need separate behavior implementations.
+
+## Phase 8 — Autonomous Behaviors
+
+Autonomous sensing is **off by default**. From a cheats-enabled test world, stand within 12 blocks of your owned NPC and use:
+
+```mcfunction
+/npcortex auto on
+/npcortex auto status
+/npcortex auto off
+```
+
+Specify any loaded owned NPC without standing next to it:
+
+```mcfunction
+/npcortex auto list
+/npcortex auto on yui
+/npcortex auto off ai
+/npcortex auto status yui
+```
+
+For multiple NPCs with the same ID, use the full UUID shown by `auto list`. Alternatively, open **ESC → NPCortex Manager → Manage NPC Autonomy** and choose the intended NPC. The GUI lists **loaded owned NPCs** and checks permission server-side. See [Autonomy Manager](docs/phase-8-autonomy-manager.md).
+
+When enabled, an NPC near its online owner periodically checks for nearby visible hostile mobs, generates one in-character owner warning via Qwen (with optional system fallback if AI unavailable), and may *attempt* to retreat if it is following and a monster gets too close. If the NPC has been told to **Stay**, it can still warn but will not initiate autonomous movement. Explicit multi-step plans are not interrupted. Exactly one owner-facing warning is shown for each event: normally the Qwen reply; the plain system text appears only if AI speech is disabled/unavailable and the fallback setting is enabled. No duplicate messages are shown. AI inference is rate-limited, not run every tick.
+
+See the [Phase 8 autonomous behavior guide](docs/phase-8-autonomous-behaviors.md) for testing, settings, and current limitations. This is **reactive safety behavior** — not general autonomous mining, combat, building, or AI-initiated task planning.
 
 ## Quick Start
 

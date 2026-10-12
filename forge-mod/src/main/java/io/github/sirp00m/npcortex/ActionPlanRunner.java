@@ -54,6 +54,11 @@ public final class ActionPlanRunner {
         }
     }
 
+    /** Autonomous activities must not interrupt player-directed queued actions. */
+    public static boolean isBusy(CompanionEntity npc) {
+        return ACTIVE.containsKey(npc.getUUID());
+    }
+
     /** Cancel pending work when the owner explicitly overrides an NPC's behavior. */
     public static boolean cancel(CompanionEntity npc) {
         RunningPlan removed = ACTIVE.remove(npc.getUUID());

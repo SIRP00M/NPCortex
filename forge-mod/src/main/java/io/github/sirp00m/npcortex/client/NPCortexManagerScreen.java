@@ -44,7 +44,7 @@ public final class NPCortexManagerScreen extends Screen {
     protected void init() {
         panelW = Math.min(460, width - 16);
         panelX = (width - panelW) / 2;
-        panelY = Math.max(4, (height - 242) / 2);
+        panelY = Math.max(4, (height - 274) / 2);
         int left = panelX + 12;
         int right = panelX + panelW - 12;
         int full = panelW - 24;
@@ -76,6 +76,8 @@ public final class NPCortexManagerScreen extends Screen {
                 .bounds(left + Math.min(142, full - 74) + 4, panelY + 211, Math.min(150, full - 225), 20).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), btn -> onClose())
                 .bounds(right - 68, panelY + 211, 68, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Manage NPC Autonomy"), btn -> openAutonomy())
+                .bounds(left, panelY + 239, full, 20).build());
         selectNearestIfAvailable();
     }
 
@@ -205,6 +207,10 @@ public final class NPCortexManagerScreen extends Screen {
                 + ". Server will apply only if you own this NPC and are nearby.", false);
     }
 
+    private void openAutonomy() {
+        minecraft.setScreen(new AutonomyManagementScreen(this));
+    }
+
     private void openMemory() {
         CompanionEntity npc = selectedNpc();
         if (npc == null) {
@@ -250,7 +256,7 @@ public final class NPCortexManagerScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float tick) {
         renderBackground(graphics);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + 240, 0xEF152027);
+        graphics.fill(panelX, panelY, panelX + panelW, panelY + 274, 0xEF152027);
         graphics.fill(panelX, panelY, panelX + panelW, panelY + 2, 0xFF8BA66A);
         graphics.drawString(font, "NPCortex / Character Manager", panelX + 12, panelY + 9, 0xFFE4EDDA, false);
         graphics.drawString(font, "Skin ID", panelX + 12, panelY + 52, 0xFFC6C8B8, false);

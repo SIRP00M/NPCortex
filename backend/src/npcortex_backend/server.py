@@ -53,7 +53,7 @@ def make_handler(service):
             return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
-            if self.path not in ("/v1/chat", "/v1/agent", "/v1/action-reply", "/v1/memory"):
+            if self.path not in ("/v1/chat", "/v1/agent", "/v1/action-reply", "/v1/autonomy-reply", "/v1/memory"):
                 return self._json(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -92,6 +92,12 @@ def make_handler(service):
             if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
                 return self._json(400, {"error": "Message must contain 1–2000 characters"})
             try:
+                if self.path == "/v1/autonomy-reply":
+                    if session_id is None:
+                        return self._json(400, {"error": "session_id required"})
+                    return self._json(200, service.autonomy_reply(
+                        character_id, player_id, session_id,
+                        data.get("event"), data.get("threat_type"), data.get("result")))
                 if self.path == "/v1/action-reply":
                     if session_id is None:
                         return self._json(400, {"error": "session_id required for action replies"})

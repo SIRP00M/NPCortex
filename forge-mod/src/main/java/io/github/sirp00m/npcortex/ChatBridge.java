@@ -139,6 +139,32 @@ public final class ChatBridge {
                 });
     }
 
+    /** Optional one-sentence autonomous reaction; cannot return executable actions. */
+    public static CompletableFuture<String> autonomyReply(String characterId, String playerId,
+            String sessionId, String threatType, String result) {
+        JsonObject body = new JsonObject();
+        body.addProperty("character_id", characterId);
+        body.addProperty("player_id", playerId);
+        body.addProperty("session_id", sessionId);
+        body.addProperty("message", "A hostile mob was noticed near the NPC.");
+        body.addProperty("event", "hostile_nearby");
+        body.addProperty("threat_type", threatType);
+        body.addProperty("result", result);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/v1/autonomy-reply"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(25))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    ensureSuccess(response.statusCode());
+                    String reply = JsonParser.parseString(response.body()).getAsJsonObject()
+                            .get("reply").getAsString().strip();
+                    if (reply.isEmpty() || reply.length() > 220)
+                        throw new IllegalArgumentException("Invalid autonomous dialogue");
+                    return reply;
+                });
+    }
+
     /** World snapshots are server-generated. Structured actions are never executed here. */
     public static CompletableFuture<AgentReply> agent(String characterId, String playerId,
             String message, String sessionId, JsonObject world) {

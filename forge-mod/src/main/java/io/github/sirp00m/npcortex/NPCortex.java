@@ -30,6 +30,7 @@ public final class NPCortex {
         NpcNetwork.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(ActionPlanRunner::tick);
+        MinecraftForge.EVENT_BUS.addListener(AutonomyController::tick);
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -146,6 +147,24 @@ public final class NPCortex {
                             "NPCortex actions: follow, stay, look_at_player, move_to_player, wander, jump, pickup_nearby, equip_item, drop_held_item, drop_stored_item, take_offered_item, give_item_to_owner. No attack/mining/crafting."), false);
                     return 1;
                 }))
+                .then(Commands.literal("auto")
+                        .then(Commands.literal("list")
+                                .executes(context -> listAutonomy(context.getSource().getPlayerOrException())))
+                        .then(Commands.literal("on")
+                                .executes(context -> setAutonomy(context.getSource().getPlayerOrException(), true))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> setAutonomy(context.getSource().getPlayerOrException(),
+                                                true, StringArgumentType.getString(context, "npc")))))
+                        .then(Commands.literal("off")
+                                .executes(context -> setAutonomy(context.getSource().getPlayerOrException(), false))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> setAutonomy(context.getSource().getPlayerOrException(),
+                                                false, StringArgumentType.getString(context, "npc")))))
+                        .then(Commands.literal("status")
+                                .executes(context -> statusAutonomy(context.getSource().getPlayerOrException(), null))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> statusAutonomy(context.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(context, "npc"))))))
                 .then(Commands.literal("spawn")
                         .then(Commands.argument("character", StringArgumentType.word())
                                 .executes(context -> {
@@ -181,6 +200,73 @@ public final class NPCortex {
                                 })))
                 .then(Commands.literal("follow").executes(context -> setFollow(context.getSource().getPlayerOrException(), true)))
                 .then(Commands.literal("stay").executes(context -> setFollow(context.getSource().getPlayerOrException(), false))));
+    }
+
+    private static int setAutonomy(ServerPlayer player, boolean enabled) {
+        CompanionEntity npc = nearestCompanion(player);
+        if (npc == null) {
+            player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks. "
+                    + "Use /npcortex auto list to select one by ID or UUID."));
+            return 0;
+        }
+        return applyAutonomy(player, npc, enabled);
+    }
+
+    private static int setAutonomy(ServerPlayer player, boolean enabled, String selector) {
+        CompanionEntity npc = resolveAutonomyNpc(player, selector);
+        return npc == null ? 0 : applyAutonomy(player, npc, enabled);
+    }
+
+    private static int applyAutonomy(ServerPlayer player, CompanionEntity npc, boolean enabled) {
+        npc.setAutonomyEnabled(enabled);
+        player.sendSystemMessage(Component.literal("NPCortex: " + npc.getName().getString()
+                + " [" + npc.getUUID().toString().substring(0, 8) + "] autonomy "
+                + (enabled ? "ON" : "OFF") + ". Awareness needs the owner nearby."));
+        return 1;
+    }
+
+    private static CompanionEntity resolveAutonomyNpc(ServerPlayer player, String selector) {
+        var match = AutonomySelector.resolve(AutonomyRoster.ownedLoaded(player), selector,
+                CompanionEntity::getCharacterId, CompanionEntity::getUUID);
+        if (match.ambiguous()) {
+            player.sendSystemMessage(Component.literal("NPCortex: Multiple NPCs use ID '" + selector
+                    + "'. Use /npcortex auto list and specify the full UUID."));
+            return null;
+        }
+        if (match.value() == null) {
+            player.sendSystemMessage(Component.literal("NPCortex: No LOADED owned NPC matches '" + selector
+                    + "'. Unloaded NPCs cannot be changed; use /npcortex auto list."));
+        }
+        return match.value();
+    }
+
+    private static int statusAutonomy(ServerPlayer player, String selector) {
+        CompanionEntity npc = selector == null ? nearestCompanion(player) : resolveAutonomyNpc(player, selector);
+        if (npc == null) {
+            if (selector == null) player.sendSystemMessage(Component.literal(
+                    "NPCortex: No owned companion within 12 blocks. Use /npcortex auto list."));
+            return 0;
+        }
+        player.sendSystemMessage(Component.literal("NPCortex: " + npc.getName().getString()
+                + " [" + npc.getUUID() + "] autonomy=" + (npc.isAutonomyEnabled() ? "ON" : "OFF")
+                + " | following=" + npc.isFollowing() + " | retreating=" + npc.isRetreating()));
+        return 1;
+    }
+
+    private static int listAutonomy(ServerPlayer player) {
+        List<CompanionEntity> owned = AutonomyRoster.ownedLoaded(player);
+        player.sendSystemMessage(Component.literal("NPCortex: " + owned.size()
+                + " loaded owned NPCs (unloaded chunks are not included):"));
+        for (int i = 0; i < Math.min(owned.size(), 20); i++) {
+            CompanionEntity npc = owned.get(i);
+            player.sendSystemMessage(Component.literal(" - " + npc.getName().getString()
+                    + " (" + npc.getCharacterId() + ") " + npc.getUUID()
+                    + " | auto=" + (npc.isAutonomyEnabled() ? "ON" : "OFF")
+                    + " | " + npc.level().dimension().location()));
+        }
+        if (owned.size() > 20) player.sendSystemMessage(Component.literal(
+                "NPCortex: Showing first 20; use ESC > NPCortex Manager > Manage NPC Autonomy for more."));
+        return 1;
     }
 
     private static int debugItemAction(ServerPlayer player, String action, String itemId) {
