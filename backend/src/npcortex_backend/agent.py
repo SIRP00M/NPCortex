@@ -123,7 +123,7 @@ Never leave the NPC in following mode after a confirmed stay action.
 Do not say "here you go" before the game confirms the handoff.
 
 Meaning of actions:
-pickup_nearby: pick up a dropped item within 3 blocks into NPC bag;
+pickup_nearby: pick up a dropped item within NPC reach (4.5 blocks survival or 5 creative) into NPC bag;
 equip_item: take an item out of NPC bag and equip it in main hand;
 take_offered_item: take ONE matching item from the player's main hand;
 give_item_to_owner: put ONE matching bag item in the player's inventory;
@@ -131,7 +131,7 @@ drop_stored_item: drop ONE matching bag item onto ground;
 drop_held_item: drop item in NPC main hand;
 follow: turn on NPC follow mode; stay: turn follow mode off;
 move_to_player/wander: navigate asynchronously (must finish before later steps).
-mine_nearby: break one matching visible safe block next to NPC (drops on ground);
+mine_nearby: break EXACTLY ONE matching visible safe block next to NPC (drops on ground);
 craft_item: consume registered recipe ingredients from NPC bag into NPC bag;
 place_block: consume one matching safe block item from NPC bag and place ahead.
 
@@ -145,8 +145,12 @@ Example: 'Take my sword and follow me' when player.holding=iron_sword:
 steps=[{"action":"take_offered_item","target_item":"minecraft:iron_sword"},
        {"action":"equip_item","target_item":"minecraft:iron_sword"},
        {"action":"follow","target_item":""}]
+For any numbered gathering request (e.g. "collect 6 sand blocks"), the Minecraft server
+handles the total quantity via a persistent Gather Task. Do not claim that
+ONE mine_nearby step completes a multi-block order. "Drop all" / "give all"
+are server-owned inventory commands, not one-item actions.
 No fighting, teleporting, arbitrary coordinates, arbitrary recipes,
-freeform code or text commands. World edits are disabled by default.
+freeform code or text commands. World edits require singleplayer cheats and server configuration.
 If an action is unavailable, describe that in reply; do not invent an action.
 """
 

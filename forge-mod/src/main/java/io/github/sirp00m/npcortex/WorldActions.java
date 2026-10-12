@@ -26,6 +26,11 @@ public final class WorldActions {
                 !player.getUUID().equals(npc.getOwnerUUID())) {
             return "[Action blocked: only the nearby owner can control this NPC.]";
         }
+        if (AgenticTaskController.isBusy(npc))
+            return "[Action blocked: NPC has an active agentic task.]";
+        if (GatherTaskController.isBusy(npc) && !"follow".equals(action) && !"stay".equals(action))
+            return "[Action blocked: NPC is gathering resources. Cancel its task first.]";
+        if (GatherTaskController.isBusy(npc)) GatherTaskController.cancel(npc);
         // An explicit owner command always supersedes a temporary autonomous retreat.
         npc.clearRetreat();
         return switch (action) {
@@ -69,6 +74,175 @@ public final class WorldActions {
             case "craft_item" -> WorldCrafting.craft(npc, targetItem);
             default -> "[Action blocked: unknown action.]";
         };
+    }
+
+    /** Full-stack / exact-count transfer; authoritative, does not use the 8-step planner.
+     *  Every item removed from the NPC has either been accepted by the player or
+     *  successfully spawned in-world. Partial transfers explicitly report partial.
+     */
+    public static String executeBulk(ServerPlayer owner, CompanionEntity npc,
+            BulkTransferIntent.Request request) {
+        if (owner == null || npc == null || request == null || npc.isRemoved()
+                || npc.level() != owner.level() || owner.distanceToSqr(npc) > 64.0D
+                || !owner.isAlive() || !npc.isAlive()
+                || !owner.getUUID().equals(npc.getOwnerUUID()))
+            return "[Action blocked: only the nearby owner can control this NPC.]";
+        if (GatherTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
+            return "[Action blocked: NPC is busy with a task/plan; cancel that first.]";
+        int remaining = request.count();
+        int moved = 0;
+        boolean matched = false;
+        // Equipped main hand is NOT in the nine-slot NPC bag.
+        for (int slot = -1; slot < npc.bag().getContainerSize() && remaining > 0; slot++) {
+            ItemStack source = slot < 0 ? npc.getMainHandItem() : npc.bag().getItem(slot);
+            if (source.isEmpty()) continue;
+            String sourceId = BuiltInRegistries.ITEM.getKey(source.getItem()).toString();
+            if (!request.itemId().isEmpty() && !request.itemId().equals(sourceId)) continue;
+            matched = true;
+            int offered = Math.min(remaining, source.getCount());
+            ItemStack portion = source.copy();
+            portion.setCount(offered);
+            int accepted;
+            if (request.give()) {
+                // Inventory.add mutates 'portion' to the leftover; never remove
+                // goods from the NPC before we know how much was inserted.
+                owner.getInventory().add(portion);
+                accepted = offered - portion.getCount();
+            } else {
+                ItemEntity drop = npc.spawnAtLocation(portion);
+                accepted = drop == null ? 0 : offered;
+            }
+            if (accepted > 0) {
+                if (slot < 0) {
+                    ItemStack heldLeft = source.copy();
+                    heldLeft.shrink(accepted);
+                    npc.setItemSlot(EquipmentSlot.MAINHAND, heldLeft);
+                } else {
+                    npc.bag().removeItem(slot, accepted);
+                }
+                remaining -= accepted;
+                moved += accepted;
+            }
+            if (accepted < offered && request.give()) break; // owner is full
+        }
+        String verb = request.give() ? "transferred" : "dropped";
+        if (!matched) return "[Action failed: matching item not found in NPC hand or bag.]";
+        if (moved == 0) return "[Action failed: no items moved; inventory full or item drop failed.]";
+        if (!request.all() && moved < request.count())
+            return "[Action partial: " + verb + " " + moved + "/" + request.count()
+                    + " item(s); remaining quantity unavailable or owner inventory full.]";
+        if (request.all() && remaining > 0) {
+            // 'all' has a bounded maximum for safety; report truthfully if anything
+            // matching remains (e.g. owner's inventory filled mid-transfer).
+            boolean left = !npc.getMainHandItem().isEmpty() && (request.itemId().isEmpty()
+                    || request.itemId().equals(BuiltInRegistries.ITEM.getKey(
+                            npc.getMainHandItem().getItem()).toString()));
+            for (int i = 0; i < npc.bag().getContainerSize() && !left; i++) {
+                ItemStack stack = npc.bag().getItem(i);
+                left = !stack.isEmpty() && (request.itemId().isEmpty() || request.itemId()
+                        .equals(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()));
+            }
+            if (left) return "[Action partial: " + verb + " " + moved
+                    + " item(s); matching items still remain in NPC inventory.]";
+        }
+        return "[Action confirmed: " + verb + " " + moved
+                + " item(s)" + (request.itemId().isEmpty() ? "" : " of " + request.itemId())
+                + ".]";
+    }
+
+    /** Internal bounded pickup for server-owned gather task; unlike direct actions it
+     *  may operate outside 8-block dialogue range (owner stays within 32 blocks).
+     *  Each call may collect at most the remaining task quota.
+     */
+    /** Exact physical pickup eligibility shared by observation and execution. */
+    public static boolean reachableGatherDrop(CompanionEntity npc, ItemEntity drop,
+            boolean ownerCreative) {
+        return drop.isAlive() && !drop.getItem().isEmpty()
+                && AgenticTaskPolicy.pickupNear(npc.distanceToSqr(drop))
+                && npc.level().clip(new ClipContext(npc.getEyePosition(),
+                      drop.getBoundingBox().getCenter(), ClipContext.Block.COLLIDER,
+                      ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS;
+    }
+
+    public static int pickupForGather(ServerPlayer owner, CompanionEntity npc,
+            String targetId, int limit) {
+        if (limit <= 0 || !owner.getUUID().equals(npc.getOwnerUUID())
+                || owner.level() != npc.level() || owner.distanceToSqr(npc) > 1024.0D) return 0;
+        double pickupBounds = Math.sqrt(AgenticTaskPolicy.PICKUP_RADIUS_SQUARED);
+        List<ItemEntity> found = npc.level().getEntitiesOfClass(ItemEntity.class,
+                npc.getBoundingBox().inflate(pickupBounds), item ->
+                        BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString().equals(targetId)
+                        && reachableGatherDrop(npc, item, owner.isCreative()));
+        found.sort(Comparator.comparingDouble(npc::distanceToSqr));
+        int total = 0;
+        for (ItemEntity entity : found) {
+            if (total >= limit) break;
+            ItemStack source = entity.getItem();
+            int offered = Math.min(source.getCount(), limit - total);
+            ItemStack selected = source.copy();
+            selected.setCount(offered);
+            ItemStack leftover = npc.bag().addItem(selected);
+            int collected = offered - leftover.getCount();
+            if (collected <= 0) continue;
+            source.shrink(collected);
+            if (source.isEmpty()) entity.discard();
+            else entity.setItem(source);
+            total += collected;
+        }
+        return total;
+    }
+
+    public static boolean canStoreGather(CompanionEntity npc, String itemId) {
+        for (int i = 0; i < npc.bag().getContainerSize(); i++) {
+            ItemStack existing = npc.bag().getItem(i);
+            if (existing.isEmpty()) return true;
+            if (BuiltInRegistries.ITEM.getKey(existing.getItem()).toString().equals(itemId)
+                    && existing.getCount() < existing.getMaxStackSize()) return true;
+        }
+        return false;
+    }
+
+    /** Atomic enough for the player inventory: require sufficient capacity BEFORE
+     *  adding the stack; never delete NPC goods until Minecraft accepts the transfer.
+     */
+    public static int deliverGathered(ServerPlayer owner, CompanionEntity npc,
+            String itemId, int count) {
+        if (count <= 0 || count > GatherTaskPolicy.MAX_ITEMS || npc.level() != owner.level()
+                || !owner.getUUID().equals(npc.getOwnerUUID()) || owner.distanceToSqr(npc) > 9.0D)
+            return 0;
+        int available = 0;
+        ItemStack prototype = ItemStack.EMPTY;
+        for (int i = 0; i < npc.bag().getContainerSize(); i++) {
+            ItemStack stack = npc.bag().getItem(i);
+            if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(itemId)) {
+                available += stack.getCount();
+                if (prototype.isEmpty()) prototype = stack.copy();
+            }
+        }
+        if (available < count || prototype.isEmpty()) return 0;
+        int capacity = 0;
+        // The 36 inventory slots are player main inventory + hotbar.
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack held = owner.getInventory().getItem(slot);
+            if (held.isEmpty()) capacity += prototype.getMaxStackSize();
+            else if (ItemStack.isSameItemSameTags(held, prototype))
+                capacity += Math.max(0, held.getMaxStackSize() - held.getCount());
+            if (capacity >= count) break;
+        }
+        if (capacity < count) return 0;
+        ItemStack transfer = prototype.copy();
+        transfer.setCount(count);
+        if (!owner.getInventory().add(transfer) || !transfer.isEmpty()) return 0;
+        int remaining = count;
+        for (int i = 0; i < npc.bag().getContainerSize() && remaining > 0; i++) {
+            ItemStack stack = npc.bag().getItem(i);
+            if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(itemId)) {
+                int amount = Math.min(remaining, stack.getCount());
+                npc.bag().removeItem(i, amount);
+                remaining -= amount;
+            }
+        }
+        return count;
     }
 
     /** Legacy immediate executor for developer diagnostics. Dialogue uses ActionPlanRunner. */

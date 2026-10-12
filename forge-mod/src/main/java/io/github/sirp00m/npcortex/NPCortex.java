@@ -31,6 +31,8 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(ActionPlanRunner::tick);
         MinecraftForge.EVENT_BUS.addListener(AutonomyController::tick);
+        MinecraftForge.EVENT_BUS.addListener(GatherTaskController::tick);
+        MinecraftForge.EVENT_BUS.addListener(AgenticTaskController::tick);
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -151,6 +153,26 @@ public final class NPCortex {
                                 .then(Commands.argument("item_id", StringArgumentType.greedyString())
                                         .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
                                                 "craft_item", StringArgumentType.getString(context, "item_id"))))))
+                .then(Commands.literal("task")
+                        .then(Commands.literal("gather")
+                                .then(Commands.argument("request", StringArgumentType.greedyString())
+                                        .executes(context -> gatherCommand(context.getSource().getPlayerOrException(),
+                                                StringArgumentType.getString(context, "request")))))
+                        .then(Commands.literal("status")
+                                .executes(context -> taskCommand(context.getSource().getPlayerOrException(), "status", null))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> taskCommand(context.getSource().getPlayerOrException(),
+                                                "status", StringArgumentType.getString(context, "npc")))))
+                        .then(Commands.literal("cancel")
+                                .executes(context -> taskCommand(context.getSource().getPlayerOrException(), "cancel", null))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> taskCommand(context.getSource().getPlayerOrException(),
+                                                "cancel", StringArgumentType.getString(context, "npc")))))
+                        .then(Commands.literal("resume")
+                                .executes(context -> taskCommand(context.getSource().getPlayerOrException(), "resume", null))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> taskCommand(context.getSource().getPlayerOrException(),
+                                                "resume", StringArgumentType.getString(context, "npc"))))))
                 .then(Commands.literal("observe").executes(context -> {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     CompanionEntity npc = nearestCompanion(player);
@@ -328,13 +350,62 @@ public final class NPCortex {
                 .min(Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
+    /** Usage: /npcortex task gather minecraft:oak_log 10 [character-id-or-UUID]
+     *  Uses greedy text so colon-containing item IDs work with Brigadier.
+     */
+    private static int gatherCommand(ServerPlayer player, String request) {
+        String[] parts = request.trim().split("\\s+");
+        if (parts.length < 2 || parts.length > 3 || !parts[1].matches("[0-9]{1,3}")) {
+            player.sendSystemMessage(Component.literal("Usage: /npcortex task gather minecraft:oak_log 10 [npc]"));
+            return 0;
+        }
+        int amount = Integer.parseInt(parts[1]);
+        String item = parts[0].contains(":") ? parts[0] : "minecraft:" + parts[0];
+        CompanionEntity npc = parts.length == 3 ? resolveAutonomyNpc(player, parts[2]) : nearestCompanion(player);
+        if (npc == null) {
+            player.sendSystemMessage(Component.literal("NPCortex: No matching loaded owned NPC."));
+            return 0;
+        }
+        String status = "minecraft:oak_log".equals(item)
+                ? AgenticTaskController.start(player, npc, "Gather " + amount + " " + item, item, amount)
+                : GatherTaskController.start(player, npc, item, amount);
+        player.sendSystemMessage(Component.literal("NPCortex " + npc.getName().getString() + ": " + status));
+        return status.startsWith("[Task started:") || status.startsWith("[Agentic task started:") ? 1 : 0;
+    }
+
+    private static int taskCommand(ServerPlayer player, String operation, String selector) {
+        CompanionEntity npc = selector == null ? nearestCompanion(player) : resolveAutonomyNpc(player, selector);
+        if (npc == null) {
+            player.sendSystemMessage(Component.literal("NPCortex: No matching loaded owned NPC."));
+            return 0;
+        }
+        String result = AgenticTaskController.isBusy(npc) ? switch (operation) {
+            case "cancel" -> AgenticTaskController.cancel(npc);
+            case "resume" -> AgenticTaskController.resume(npc);
+            default -> AgenticTaskController.status(npc);
+        } : switch (operation) {
+            case "cancel" -> GatherTaskController.cancel(npc);
+            case "resume" -> GatherTaskController.resume(npc);
+            default -> GatherTaskController.status(npc);
+        };
+        if (!"status".equals(operation)) npc.getPersistentData().putInt("NPCortexRequestRevision",
+                npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
+        player.sendSystemMessage(Component.literal("NPCortex " + npc.getName().getString() + ": " + result));
+        return 1;
+    }
+
     private static int setFollow(ServerPlayer player, boolean following) {
         CompanionEntity npc = nearestCompanion(player);
         if (npc == null) {
             player.sendSystemMessage(Component.literal("NPCortex: No owned companion within 12 blocks."));
             return 0;
         }
+        if (AgenticTaskController.isBusy(npc)) {
+            player.sendSystemMessage(Component.literal("Cancel the agentic task and finish scaffold cleanup first."));
+            return 0;
+        }
         ActionPlanRunner.cancel(npc);
+        GatherTaskController.cancel(npc);
         npc.getPersistentData().putInt("NPCortexRequestRevision",
                 npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
         npc.setFollowing(following);

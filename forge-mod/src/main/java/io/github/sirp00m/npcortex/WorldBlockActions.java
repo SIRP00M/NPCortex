@@ -9,13 +9,14 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-/** Bounded world edits. Off by default; no arbitrary block or position input. */
+/** Bounded world edits. Server-side owner/permission checks; no arbitrary LLM coordinates. */
 public final class WorldBlockActions {
     private WorldBlockActions() {}
 
@@ -62,8 +63,70 @@ public final class WorldBlockActions {
         return "[Action confirmed: mined " + targetBlock + "; drops remain on the ground.]";
     }
 
-    private static boolean visible(CompanionEntity npc, BlockPos pos) {
+    /** Exact-block mining for counted tasks. Never switches to a different nearby block. */
+    public static String mineAt(ServerPlayer owner, CompanionEntity npc,
+            String targetBlock, BlockPos pos) {
+        if (!permitted(owner) || npc == null || pos == null || owner.level() != npc.level()
+                || !owner.getUUID().equals(npc.getOwnerUUID()))
+            return "[Action blocked: unauthorized world edit.]";
+        if (!WorldInteractionPolicy.breakable(targetBlock) || !owner.serverLevel().isLoaded(pos)
+                || pos.equals(npc.blockPosition().below()))
+            return "[Action blocked: unsafe mining target.]";
+        ServerLevel level = owner.serverLevel();
+        BlockState state = level.getBlockState(pos);
+        if (level.getBlockEntity(pos) != null || !BuiltInRegistries.BLOCK.getKey(
+                state.getBlock()).toString().equals(targetBlock)
+                || npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(pos))
+                        > InteractionReach.squared(owner.isCreative()) || !visible(npc, pos))
+            return "[Action failed: requested block is not visible/reachable.]";
+        ItemStack tool = npc.getMainHandItem();
+        if (state.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(state))
+            return "[Action failed: correct tool required.]";
+        if (state.getDestroySpeed(level, pos) < 0 || !level.destroyBlock(pos, true, npc))
+            return "[Action failed: unable to break requested block.]";
+        if (!tool.isEmpty() && tool.isDamageableItem())
+            tool.hurtAndBreak(1, npc, entity -> entity.broadcastBreakEvent(EquipmentSlot.MAINHAND));
+        return "[Action confirmed: mined 1 " + targetBlock + "; drops are on the ground.]";
+    }
+
+    /** Detect ONLY a naturally generated oak leaf currently blocking a log ray. */
+    public static BlockPos blockingNaturalOakLeaf(CompanionEntity npc, BlockPos log) {
         Vec3 eye = npc.getEyePosition();
+        BlockHitResult hit = npc.level().clip(new ClipContext(eye, Vec3.atCenterOf(log),
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, npc));
+        if (hit.getType() != HitResult.Type.BLOCK || hit.getBlockPos().equals(log)) return null;
+        BlockPos leaf = hit.getBlockPos();
+        if (!npc.level().isLoaded(leaf) || Math.abs(leaf.getX() - log.getX()) > 2
+                || Math.abs(leaf.getY() - log.getY()) > 2 || Math.abs(leaf.getZ() - log.getZ()) > 2)
+            return null;
+        BlockState state = npc.level().getBlockState(leaf);
+        return state.is(net.minecraft.world.level.block.Blocks.OAK_LEAVES)
+                && state.hasProperty(LeavesBlock.PERSISTENT)
+                && !state.getValue(LeavesBlock.PERSISTENT) ? leaf.immutable() : null;
+    }
+
+    /** Only used inside an owner-authorized, bounded oak-log gather task. */
+    public static String clearNaturalOakLeaf(ServerPlayer owner, CompanionEntity npc,
+            BlockPos leaf, BlockPos log) {
+        if (!permitted(owner) || npc == null || leaf == null || log == null
+                || owner.level() != npc.level() || !owner.getUUID().equals(npc.getOwnerUUID())
+                || !owner.serverLevel().isLoaded(leaf) || !owner.serverLevel().isLoaded(log)
+                || !owner.serverLevel().getBlockState(log).is(
+                    net.minecraft.world.level.block.Blocks.OAK_LOG)
+                || npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(leaf))
+                    > InteractionReach.squared(owner.isCreative())
+                || !leaf.equals(blockingNaturalOakLeaf(npc, log)))
+            return "[Action blocked: leaf not a verified obstruction.]";
+        if (!owner.serverLevel().destroyBlock(leaf, true, npc))
+            return "[Action failed: cannot clear natural leaf.]";
+        return "[Action confirmed: cleared 1 naturally generated oak leaf obstructing target log.]";
+    }
+
+    public static boolean visible(CompanionEntity npc, BlockPos pos) {
+        return visibleFrom(npc, npc.getEyePosition(), pos);
+    }
+
+    public static boolean visibleFrom(CompanionEntity npc, Vec3 eye, BlockPos pos) {
         BlockHitResult hit = npc.level().clip(new ClipContext(eye, Vec3.atCenterOf(pos),
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, npc));
         return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos);

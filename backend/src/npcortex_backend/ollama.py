@@ -15,10 +15,15 @@ class OllamaProvider:
         """Ask Ollama for a validated JSON result; strict parsing lives in agent.py."""
         return self._request(messages, schema)
 
+    def chat_brain(self, messages: list[dict[str, str]], schema: dict) -> str:
+        """One bounded reasoning decision (not a multi-step monologue)."""
+        return self._request(messages, schema, predict=280, timeout=45)
+
     def chat(self, messages: list[dict[str, str]]) -> str:
         return self._request(messages)
 
-    def _request(self, messages: list[dict[str, str]], schema: dict | None = None) -> str:
+    def _request(self, messages: list[dict[str, str]], schema: dict | None = None,
+                 predict: int | None = None, timeout: int = 90) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
@@ -29,6 +34,8 @@ class OllamaProvider:
         if schema is not None:
             payload["format"] = schema
             payload["options"]["num_predict"] = 700
+        if predict is not None:
+            payload["options"]["num_predict"] = predict
         req = Request(
             self.base_url + "/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -36,7 +43,7 @@ class OllamaProvider:
             method="POST",
         )
         try:
-            with urlopen(req, timeout=90) as response:
+            with urlopen(req, timeout=timeout) as response:
                 data = json.load(response)
             reply = data["message"]["content"]
             if not isinstance(reply, str) or not reply.strip():

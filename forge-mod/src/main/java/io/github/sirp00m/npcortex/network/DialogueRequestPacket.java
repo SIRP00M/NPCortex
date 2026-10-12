@@ -3,6 +3,10 @@ package io.github.sirp00m.npcortex.network;
 import io.github.sirp00m.npcortex.ChatBridge;
 import io.github.sirp00m.npcortex.DirectIntent;
 import io.github.sirp00m.npcortex.ActionPlanRunner;
+import io.github.sirp00m.npcortex.GatherTaskController;
+import io.github.sirp00m.npcortex.AgenticTaskController;
+import io.github.sirp00m.npcortex.GatherTaskIntent;
+import io.github.sirp00m.npcortex.BulkTransferIntent;
 import io.github.sirp00m.npcortex.WorldActions;
 import io.github.sirp00m.npcortex.WorldObservation;
 import io.github.sirp00m.npcortex.entity.CompanionEntity;
@@ -41,6 +45,48 @@ public record DialogueRequestPacket(int entityId, String message) {
             if (text.isEmpty() || text.length() > 400) return;
             if (!player.getUUID().equals(npc.getOwnerUUID())) return;
 
+            // Explicit counted gather and bulk inventory requests bypass the
+            // one-step LLM actions so "six" never silently becomes "one".
+            var bulk = BulkTransferIntent.parse(text);
+            if (bulk != null) {
+                if (AgenticTaskController.isBusy(npc)) {
+                    send(player, packet.entityId, "Cancel the agentic task before transferring items.", false);
+                    return;
+                }
+                npc.getPersistentData().putInt("NPCortexRequestRevision",
+                        npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
+                String status = WorldActions.executeBulk(player, npc, bulk);
+                send(player, packet.entityId, status, status.startsWith("[Action confirmed:"));
+                return; // factual feedback only; no premature generated success claim
+            }
+            String invalidGather = GatherTaskIntent.rejection(text);
+            if (invalidGather != null) {
+                send(player, packet.entityId, invalidGather, false);
+                return;
+            }
+            // Bounded task directives are recognized before the LLM; count and
+            // resource IDs are revalidated on the Minecraft server.
+            var gather = GatherTaskIntent.parse(text);
+            if (gather != null || GatherTaskIntent.isCancel(text)) {
+                npc.getPersistentData().putInt("NPCortexRequestRevision",
+                        npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
+                String result = gather == null
+                        ? (AgenticTaskController.isBusy(npc) ? AgenticTaskController.cancel(npc)
+                                : GatherTaskController.cancel(npc))
+                        : ("minecraft:oak_log".equals(gather.itemId())
+                                ? AgenticTaskController.start(player, npc, text, gather.itemId(), gather.count())
+                                : GatherTaskController.start(player, npc, gather.itemId(), gather.count()));
+                send(player, packet.entityId, result, result.startsWith("[Task started:")
+                        || result.startsWith("[Task cancelled")
+                        || result.startsWith("[Agentic task started")
+                        || result.startsWith("[Agentic task cancelled"));
+                return;
+            }
+            if (AgenticTaskController.isBusy(npc)) {
+                send(player, packet.entityId, AgenticTaskController.status(npc)
+                        + " Use /npcortex task cancel before other actions.", false);
+                return;
+            }
             // Every accepted request supersedes older, still-pending model responses.
             // Explicit stay/follow instructions can interrupt an active plan immediately.
             String direct = DirectIntent.action(text, npc.getCharacterId(), npc.getName().getString());
@@ -48,6 +94,7 @@ public record DialogueRequestPacket(int entityId, String message) {
                 npc.getPersistentData().putInt("NPCortexRequestRevision",
                         npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
                 ActionPlanRunner.cancel(npc);
+                GatherTaskController.cancel(npc);
                 // Deferred movement/jump actions use the same server-authoritative
                 // completion/timeout tracking as the normal AI planner.
                 boolean deferred = "move_to_player".equals(direct)

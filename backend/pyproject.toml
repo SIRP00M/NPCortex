@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "npcortex-backend"
-version = "0.5.6a0"
+version = "0.8.5a0"
 description = "Local AI backend for the NPCortex Minecraft framework"
 requires-python = ">=3.10"
 dependencies = []

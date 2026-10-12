@@ -35,10 +35,10 @@ public final class NPCortexConfig {
                 "Only show a system warning if the AI reaction is unavailable or disabled; never duplicate an AI reply")
                 .define("fallback_warning_when_ai_unavailable", true);
         builder.pop();
-        builder.comment("Safe singleplayer world editing; OFF by default. Backup your world first.")
+        builder.comment("Singleplayer world editing; ON by default for this development build. Backup your world first.")
                 .push("world_interaction");
-        WORLD_EDITS_ENABLED = builder.comment("Allow registered mining/placement actions; also requires cheats")
-                .define("enable_world_edits", false);
+        WORLD_EDITS_ENABLED = builder.comment("Allow registered mining/placement actions; still limited to singleplayer with cheats")
+                .define("enable_world_edits", true);
         builder.pop();
         SPEC = builder.build();
     }

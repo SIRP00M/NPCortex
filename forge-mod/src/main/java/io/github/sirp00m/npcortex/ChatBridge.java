@@ -23,6 +23,7 @@ public final class ChatBridge {
     public record CharacterProfile(String id, String name, String skin, String model) {}
     public record ActionStep(String action, String targetItem) {}
     public record AgentReply(String reply, String action, String targetItem, List<ActionStep> steps) {}
+    public record BrainDecision(String tool, String target, String reason) {}
 
     private ChatBridge() {}
 
@@ -233,6 +234,42 @@ public final class ChatBridge {
                     && step.targetItem().isEmpty()) return false;
         }
         return true;
+    }
+
+
+    /** Stateless model decision; the server keeps the task ledger and validates the result. */
+    public static CompletableFuture<BrainDecision> brainStep(String characterId, String playerId,
+            String message, String sessionId, JsonObject world) {
+        JsonObject body = new JsonObject();
+        body.addProperty("character_id", characterId);
+        body.addProperty("player_id", playerId);
+        body.addProperty("message", message);
+        body.addProperty("session_id", sessionId);
+        body.add("world", world);
+        HttpRequest request = HttpRequest.newBuilder(endpoint("/v1/brain/step"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(55))
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    ensureSuccess(response.statusCode());
+                    JsonObject obj = JsonParser.parseString(response.body()).getAsJsonObject();
+                    String tool = obj.get("tool").getAsString();
+                    String target = obj.get("target").getAsString();
+                    String reason = obj.get("reason").getAsString();
+                    if (!java.util.Set.of("mine", "approach", "pickup", "approach_drop",
+                            "clear_leaf", "climb", "descend", "wait", "finish", "pause").contains(tool)
+                            || !target.matches("(?:b|d)(?:[0-9]|1[0-5])|"
+                            ) || reason.length() > 180)
+                        throw new IllegalArgumentException("Invalid brain decision");
+                    boolean block = java.util.Set.of("mine", "approach", "clear_leaf", "climb").contains(tool);
+                    boolean drop = "approach_drop".equals(tool);
+                    if ((block && !target.matches("b(?:[0-9]|1[0-5])"))
+                            || (drop && !target.matches("d(?:[0-9]|1[0-5])"))
+                            || (!block && !drop && !target.isEmpty()))
+                        throw new IllegalArgumentException("Invalid target for skill");
+                    return new BrainDecision(tool, target, reason);
+                });
     }
 
     /** Scoped persistent memory; only the server constructs owner/player identifiers. */

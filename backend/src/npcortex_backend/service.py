@@ -6,6 +6,7 @@ from .agent import (AGENT_POLICY, AGENT_SCHEMA, sanitize_observation,
                     parse_agent_result, augment_simple_handoff,
                     reconcile_explicit_held_drop, reconcile_single_item_intent)
 import json
+import logging
 from .session import SessionStore
 from .memory import MemoryStore
 
@@ -161,6 +162,49 @@ class ChatService:
         return {"character_id": character.character_id,
                 "character_name": character.display_name,
                 "reply": reply, "model": self.model}
+
+    def brain_step(self, character_id: str, player_id: str, message: str,
+                   session_id: str, world: dict) -> dict:
+        """One bounded Qwen decision; never records a fictional success in memory."""
+        from .brain import (BRAIN_POLICY, validate_state, validate_decision,
+                            schema_for_observation)
+        state = validate_state(world)
+        character = load_character(self.packs_dir, character_id)
+        scope = f"{character_id}:{session_id}"
+        # Character pack and persistent memories inform personality/preferences.
+        # World observations are untrusted and cannot modify the character identity.
+        system, _history = self._context(player_id, scope,
+                                         character.system_prompt + "\n\n" + BRAIN_POLICY,
+                                         character.display_name)
+        prompt = {"owner_request": message, "server_observation": state}
+        messages = [*system, {"role": "user", "content":
+                    "READ-ONLY DATA: " + json.dumps(prompt, ensure_ascii=True)}]
+        inference = getattr(self.provider, "chat_brain", self.provider.chat_structured)
+        # An observation-scoped enum reduces ungrounded references before validation.
+        # One Java request -> exactly one Qwen request: no hidden retries or budget bypass.
+        response = inference(messages, schema_for_observation(state))
+        try:
+            return validate_decision(response, state)
+        except ValueError as exc:
+            # Do not log full observations/character memories or untrusted model prose.
+            # Tool/target names alone make the underlying failure diagnosable.
+            raw = response
+            if isinstance(response, str):
+                try:
+                    raw = json.loads(response)
+                except (ValueError, TypeError):
+                    raw = None
+            if isinstance(raw, dict):
+                tool = str(raw.get("tool", "<missing>"))[:48]
+                target = str(raw.get("target", "<missing>"))[:48]
+                logging.getLogger(__name__).warning(
+                    "Brain decision rejected: %s; tool=%r target=%r", exc, tool, target)
+            else:
+                logging.getLogger(__name__).warning(
+                    "Brain decision rejected: %s; response_type=%s",
+                    exc, type(response).__name__)
+            from .ollama import ModelError
+            raise ModelError(f"Qwen decision rejected: {exc}") from exc
 
     def agent(self, character_id: str, player_id: str, message: str,
               session_id: str, world: dict) -> dict:

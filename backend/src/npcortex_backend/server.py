@@ -9,7 +9,7 @@ from .ollama import ModelError
 
 LOG = logging.getLogger(__name__)
 ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
-MAX_BODY = 8192
+MAX_BODY = 16384
 
 def _memory_scope(data):
     player = data.get("player_id")
@@ -53,14 +53,14 @@ def make_handler(service):
             return self._json(404, {"error": "Not found"})
 
         def do_POST(self):
-            if self.path not in ("/v1/chat", "/v1/agent", "/v1/action-reply", "/v1/autonomy-reply", "/v1/memory"):
+            if self.path not in ("/v1/chat", "/v1/agent", "/v1/brain/step", "/v1/action-reply", "/v1/autonomy-reply", "/v1/memory"):
                 return self._json(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 return self._json(400, {"error": "Invalid Content-Length"})
             if length < 1 or length > MAX_BODY:
-                return self._json(413, {"error": "Request size must be 1–8192 bytes"})
+                return self._json(413, {"error": "Request size must be 1–16384 bytes"})
             try:
                 data = json.loads(self.rfile.read(length))
             except (ValueError, UnicodeDecodeError):
@@ -108,6 +108,12 @@ def make_handler(service):
                     return self._json(200, service.action_reply(character_id, player_id,
                                                                  message.strip(), session_id,
                                                                  action, result))
+                if self.path == "/v1/brain/step":
+                    if session_id is None:
+                        return self._json(400, {"error": "session_id required for brain steps"})
+                    return self._json(200, service.brain_step(character_id, player_id,
+                                                              message.strip(), session_id,
+                                                              data.get("world")))
                 if self.path == "/v1/agent":
                     if session_id is None:
                         return self._json(400, {"error": "session_id required for agent requests"})
@@ -122,6 +128,8 @@ def make_handler(service):
             except CharacterError as exc:
                 return self._json(400, {"error": str(exc)})
             except ValueError as exc:
+                if self.path == "/v1/brain/step":
+                    LOG.warning("Brain request rejected BEFORE Qwen: %s", exc)
                 return self._json(400, {"error": str(exc)})
             except ModelError:
                 LOG.exception("Local AI provider or structured output validation failed")

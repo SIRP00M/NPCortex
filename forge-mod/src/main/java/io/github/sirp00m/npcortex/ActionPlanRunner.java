@@ -72,6 +72,13 @@ public final class ActionPlanRunner {
         if (steps == null || steps.size() > ChatBridge.MAX_PLAN_STEPS)
             return "[Plan rejected: invalid number of steps.]";
         if (steps.isEmpty()) return "";
+        if (AgenticTaskController.isBusy(npc)) return "[Plan busy: NPC is running an agentic task.]";
+        if (GatherTaskController.isBusy(npc)) {
+            String first = steps.get(0).action();
+            if (steps.size() == 1 && ("follow".equals(first) || "stay".equals(first)))
+                GatherTaskController.cancel(npc);
+            else return "[Plan busy: NPC is gathering. Cancel that task first.]";
+        }
         if (ACTIVE.containsKey(npc.getUUID())) {
             // Single-step follow/stay is an explicit owner override, not a queued task.
             String first = steps.get(0).action();

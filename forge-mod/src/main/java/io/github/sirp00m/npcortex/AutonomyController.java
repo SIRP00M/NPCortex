@@ -49,7 +49,7 @@ public final class AutonomyController {
         Monster threat = closest.get();
         double distance = Math.sqrt(npc.distanceToSqr(threat));
         var decision = AutonomyPolicy.decide(npc.isAutonomyEnabled(), true, true,
-                npc.isFollowing(), ActionPlanRunner.isBusy(npc), npc.isRetreating(),
+                npc.isFollowing(), (ActionPlanRunner.isBusy(npc) || GatherTaskController.isBusy(npc) || AgenticTaskController.isBusy(npc)), npc.isRetreating(),
                 distance, radius, NPCortexConfig.AUTONOMY_RETREAT_RADIUS.get(),
                 tick, npc.nextAutonomyWarningTick());
         if (!decision.warnOwner() && !decision.tryRetreat()) return;

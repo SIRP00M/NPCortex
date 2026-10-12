@@ -8,7 +8,7 @@
 
 **Minecraft 1.20.1** · **Forge 47.4.10** · **Java 17** · **Python 3.10+** · **Ollama / Qwen 3 8B**
 
-**v0.8.0-alpha — Advanced World Interaction (Experimental)**
+**v0.8.1-alpha — Agentic AI Brain (Experimental)**
 
 [Features](#features) · [Quick Start](#quick-start) · [Custom NPCs](#create-your-own-npc) · [Actions](#supported-actions) · [Architecture](#architecture) · [Documentation](#documentation)
 
@@ -23,7 +23,7 @@ NPCortex is a modular, open-source Minecraft Forge mod plus a Python AI backend.
 
 The goal is to give modpack creators and developers a reusable foundation for custom NPCs, rather than locking characters or AI models behind a particular hosted service. The default setup uses **Ollama with Qwen 3 8B locally**, with **no separate cloud API subscription required**. Your computer supplies the processing power.
 
-Character packs define *who the NPC is*. The AI helps interpret *what the player wants*. Minecraft server code decides *what the NPC is actually allowed to do*.
+Character packs define *who an NPC is*. The **Qwen AI Brain** can decide *which validated skill to use next* for a bounded autonomous gathering task. The Minecraft server retains authority over **ownership, reach, block/item safety, navigation, inventory, and completion verification**. The existing deterministic 8-step action runner and other companion functions remain available.
 
 ## Features
 
@@ -42,7 +42,9 @@ Character packs define *who the NPC is*. The AI helps interpret *what the player
 | **Action dialogue** | Character-specific reactions generated after Minecraft reports action outcomes |
 | **Autonomous awareness** | Opt-in threat detection, bounded retreat while following, and a single Qwen in-character warning (system fallback only if AI unavailable) |
 | **Per-NPC autonomy management** | Enable/disable by Character ID or UUID, or choose owned NPCs through ESC → NPCortex Manager; server checks ownership |
-| **Bounded world interactions (experimental)** | Opt-in singleplayer mining/placement of safe blocks and bag-only crafting of four supported recipes; steps work with the existing 8-step plan runner |
+| **Bounded world interactions (experimental)** | Singleplayer-with-cheats mining/placement of safe blocks and bag-only crafting of four supported recipes; steps work with the existing 8-step plan runner |
+| **Agentic AI Brain (v0.8.1-alpha pilot)** | Qwen chooses grounded skills for bounded `minecraft:oak_log` tasks using server observations, tool feedback, and replanning budgets |
+| **Legacy gathering & task control** | Existing heuristic task flows remain compatible; task status, cancel/resume, and item storage use server-owned state |
 
 A companion can respond to a request such as:
 
@@ -52,13 +54,85 @@ A companion can respond to a request such as:
 
 This does **not** mean the NPC can automatically fight with that sword. Combat and more advanced activities need separate behavior implementations.
 
+## v0.8.1-alpha — Agentic AI Brain (Oak Log Pilot)
+
+This release integrates the development snapshots previously labeled **v0.8.4–v0.8.5.5** into the public **v0.8.1-alpha** milestone, building on the repository's v0.8.0 codebase. Historical prototype documentation retains its original filenames; those are **not** separate published releases.
+
+**Design:** `Observe → Qwen reason/choose skill → Java validate → Execute → Verify → Replan`. The model makes bounded *decisions*, not per-tick movement, raw console commands, arbitrary Java execution, or unchecked changes to Minecraft worlds.
+
+| Responsibility | Component |
+| --- | --- |
+| Reasoning / skill selection | Local **Ollama + Qwen 3 8B**, through `/v1/brain/step` |
+| Grounded observations | Server snapshots of candidate blocks, drops, reachability, inventory, and previous action feedback |
+| Movement & physical actions | Java-side pathfinding and validated `approach`, `mine`, `clear_leaf`, `climb`, `approach_drop`, `pickup`, `descend`, `wait`, `pause`, `finish` |
+| Authority & safety | Minecraft server verifies ownership, game permissions, world edits, collision, reach, resources, and action results |
+| Recovery | Request budgets, failure / no-progress watchdogs, bounded retries, task pause / resume / cancel |
+| Completion | **Counted oak logs must be verified in the NPC bag**; no automatic transfer to player |
+
+### Quick agentic test (experimental)
+
+Use a **backed-up singleplayer test world**, enable cheats and permitted world editing, and place one accessible Oak Log near an owned NPC. Keep the player far enough from the drop to avoid collecting it themselves.
+
+```mcfunction
+/npcortex spawn yui
+/npcortex task gather minecraft:oak_log 1
+/npcortex task status
+/npcortex inventory
+```
+
+For a paused task, use `/npcortex task resume`; cancel with `/npcortex task cancel`. Test with one easily accessible block before attempting a whole tree. The `task status` output includes `mined`, `stored`, `chosen`, `last`, `stalls`, `observedDrops`, and `pickupReady` for diagnosing a failed run. The current pilot accepts **1–16 oak logs**. The `pickup` skill is still an explicit model-selected action; *player-like automatic item magnet pickup is not implemented in this release*.
+
+**Observed during manual in-game testing:** a reachable oak log was mined and **1/1** was verified in Yui's NPC bag. **Known failure:** nearby oak leaves / terrain can prevent a safe visible standing position; multi-log tasks may pause after mining a block without collecting or navigating to subsequent targets. Removing obstructing foliage allowed the same area to complete. We have **not** proved whether the obstruction arises from line-of-sight, collision, or both. Do not describe navigation, multi-tree harvesting, automatic leaf clearance, automatic pickup, or generalized autonomy as complete.
+
+**Local test commands** (PowerShell, repository root):
+
+```powershell
+.\scripts\test-agentic-v085.ps1
+.\scripts\build-agentic-v085.ps1
+.\scripts\dev-backend.ps1
+# In another terminal:
+.\scripts\dev-forge.ps1 -Task runClient
+```
+
+The `v085` names are retained for compatibility with the development tooling; the **published release metadata is 0.8.1-alpha**. Unit tests, Forge builds, live Qwen inference, and in-game validation are **different checks**. A successful HTTP 200 is not proof of good tool choice or successful execution.
+
+For source-level technical notes see [Agentic Brain pilot](docs/agentic-brain-v0.8.5.md) and [Navigation / Pickup affordances](docs/agentic-brain-v0.8.5.5.md). For the public milestone summary see [v0.8.1 release notes](docs/releases/v0.8.1-alpha.md).
+
+> **Development history:** The following v0.8.1–v0.8.5 notes describe earlier local prototype stages, not the public release numbering used above.
+
+## Historical Prototype — Smart Tree Harvest & Store-First Gathering
+
+Counted gathering **keeps items in the NPC bag**, never auto-delivers to the owner — even when a task was saved in the older `return` state. Give/drop remains a **separate, explicit request**: `Yui, give me all the oak logs.` Woodcutting now chooses **exact visible log positions**, navigates to safer angles around the tree (including small elevation differences), ranks feasible bottom-up / top-down order, and can clear at most **8 directly obstructing natural oak leaves**. It cannot climb/scaffold or guarantee tall-tree completion. Use a backed-up test world.
+
+Guide: [Smart Tree Harvest v0.8.3](docs/smart-harvest-v0.8.3.md). PowerShell: `./scripts/smart-harvest-check.ps1`, then `./scripts/dev-forge.ps1 -Task build`.
+
+## Historical Prototype — Quantity & Full-Stack Interaction
+
+**New:** Dialogue requests such as `Yui, collect 6 sand blocks and bring them back to me` now use the persistent quantity-controlled Gather Task rather than an AI-proposed **single** mining action. `give me all`, `drop all`, `give me all sand`, and `give me 6 sand blocks` use server-authoritative bulk transfers from the NPC's bag **and main hand**. Feedback shows the actual count and flags partial transfers. The new-config `enable_world_edits` default is `true` for Singleplayer testing; existing TOML is never overwritten. **Back up important worlds before enabling it.**
+
+See [v0.8.2 Quantity Hotfix](docs/quantity-and-stack-hotfix-v0.8.2.md).
+
+## Historical Prototype — Heuristic Intelligent Task Execution
+
+**New:** Give an owned NPC a bounded long-running task, such as **"Yui, collect 10 oak logs and bring them back to me"**. The Minecraft server validates the resource and count, searches nearby *loaded* blocks, navigates using vanilla pathfinding, mines, picks up drops, and returns to the owner to deliver the collected quota. Tasks save their stage and progress with the NPC's world data. Cancelled work stops safely; already acquired items stay in the NPC bag.
+
+```mcfunction
+/npcortex task gather minecraft:oak_log 10
+/npcortex task gather minecraft:oak_log 10 yui
+/npcortex task status yui
+/npcortex task cancel yui
+/npcortex task resume yui
+```
+
+Only five self-dropping building resources are eligible for this prototype. Count 1–16, owner initially within 8 blocks, and owner stays within 32 blocks while the task runs. Tasks require singleplayer+cheats and enabled world edits, do not force-load chunks or teleport, and may pause on unreachable terrain or full inventories. No arbitrary AI-generated coordinates. **Run the Minecraft tests before declaring this feature verified.** See [Intelligent Task Execution Guide](docs/intelligent-task-execution-v0.8.1.md).
+
 ## v0.8.0-alpha — Advanced World Interaction
 
 **Reach update:** Minecraft-side `mine_nearby`, `pickup_nearby`, and world observations now use vanilla-like **4.5-block Survival / 5-block Creative** range, based on the owner's game mode. `place_block` chooses the farthest safe, unobstructed position straight ahead within that range. See [Player Reach Hotfix](docs/player-reach-hotfix-v0.8.0.md).
 
 This version introduces **three server-authoritative actions** — `mine_nearby`, `craft_item`, and `place_block` — that can be chained with existing actions such as `pickup_nearby`. Example: mine an oak log → collect its drop → craft oak planks → place a block directly in front of the NPC. The server checks ownership, distance, inventory, resource IDs, and execution results before continuing the plan.
 
-**Important:** breaking and placing blocks are **disabled by default**, require an explicit TOML opt-in, singleplayer with cheats, and a small block allowlist. Crafting currently supports only oak planks, sticks, crafting tables and torches. This is **not** arbitrary mining, modded crafting or intelligent house construction. See the [v0.8.0 world interaction guide](docs/world-interactions-v0.8.md) for exact recipes, safety constraints, commands and setup.
+**Historical note (v0.8.0):** breaking and placing blocks were **disabled by default**. As of v0.8.2, the *new-config* default is `true`, but Singleplayer + Cheats + Owner restrictions and the block allowlist remain. Existing TOML values are preserved. Crafting currently supports only oak planks, sticks, crafting tables and torches. This is **not** arbitrary mining, modded crafting or intelligent house construction. See the [v0.8.0 world interaction guide](docs/world-interactions-v0.8.md) for exact recipes, safety constraints, commands and setup.
 
 Use `/npcortex world status`, `/npcortex world mine minecraft:oak_log`, `/npcortex world craft minecraft:oak_planks`, and `/npcortex world place minecraft:oak_planks` to test mechanics without Qwen first.
 
@@ -86,6 +160,25 @@ For multiple NPCs with the same ID, use the full UUID shown by `auto list`. Alte
 When enabled, an NPC near its online owner periodically checks for nearby visible hostile mobs, generates one in-character owner warning via Qwen (with optional system fallback if AI unavailable), and may *attempt* to retreat if it is following and a monster gets too close. If the NPC has been told to **Stay**, it can still warn but will not initiate autonomous movement. Explicit multi-step plans are not interrupted. Exactly one owner-facing warning is shown for each event: normally the Qwen reply; the plain system text appears only if AI speech is disabled/unavailable and the fallback setting is enabled. No duplicate messages are shown. AI inference is rate-limited, not run every tick.
 
 See the [Phase 8 autonomous behavior guide](docs/phase-8-autonomous-behaviors.md) for testing, settings, and current limitations. This is **reactive safety behavior** — not general autonomous mining, combat, building, or AI-initiated task planning.
+
+### Historical Prototype — Temporary Scaffold / Agentic Brain (development snapshots)
+
+### v0.8.4-alpha — Tree commitment & temporary scaffold (experimental)
+
+Oak-log gathering now locks one straight 1x1 trunk before moving to another. When logs are too high to reach, NPCortex can attempt a six-block-high *temporary* jump-and-place pillar made from safe full blocks in the NPC's own inventory, then dismantle it top down before finishing or changing trees. Requests to chop/collect **do not automatically give items to the owner**. Unsupported or unsafe conditions pause the task. See [docs/tree-scaffold-v0.8.4.md](docs/tree-scaffold-v0.8.4.md). Minecraft live testing is required.
+
+### v0.8.5-alpha — Agentic AI Brain (oak-log pilot)
+
+**Observe → Qwen reason / select skill → Java validate → Minecraft execute → verify → replan.**
+Counted **oak-log** gather orders now use the opt-in-world-edits, server-authoritative,
+persistent `AgenticTaskController` instead of the hardcoded gathering heuristic.
+Qwen chooses one action at a time; feedback and the fresh world snapshot determine the
+next decision. A task is complete only after the **new** required logs are confirmed
+in the NPC bag and any task-owned scaffold has been safely removed. Other actions,
+character packs, NPC UI and legacy gather flows remain available unchanged.
+
+Full architecture, safety limits, commands, tests and caveats:
+[Agentic Brain v0.8.5](docs/agentic-brain-v0.8.5.md).
 
 ## Quick Start
 
@@ -213,13 +306,14 @@ The in-game manager can also import skin PNGs. **Adding a JSON field does not au
 
 ## Supported Actions
 
-NPCortex currently supports these **server-side action types**:
+NPCortex supports these **legacy server-side action types** (separate from the bounded AI skill catalog):
 
 | Group | Action IDs |
 | --- | --- |
 | Companion control | `follow`, `stay`, `look_at_player` |
 | Movement | `move_to_player`, `wander`, `jump` |
 | Inventory & equipment | `pickup_nearby`, `take_offered_item`, `give_item_to_owner`, `equip_item`, `drop_held_item`, `drop_stored_item` |
+| Validated world actions | `mine_nearby`, `craft_item`, `place_block` (singleplayer safeguards apply) |
 
 `none` is a no-action response for normal dialogue. The exact allowlist is implemented by `ActionCatalog.java` and the backend action schema.
 
@@ -291,6 +385,9 @@ All `/npcortex` developer commands currently require operator permission / cheat
 | `/npcortex item pickup minecraft:emerald` | Debug nearby item pickup |
 | `/npcortex item drop minecraft:emerald` | Debug item drop from NPC storage |
 | `/npcortex item give minecraft:emerald` | Debug transfer to owner |
+| `/npcortex task gather minecraft:oak_log 1` | Start bounded oak-log agentic pilot |
+| `/npcortex task status` | Inspect progress, chosen skill, failures, and item pickup diagnostics |
+| `/npcortex task cancel` / `/npcortex task resume` | Manage the active task |
 | `/npcortex ask yui Hello!` | Text-only AI chat test |
 
 Commands act on the relevant nearby **owned** companion when applicable. Debug commands are intended for development rather than end-user gameplay UI.
@@ -328,7 +425,7 @@ NPCortex/
 ├── .github/workflows/    # CI workflows
 ├── CONTRIBUTING.md
 ├── LICENSE
-└── README.md
+└── ReadMe.md
 ```
 
 ## Configuration & Privacy
@@ -345,7 +442,7 @@ See [`backend/.env.example`](backend/.env.example) for environment variable name
 
 ## Current Limitations & Roadmap
 
-**Not implemented as complete player-like capabilities:** combat AI, attacking with equipped swords, mining, crafting, building, opening containers, autonomous background planning, target-specific long-distance exploration, TaCZ weapon integration, and production-ready multiplayer authentication.
+**Not implemented as complete player-like capabilities:** robust generalized autonomous mining, reliable navigation through dense leaves/terrain, arbitrary crafting/building, player-like automatic item collection, combat AI, attacking with equipped swords, opening containers, unrestricted world exploration, TaCZ integration, or production-ready multiplayer authentication. **Bounded experimental** mining, placement, simple crafting, and the oak-log agent pilot exist but are not general capabilities.
 
 **Planned directions:** autonomous event-driven awareness, more validated action executors, equipment/combat behaviors, optional mod adapters, better pathfinding and recovery, multi-provider LLM support, and Thai dialogue/localization.
 
@@ -367,6 +464,8 @@ For debugging, use a test world, include the relevant backend error and Forge lo
 
 ## Documentation
 
+- [v0.8.1-alpha Agentic Brain release notes](docs/releases/v0.8.1-alpha.md)
+- [Agentic Brain design and limitations](docs/agentic-brain-v0.8.5.5.md)
 - [Development & Setup](docs/development.md)
 - [API Reference](docs/api.md)
 - [Character Packs & Skins](docs/phase-5-character-skins.md)
