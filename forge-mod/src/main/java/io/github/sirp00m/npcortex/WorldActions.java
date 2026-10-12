@@ -9,6 +9,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 
 /** Validated one-step NPC actions, always applied on Minecraft's server thread. */
@@ -56,7 +58,7 @@ public final class WorldActions {
                 npc.getJumpControl().jump();
                 yield "[Action started: jump requested.]";
             }
-            case "pickup_nearby" -> pickup(npc, targetItem);
+            case "pickup_nearby" -> pickup(player, npc, targetItem);
             case "equip_item" -> equip(npc, targetItem);
             case "drop_held_item" -> drop(npc);
             case "drop_stored_item" -> dropStored(npc, targetItem);
@@ -188,14 +190,20 @@ public final class WorldActions {
         return "[Action confirmed: dropped 1 " + item + " from NPC inventory onto ground.]";
     }
 
-    private static String pickup(CompanionEntity npc, String targetItem) {
+    private static String pickup(ServerPlayer owner, CompanionEntity npc, String targetItem) {
+        double reach = InteractionReach.blocks(owner.isCreative());
+        double reachSq = InteractionReach.squared(owner.isCreative());
         List<ItemEntity> drops = npc.level().getEntitiesOfClass(ItemEntity.class,
-                npc.getBoundingBox().inflate(3.0D), item -> item.isAlive() && !item.getItem().isEmpty()
-                        && npc.distanceToSqr(item) <= 9.0D
+                npc.getBoundingBox().inflate(reach), item -> item.isAlive() && !item.getItem().isEmpty()
+                        && npc.distanceToSqr(item) <= reachSq
+                        && npc.level().clip(new ClipContext(npc.getEyePosition(),
+                                item.getBoundingBox().getCenter(), ClipContext.Block.COLLIDER,
+                                ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS
                         && (targetItem == null || targetItem.isEmpty() ||
                             BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString().equals(targetItem)));
         drops.sort(Comparator.comparingDouble(npc::distanceToSqr));
-        if (drops.isEmpty()) return "[Action failed: no matching dropped items within 3 blocks.]";
+        if (drops.isEmpty()) return "[Action failed: no matching dropped items within "
+                + reach + " blocks.]";
         ItemEntity target = drops.get(0);
         String itemId = BuiltInRegistries.ITEM.getKey(target.getItem().getItem()).toString();
         int before = target.getItem().getCount();

@@ -16,6 +16,8 @@ import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.HitResult;
 
 /** Snapshot computed on server game thread. Bounded; no free-form player names. */
 public final class WorldObservation {
@@ -61,11 +63,16 @@ public final class WorldObservation {
         npcData.addProperty("holding_count", npc.getMainHandItem().getCount());
         root.add("npc", npcData);
 
+        double reach = InteractionReach.blocks(player.isCreative());
+        double reachSq = InteractionReach.squared(player.isCreative());
         // Visible item entities are independent of the NPC bag: thrown items are NOT
         // automatically owned and must first be collected using pickup_nearby.
         JsonArray groundItems = new JsonArray();
-        world.getEntitiesOfClass(ItemEntity.class, npc.getBoundingBox().inflate(3.0D),
-                item -> item.isAlive() && !item.getItem().isEmpty() && npc.distanceToSqr(item) <= 9.0D)
+        world.getEntitiesOfClass(ItemEntity.class, npc.getBoundingBox().inflate(reach),
+                item -> item.isAlive() && !item.getItem().isEmpty() && npc.distanceToSqr(item) <= reachSq
+                        && world.clip(new ClipContext(npc.getEyePosition(),
+                                item.getBoundingBox().getCenter(), ClipContext.Block.COLLIDER,
+                                ClipContext.Fluid.NONE, npc)).getType() == HitResult.Type.MISS)
                 .stream().sorted(Comparator.comparingDouble(npc::distanceToSqr))
                 .limit(6).forEach(item -> {
                     JsonObject entry = new JsonObject();
@@ -84,10 +91,13 @@ public final class WorldObservation {
         // The model may refer only to IDs observed here; the executor re-checks
         // physical reachability and visibility before editing anything.
         java.util.Set<String> visibleBlocks = new java.util.LinkedHashSet<>();
-        for (int dx = -2; dx <= 2; dx++) for (int dy = 0; dy <= 2; dy++)
-            for (int dz = -2; dz <= 2; dz++) {
+        int scan = InteractionReach.MAX_SCAN_OFFSET;
+        for (int dx = -scan; dx <= scan; dx++) for (int dy = -1; dy <= scan; dy++)
+            for (int dz = -scan; dz <= scan; dz++) {
                 BlockPos near = pos.offset(dx, dy, dz);
-                if (!world.isLoaded(near)) continue;
+                if (near.equals(pos.below()) || !world.isLoaded(near)
+                        || !InteractionReach.within(npc.getEyePosition().distanceToSqr(
+                                net.minecraft.world.phys.Vec3.atCenterOf(near)), player.isCreative())) continue;
                 String id = blockName(world.getBlockState(near));
                 if (WorldInteractionPolicy.breakable(id)) visibleBlocks.add(id);
             }

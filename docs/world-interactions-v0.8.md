@@ -108,3 +108,8 @@ This requests four validated steps: `mine_nearby → pickup_nearby → craft_ite
 - `follow`, `stay`, autonomous threat alerts, Skin Manager, Memory and earlier actions remain supported.
 - Mining, placing, and crafting are currently **owner-initiated** actions; not part of background autonomous behavior.
 - This work must be compiled and tested in a Forge development client before shipping on GitHub Releases.
+
+
+## Player-like reach hotfix (v0.8.0-alpha)
+
+For the newer player-reach hotfix, use the updated reach and placement behavior documented in [player-reach-hotfix-v0.8.0.md](player-reach-hotfix-v0.8.0.md). This supersedes the older short-range examples above.

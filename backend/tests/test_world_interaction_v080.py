@@ -105,7 +105,8 @@ class WorldInteractionTests(unittest.TestCase):
         self.assertIn('WorldInteractionPolicy.breakable', java)
         self.assertIn('WorldInteractionPolicy.placeable', java)
         self.assertIn('getBlockEntity(p) != null', java)
-        self.assertIn('level.getEntities((net.minecraft.world.entity.Entity) null, new AABB(placePos)', java)
+        self.assertIn('level.getEntities((net.minecraft.world.entity.Entity) null,', java)
+        self.assertIn('new AABB(candidate)', java)
 
     def test_java_and_python_catalog_agree(self):
         cat = (J/'ActionCatalog.java').read_text()

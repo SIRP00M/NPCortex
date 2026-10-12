@@ -54,6 +54,8 @@ This does **not** mean the NPC can automatically fight with that sword. Combat a
 
 ## v0.8.0-alpha — Advanced World Interaction
 
+**Reach update:** Minecraft-side `mine_nearby`, `pickup_nearby`, and world observations now use vanilla-like **4.5-block Survival / 5-block Creative** range, based on the owner's game mode. `place_block` chooses the farthest safe, unobstructed position straight ahead within that range. See [Player Reach Hotfix](docs/player-reach-hotfix-v0.8.0.md).
+
 This version introduces **three server-authoritative actions** — `mine_nearby`, `craft_item`, and `place_block` — that can be chained with existing actions such as `pickup_nearby`. Example: mine an oak log → collect its drop → craft oak planks → place a block directly in front of the NPC. The server checks ownership, distance, inventory, resource IDs, and execution results before continuing the plan.
 
 **Important:** breaking and placing blocks are **disabled by default**, require an explicit TOML opt-in, singleplayer with cheats, and a small block allowlist. Crafting currently supports only oak planks, sticks, crafting tables and torches. This is **not** arbitrary mining, modded crafting or intelligent house construction. See the [v0.8.0 world interaction guide](docs/world-interactions-v0.8.md) for exact recipes, safety constraints, commands and setup.

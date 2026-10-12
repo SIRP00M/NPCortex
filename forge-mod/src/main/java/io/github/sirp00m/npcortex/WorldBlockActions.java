@@ -32,17 +32,20 @@ public final class WorldBlockActions {
         ServerLevel level = owner.serverLevel();
         BlockPos center = npc.blockPosition();
         BlockPos choice = null;
-        double closest = 10.0D;
-        // Small sphere around the NPC; skip feet/below to avoid digging itself into a hole.
-        for (int dx = -2; dx <= 2; dx++) for (int dy = 0; dy <= 2; dy++)
-            for (int dz = -2; dz <= 2; dz++) {
+        double closest = Double.POSITIVE_INFINITY;
+        double reachSq = InteractionReach.squared(owner.isCreative());
+        int scan = InteractionReach.MAX_SCAN_OFFSET;
+        // Server checks the eye-to-block distance and line of sight. Never mine the
+        // supporting block immediately under the NPC to avoid self-inflicted falls.
+        for (int dx = -scan; dx <= scan; dx++) for (int dy = -1; dy <= scan; dy++)
+            for (int dz = -scan; dz <= scan; dz++) {
                 BlockPos p = center.offset(dx, dy, dz);
-                if (!level.isLoaded(p) || !WorldInteractionPolicy.breakable(
+                if (p.equals(center.below()) || !level.isLoaded(p) || !WorldInteractionPolicy.breakable(
                         BuiltInRegistries.BLOCK.getKey(level.getBlockState(p).getBlock()).toString())) continue;
                 if (!BuiltInRegistries.BLOCK.getKey(level.getBlockState(p).getBlock())
                         .toString().equals(targetBlock) || level.getBlockEntity(p) != null) continue;
                 double dist = npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(p));
-                if (dist > 10.0D || dist >= closest || !visible(npc, p)) continue;
+                if (dist > reachSq || dist >= closest || !visible(npc, p)) continue;
                 choice = p;
                 closest = dist;
             }
@@ -83,18 +86,39 @@ public final class WorldBlockActions {
         if (!(stack.getItem() instanceof BlockItem blockItem))
             return "[Action blocked: selected item is not a block item.]";
         ServerLevel level = owner.serverLevel();
-        // Strict placement: one block in front of NPC at feet level, never at arbitrary coordinates.
-        BlockPos placePos = npc.blockPosition().relative(npc.getDirection());
-        if (!level.isLoaded(placePos) || !level.getBlockState(placePos).isAir()
-                || level.getBlockState(placePos.below()).isAir())
-            return "[Action failed: placement spot in front of NPC is not clear or supported.]";
+        // Place within vanilla-like reach *along the NPC's facing direction*.
+        // Because this action has no target coordinates, use the farthest safe,
+        // unobstructed, supported empty position on that straight line.
+        // No arbitrary positions or placements through a wall are permitted.
+        BlockPos center = npc.blockPosition();
+        BlockPos placePos = null;
         BlockState desired = blockItem.getBlock().defaultBlockState();
-        if (!desired.canSurvive(level, placePos)
-                || !level.getEntities((net.minecraft.world.entity.Entity) null, new AABB(placePos), e -> e.isAlive()).isEmpty())
-            return "[Action failed: block placement would collide with an entity or cannot survive.]";
+        int scan = InteractionReach.MAX_SCAN_OFFSET;
+        double reachSq = InteractionReach.squared(owner.isCreative());
+        for (int distance = scan; distance >= 1; distance--) {
+            BlockPos candidate = center.relative(npc.getDirection(), distance);
+            if (!level.isLoaded(candidate)
+                    || npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(candidate)) > reachSq
+                    || !level.getBlockState(candidate).isAir()
+                    || level.getBlockState(candidate.below()).isAir()
+                    || !desired.canSurvive(level, candidate)
+                    || !level.getEntities((net.minecraft.world.entity.Entity) null,
+                            new AABB(candidate), e -> e.isAlive()).isEmpty()) continue;
+            BlockHitResult hit = level.clip(new ClipContext(npc.getEyePosition(),
+                    Vec3.atCenterOf(candidate), ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, npc));
+            if (hit.getType() != HitResult.Type.MISS) continue;
+            placePos = candidate;
+            break;
+        }
+        if (placePos == null)
+            return "[Action failed: no clear supported placement spot within "
+                    + InteractionReach.blocks(owner.isCreative()) + " blocks ahead.]";
         if (!level.setBlock(placePos, desired, 3))
             return "[Action failed: Minecraft rejected block placement.]";
         npc.bag().removeItem(slot, 1);
-        return "[Action confirmed: placed 1 " + targetItem + " directly ahead of NPC.]";
+        return "[Action confirmed: placed 1 " + targetItem + " "
+                + Math.round(Math.sqrt(npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(placePos))) * 10.0D) / 10.0D
+                + " blocks ahead of NPC.]";
     }
 }
