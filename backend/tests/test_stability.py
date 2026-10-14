@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 from npcortex_backend.config import Settings
 from npcortex_backend.ollama import ModelError, OllamaProvider
-from npcortex_backend.server import make_handler
+from npcortex_backend.server import make_handler, make_http_server
 from npcortex_backend.service import ChatService, ModelCapacityError
 from npcortex_backend.session import SessionStore, SessionBusyError, SessionCapacityError
 
@@ -196,7 +196,7 @@ class HttpTest(unittest.TestCase):
         cls.provider = Mock()
         cls.provider.chat.return_value = "Mock response"
         cls.service = chat_service(cls.provider)
-        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(cls.service))
+        cls.httpd = make_http_server(cls.service)
         cls.httpd.daemon_threads = True
         cls.thread = Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.thread.start()

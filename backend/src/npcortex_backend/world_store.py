@@ -1,17 +1,17 @@
-"""B1 local SQLite world/actor registry and bounded durable player-to-actor transcripts.
+"""Durable world/actor registry and B1 player-to-actor transcripts.
 
-Single-process localhost backend only. No world simulation, behavior or NPC-NPC turns.
-Every operation opens an independent SQLite connection for ThreadingHTTPServer safety.
+B2-C: all operational SQL runs through explicit short-lived SQLite units of
+work; B1 tables and the additive B2 schema remain unchanged.
 """
-from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+from .persistence import SQLiteDatabase
 from uuid import uuid4, uuid5, UUID
 from .identity import canonical_uuid, dimension_id, player_id, world_name
 
 # Namespace is a fixed stable value; changing it would break derived conversation IDs.
 CONVERSATION_NAMESPACE = UUID("4bc93e61-ac2d-4c7a-94cf-4cfc4a3a59e1")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 
 class RegistryNotFoundError(LookupError):
@@ -34,11 +34,12 @@ class WorldStore:
         self.db_path = Path(db_path)
         self.max_transcript_messages = max_transcript_messages
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as db:
+        self.database = SQLiteDatabase(self.db_path)
+        with self.database.maintenance() as db:
             # SQLite WAL supports concurrent readers and one serialized writer.
             db.execute("PRAGMA journal_mode=WAL")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version != 0 and version != SCHEMA_VERSION:
+            if version not in (0, 1, 2, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"Unsupported SQLite schema version {version}; expected {SCHEMA_VERSION}. "
                     "Do not downgrade or delete a database containing player data."
@@ -75,29 +76,108 @@ class WorldStore:
                     PRAGMA user_version=1;
                     COMMIT;
                 """)
-            # Reject DBs that claim v1 but do not actually contain the schema.
-            for table in ("worlds", "actors", "conversations", "transcript"):
+            # Validate B1 schema before applying B2. A corrupted B1 database must
+            # never be marked as successfully migrated.
+            required_b1 = {
+                "worlds": {"world_id", "name"},
+                "actors": {"actor_id", "world_id", "dimension_id", "character_id"},
+                "conversations": {"conversation_id", "world_id", "actor_id", "player_id"},
+                "transcript": {"conversation_id", "seq", "role", "content"},
+            }
+            for table, columns in required_b1.items():
                 db.execute(f"SELECT * FROM {table} LIMIT 0")
-
-    @contextmanager
-    def _connect(self):
-        db = sqlite3.connect(str(self.db_path), timeout=5)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute("PRAGMA busy_timeout=5000")
-        try:
-            yield db
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+                actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if not columns.issubset(actual):
+                    raise sqlite3.DatabaseError(f"Invalid B1 schema: {table} missing columns")
+            if version in (0, 1):
+                # Additive, atomic upgrade: no B1 table or transcript is rewritten.
+                # An interrupted migration rolls back to a usable v1 database.
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE dialogues (
+                        dialogue_id TEXT PRIMARY KEY,
+                        world_id TEXT NOT NULL REFERENCES worlds(world_id),
+                        dimension_id TEXT NOT NULL,
+                        topic TEXT NOT NULL,
+                        max_turns INTEGER NOT NULL CHECK(max_turns BETWEEN 2 AND 64),
+                        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed'))
+                    );
+                    CREATE TABLE dialogue_participants (
+                        dialogue_id TEXT NOT NULL REFERENCES dialogues(dialogue_id),
+                        speaker_type TEXT NOT NULL CHECK(speaker_type IN ('actor', 'player')),
+                        speaker_id TEXT NOT NULL,
+                        PRIMARY KEY(dialogue_id, speaker_type, speaker_id)
+                    );
+                    CREATE TABLE dialogue_turns (
+                        dialogue_id TEXT NOT NULL REFERENCES dialogues(dialogue_id),
+                        seq INTEGER NOT NULL,
+                        request_id TEXT NOT NULL,
+                        speaker_type TEXT NOT NULL CHECK(speaker_type IN ('actor', 'player')),
+                        speaker_id TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        PRIMARY KEY(dialogue_id, seq),
+                        UNIQUE(dialogue_id, request_id),
+                        FOREIGN KEY(dialogue_id, speaker_type, speaker_id)
+                            REFERENCES dialogue_participants(dialogue_id, speaker_type, speaker_id)
+                    );
+                    CREATE INDEX idx_dialogue_turns ON dialogue_turns(dialogue_id, seq);
+                    PRAGMA user_version=2;
+                    COMMIT;
+                """)
+            required_b2 = {
+                "dialogues": {"dialogue_id", "world_id", "dimension_id", "topic", "max_turns", "status"},
+                "dialogue_participants": {"dialogue_id", "speaker_type", "speaker_id"},
+                "dialogue_turns": {"dialogue_id", "seq", "request_id", "speaker_type", "speaker_id", "content"},
+            }
+            for table, columns in required_b2.items():
+                db.execute(f"SELECT * FROM {table} LIMIT 0")
+                actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if not columns.issubset(actual):
+                    raise sqlite3.DatabaseError(f"Invalid B2 schema: {table} missing columns")
+            if version in (0, 1, 2):
+                # B3 extends B2 without rewriting worlds, actors, legacy transcripts
+                # or any existing dialogue/turn. An interrupted migration rolls back.
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE social_runs (
+                        run_id TEXT PRIMARY KEY,
+                        dialogue_id TEXT NOT NULL UNIQUE REFERENCES dialogues(dialogue_id),
+                        max_steps INTEGER NOT NULL CHECK(max_steps BETWEEN 2 AND 24),
+                        status TEXT NOT NULL DEFAULT 'active'
+                            CHECK(status IN ('active','completed','stopped','failed')),
+                        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                        stop_reason TEXT NOT NULL DEFAULT ''
+                    );
+                    CREATE TABLE social_steps (
+                        run_id TEXT NOT NULL REFERENCES social_runs(run_id),
+                        request_id TEXT NOT NULL,
+                        action TEXT NOT NULL CHECK(action IN ('speak','stop')),
+                        speaker_id TEXT,
+                        dialogue_seq INTEGER,
+                        reason TEXT NOT NULL DEFAULT '',
+                        PRIMARY KEY(run_id, request_id),
+                        CHECK((action='speak' AND speaker_id IS NOT NULL AND dialogue_seq IS NOT NULL)
+                          OR (action='stop' AND speaker_id IS NULL AND dialogue_seq IS NULL))
+                    );
+                    CREATE UNIQUE INDEX idx_social_step_seq
+                        ON social_steps(run_id, dialogue_seq) WHERE dialogue_seq IS NOT NULL;
+                    PRAGMA user_version=3;
+                    COMMIT;
+                """)
+            required_b3 = {
+                "social_runs": {"run_id", "dialogue_id", "max_steps", "status", "consecutive_failures", "stop_reason"},
+                "social_steps": {"run_id", "request_id", "action", "speaker_id", "dialogue_seq", "reason"},
+            }
+            for table, columns in required_b3.items():
+                db.execute(f"SELECT * FROM {table} LIMIT 0")
+                actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if not columns.issubset(actual):
+                    raise sqlite3.DatabaseError(f"Invalid B3 schema: {table} missing columns")
 
     def register_world(self, name: str, world_id: str | None = None) -> dict:
         name = world_name(name)
         wid = canonical_uuid(world_id, "world_id") if world_id is not None else str(uuid4())
-        with self._connect() as db:
+        with self.database.write() as db:
             db.execute("INSERT OR IGNORE INTO worlds(world_id,name) VALUES (?,?)", (wid, name))
             record = db.execute("SELECT name FROM worlds WHERE world_id=?", (wid,)).fetchone()
             if record["name"] != name:
@@ -109,7 +189,7 @@ class WorldStore:
         wid = canonical_uuid(world_id, "world_id")
         dim = dimension_id(dimension)
         aid = canonical_uuid(actor_id, "actor_id") if actor_id is not None else str(uuid4())
-        with self._connect() as db:
+        with self.database.write() as db:
             if db.execute("SELECT 1 FROM worlds WHERE world_id=?", (wid,)).fetchone() is None:
                 raise RegistryNotFoundError("World is not registered")
             db.execute("INSERT OR IGNORE INTO actors(actor_id,world_id,dimension_id,character_id) VALUES (?,?,?,?)",
@@ -122,7 +202,7 @@ class WorldStore:
 
     def get_actor(self, actor_id: str) -> dict:
         aid = canonical_uuid(actor_id, "actor_id")
-        with self._connect() as db:
+        with self.database.read() as db:
             record = db.execute("SELECT * FROM actors WHERE actor_id=?", (aid,)).fetchone()
         if record is None:
             raise RegistryNotFoundError("Actor not registered")
@@ -140,7 +220,7 @@ class WorldStore:
         pid = player_id(participant)
         dim = dimension_id(dimension)
         cid = self.conversation_id(wid, aid, pid)
-        with self._connect() as db:
+        with self.database.write() as db:
             actor = db.execute("SELECT world_id,dimension_id FROM actors WHERE actor_id=?", (aid,)).fetchone()
             if actor is None:
                 raise RegistryNotFoundError("Actor not registered")
@@ -152,16 +232,15 @@ class WorldStore:
 
     def history(self, conversation_id: str, max_messages: int = 12) -> list[dict[str, str]]:
         cid = canonical_uuid(conversation_id, "conversation_id")
-        with self._connect() as db:
+        with self.database.read() as db:
             rows = db.execute("SELECT role,content FROM transcript WHERE conversation_id=? "
                               "ORDER BY seq DESC LIMIT ?", (cid, max_messages)).fetchall()
         return [dict(row) for row in reversed(rows)]
 
     def append_exchange(self, conversation_id: str, user_text: str, assistant_text: str) -> None:
         cid = canonical_uuid(conversation_id, "conversation_id")
-        with self._connect() as db:
+        with self.database.write() as db:
             # Ensure sequence allocation + both messages + pruning happen atomically.
-            db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT 1 FROM conversations WHERE conversation_id=?", (cid,)).fetchone()
             if row is None:
                 raise RegistryNotFoundError("Conversation does not exist")
@@ -176,8 +255,12 @@ class WorldStore:
 
     def get_conversation(self, conversation_id: str) -> dict:
         cid = canonical_uuid(conversation_id, "conversation_id")
-        with self._connect() as db:
+        with self.database.read() as db:
             row = db.execute("SELECT * FROM conversations WHERE conversation_id=?", (cid,)).fetchone()
-        if row is None:
-            raise RegistryNotFoundError("Conversation does not exist")
-        return {**dict(row), "messages": self.history(cid, self.max_transcript_messages)}
+            if row is None:
+                raise RegistryNotFoundError("Conversation does not exist")
+            messages = db.execute(
+                "SELECT role,content FROM transcript WHERE conversation_id=? "
+                "ORDER BY seq DESC LIMIT ?", (cid, self.max_transcript_messages)
+            ).fetchall()
+            return {**dict(row), "messages": [dict(m) for m in reversed(messages)]}

@@ -9,6 +9,7 @@ import sys
 import tempfile
 from threading import Event, Thread
 import unittest
+from sqlite_test_utils import sqlite_test_connection
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -20,11 +21,11 @@ from npcortex_backend.characters import CharacterError
 from npcortex_backend.config import Settings
 from npcortex_backend.identity import IdentityError
 from npcortex_backend.ollama import ModelError
-from npcortex_backend.server import make_handler
+from npcortex_backend.server import make_handler, make_http_server
 from npcortex_backend.service import ChatService
 from npcortex_backend.session import SessionStore
 from npcortex_backend.world_store import (
-    WorldStore, RegistryConflictError, RegistryNotFoundError, SchemaVersionError,
+    WorldStore, RegistryConflictError, RegistryNotFoundError, SchemaVersionError, SCHEMA_VERSION,
 )
 
 
@@ -55,11 +56,11 @@ class B1StorageTest(unittest.TestCase):
                                    actor["actor_id"], player, text)
 
     def test_schema_created_with_version_and_relationships(self):
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
             foreign_keys = db.execute("PRAGMA foreign_key_list(transcript)").fetchall()
-        self.assertEqual(version, 1)
+        self.assertEqual(version, SCHEMA_VERSION)
         self.assertEqual(integrity, "ok")
         self.assertTrue(foreign_keys)
 
@@ -124,7 +125,7 @@ class B1StorageTest(unittest.TestCase):
             self.actor(world_id=str(uuid4()))
         with self.assertRaises(IdentityError):
             self.chat(self.actor(), player="invalid player")
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM actors").fetchone()[0], 1)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM conversations").fetchone()[0], 0)
 
@@ -178,7 +179,7 @@ class B1StorageTest(unittest.TestCase):
     def test_legacy_chat_remains_ephemeral_and_unchanged(self):
         result = self.svc.chat("yui", "p1", "hello")
         self.assertEqual(set(result), {"character_id", "character_name", "reply", "model"})
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM conversations").fetchone()[0], 0)
 
     def test_registrations_remain_idempotent_under_concurrency(self):
@@ -190,13 +191,13 @@ class B1StorageTest(unittest.TestCase):
             actors = list(pool.map(lambda _: self.svc.register_actor(wid, "minecraft:overworld", "yui", aid),
                                    range(12)))
         self.assertTrue(all(item == actors[0] for item in actors))
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM actors WHERE actor_id=?", (aid,)).fetchone()[0], 1)
 
     def test_failed_sqlite_exchange_rolls_back_both_messages(self):
         actor = self.actor()
         cid = self.svc.world_store.conversation_for(self.world_id, actor["actor_id"], "p1", "minecraft:overworld")
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             db.execute("""CREATE TRIGGER abort_assistant BEFORE INSERT ON transcript
                           WHEN NEW.role='assistant' BEGIN SELECT RAISE(ABORT, 'disk failure'); END""")
         with self.assertRaises(sqlite3.DatabaseError):
@@ -214,7 +215,7 @@ class B1StorageTest(unittest.TestCase):
         self.assertEqual(len(self.svc.world_store.get_conversation(first["conversation_id"])["messages"]), 4)
 
     def test_corrupt_schema_claiming_v1_is_rejected_at_startup(self):
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             db.execute("DROP TABLE transcript")
         with self.assertRaises(sqlite3.DatabaseError):
             WorldStore(self.db_path)
@@ -232,11 +233,11 @@ class B1StorageTest(unittest.TestCase):
                     Settings.from_environment()
 
     def test_schema_upgrade_refuses_future_versions_without_mutation(self):
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             db.execute("PRAGMA user_version=999")
         with self.assertRaises(SchemaVersionError):
             WorldStore(self.db_path)
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 999)
 
 
@@ -246,7 +247,7 @@ class B1HTTPTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.db_path = Path(self.tmp.name) / "db.sqlite3"
         self.svc, self.provider = make_service(self.db_path)
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.svc))
+        self.httpd = make_http_server(self.svc)
         self.thread = Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
         self.base = f"http://127.0.0.1:{self.httpd.server_port}"
@@ -292,7 +293,7 @@ class B1HTTPTest(unittest.TestCase):
         world_status, world = self.call("/v1/worlds", {"name": "World"})
         actor_status, actor = self.call("/v1/actors", {"world_id": world["world_id"],
                                                         "dimension_id": "minecraft:overworld", "character_id": "yui"})
-        with sqlite3.connect(self.db_path) as db:
+        with sqlite_test_connection(self.db_path) as db:
             db.execute("""CREATE TRIGGER fail_append BEFORE INSERT ON transcript
                           BEGIN SELECT RAISE(ABORT, 'private sqlite error'); END""")
         _, payload = self.call("/v1/actor-chat", {"world_id": world["world_id"],

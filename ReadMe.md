@@ -1,3 +1,7 @@
+> **B3-B HTTP Stability Candidate:** Adds bounded HTTP 413/404 request-body drain for Windows `WinError 10053`. Run `.\scripts\test-b3-http-lifecycle.ps1 -Repeat 3` and `.\scripts\test-b3-regression.ps1 -Repeat 3`. No B3 social behavior changes; Windows acceptance pending. See `docs/b3-http-lifecycle-hardening.md`.
+
+> **B3 AI-Driven Headless Social Runtime — Implementation Candidate.** B2-C passed user-reported Windows quality gates. B3 adds Qwen-selected, bounded social steps over headless NPC-only dialogues. Back up SQLite **with Backend stopped** before schema v2→v3 migration. Use `./scripts/test-b3-regression.ps1` and `./scripts/test-b3-social.ps1` for B3 acceptance. There is **no in-game NPC or C world simulation**.
+
 # NPCortex
 
 **An open-source, modular AI NPC framework for Minecraft.**
@@ -6,7 +10,7 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.1.1-alpha` B1 World & Actor Identity Foundation candidate (pending Minecraft/Forge gates).** The Python HTTP backend, bounded and expiring legacy chat sessions, SQLite-backed B1 actor conversations, example character packs and a Forge `/npcortex status` and `/npcortex ask` developer command bridge are implemented as starter source. The A2 legacy Forge bridge was accepted in a user-reported Minecraft smoke test; **new B1 actor identity/persistence has not yet been tested inside Minecraft**. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, semantic memory, NPC-to-NPC dialogue, or multiplayer authentication yet**.
+**Project status: `v0.1.1-alpha` — B3 development candidate.** A2, B1, B2 and B2-C have user-reported acceptance for their tested scopes. B3 adds Qwen-planned turn selection and bounded dialogue runs in the Python backend; **real Qwen/Windows/Forge acceptance of B3 is pending**. Forge's `/npcortex ask` still uses the legacy A2 chat endpoint. No Minecraft NPC entity, event perception, autonomous world loop, dynamic relationship system, movement, mining, combat, or C-world simulation is implemented.
 
 ## Repository layout
 
@@ -27,6 +31,25 @@ NPCortex/
 ├── LICENSE                 # MIT license for original code
 └── CONTRIBUTING.md
 ```
+
+## B3 quick test (headless, real local Qwen)
+
+B3 orchestrates dialogue between 2–8 *registered NPC actors*, controlled by explicit API steps. The model chooses which NPC speaks or to stop; the model is **not authorized to perform Minecraft actions**. SQLite schema v3 adds `social_runs` and `social_steps` while preserving old actor/dialogue/transcript tables.
+
+```powershell
+.\scripts\test-b3-regression.ps1 -Repeat 3
+# In one PowerShell: .\scripts\dev-backend.ps1
+# In another PowerShell with the backend running:
+.\scripts\test-b3-social.ps1
+```
+
+Save the printed RUN UUID; after restarting Backend:
+
+```powershell
+.\scripts\test-b3-social.ps1 -VerifyRunId 'RUN-UUID'
+```
+
+To test resuming a run after restarting mid-dialogue, use `-PauseAfter 2` and then `-ResumeRunId 'RUN-UUID'`. See [B3 Headless Social Verification](docs/b3-headless-social.md) for API contract, idempotent retries, and current limitations.
 
 ## Prerequisites
 
@@ -134,3 +157,26 @@ The backend binds to `127.0.0.1` by default and has no authentication; **do not 
 ## License
 
 MIT for the original starter code; dependencies and bundled character assets may have separate licenses. Minecraft, Forge, Ollama and Qwen are owned by their respective authors; no model weights are included.
+
+
+## B2 — Multi-Actor Dialogue Engine (headless candidate)
+
+Create a local dialogue with 2–8 participants (NPC actors plus optional player),
+then ask Qwen for **one explicitly selected NPC's response** at a time. Turns are
+saved with speaker IDs in SQLite v2, separate from B1's private actor transcripts.
+Qwen does not select future speakers or automatically start conversations. No
+NPCs spawn in Minecraft yet. See [B2 API](docs/api.md) and
+[B2 Windows checklist](docs/b2-verification.md).
+
+Run this from the repository root with the backend/Ollama already running:
+
+```powershell
+python -m unittest discover -s backend/tests -v
+.\scripts\test-b2-dialogues.ps1
+```
+
+Existing B1 databases upgrade **v1 to v2** automatically at backend startup.
+**Stop the backend and back up the SQLite DB before first B2 start.** If
+unpacking B2 to a new folder, copy the B1 backup into the new `backend/data/`
+folder before launch; old save data is not bundled in the ZIP. The B1
+backend cannot open a v2 DB, so reverting code requires restoring the backup.

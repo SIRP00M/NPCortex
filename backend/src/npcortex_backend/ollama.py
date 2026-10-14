@@ -12,6 +12,13 @@ class OllamaProvider:
         self.model = model
 
     def chat(self, messages: list[dict[str, str]]) -> str:
+        return self._chat(messages, json_format=False)
+
+    def chat_json(self, messages: list[dict[str, str]]) -> str:
+        """Optional structured-output capability used only by the B3 coordinator."""
+        return self._chat(messages, json_format=True)
+
+    def _chat(self, messages: list[dict[str, str]], *, json_format: bool) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
@@ -19,6 +26,8 @@ class OllamaProvider:
             "think": False,
             "options": {"num_ctx": 4096, "num_predict": 160},
         }
+        if json_format:
+            payload["format"] = "json"
         req = Request(
             self.base_url + "/api/chat",
             data=json.dumps(payload).encode("utf-8"),
