@@ -1,45 +1,14 @@
-# Roadmap and project status
+# NPCortex Roadmap — Baseline Reset
 
-Legend: [x] starter source exists; [ ] not implemented/verified.
+- [x] A2 — Backend concurrency, resource limits and Forge chat bridge stability.
+- [x] B1 — Code candidate: world/actor UUID registry, scoped player-to-actor
+  conversations, SQLite schema v1 + bounded durable transcript, legacy API preserved.
+  **Acceptance pending Windows Forge build and real Qwen/Minecraft tests.**
+- [ ] B2 — Multi-actor dialogue: NPC ↔ NPC, speaker/recipient context, turn limits,
+  AI request routing and guardrails. Audit/approval required before implementation.
+- [ ] B3 — Headless social simulation, recovery/performance/scale tests.
+- [ ] After B quality gates — Forge NPC entity integration/skin/UI and game events.
+- [ ] C — Full autonomous world simulation. **FUTURE ONLY**, not implemented or
+  approved. See [C Roadmap](future-autonomy-roadmap.md).
 
-## 0.1 — Local AI dialogue baseline
-
-- [x] Environment-configurable Ollama endpoint (`qwen3:8b` default)
-- [x] Python HTTP chat endpoint with JSON validation
-- [x] Example character packs (Guide, Yui)
-- [x] In-memory per-player / per-character chat context
-- [x] Forge `/npcortex status` and `/npcortex ask <character> <message>` command source
-- [x] Python unit tests and GitHub Actions source for Python and Forge builds (Forge job awaits first run)
-- [ ] ForgeGradle build and in-game connection verified on a developer workstation
-- [ ] Reliable timeout/recovery and logging tests under game load
-
-## 0.2 — Actual NPC
-
-- [ ] Custom NPC entity, registration and spawn mechanics
-- [ ] Conversation UI attached to entity
-- [ ] Player/NPC identity mapping, saved NPC data
-- [ ] NPC skin and rendering
-
-## 0.3 — Character state
-
-- [ ] Persisted conversational memory
-- [ ] Personalities, relationships and event memory
-- [ ] Localization / Thai support
-
-## 0.4 — Validated actions
-
-- [ ] Explicit action schema with game-side authorization
-- [ ] Follow / stop / navigate and failure recovery
-- [ ] Inventory, interactions, routines
-
-## 0.5 — Optional mod integrations
-
-- [ ] TaCZ compatibility adapter and tests
-- [ ] Recruits conflict investigation (no assumptions)
-- [ ] Combat / friendly-fire / permissions safeguards
-
-## Later
-
-- [ ] Multiple LLM providers via plugin interface
-- [ ] Modpack installation docs, multiplayer auth/security, benchmarks
-- [ ] Stable public character pack format
+No Test, No Push. User performs GitHub operations only.

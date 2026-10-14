@@ -4,7 +4,7 @@ This phase adds a **developer command bridge**, not a spawnable NPC or GUI. The 
 
 ## Tested / untested
 
-- [x] Python backend -> Ollama (tested by project owner on Windows with `qwen3:8b`).
+- [x] Python backend -> Ollama (reported as tested by project owner in the original baseline; **not re-verified against real Ollama in A2**).
 - [x] `/health` returns HTTP 200 (backend process is alive; model may still be offline).
 - [x] Forge command and Gradle project code authored; scripts prepared.
 - [ ] Gradle compilation verified on a PC with JDK 17 and internet access.
@@ -56,7 +56,7 @@ cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 
-On first run, `dev-forge.ps1` downloads the Gradle wrapper from the official Forge 47.4.10 MDK and verifies its published SHA-1. Gradle still needs an internet connection for Forge/Minecraft dependencies.
+The ZIP already contains the Gradle wrapper. If missing, `dev-forge.ps1` downloads a verified wrapper from the official Forge 47.4.10 MDK. Gradle still needs an internet connection for Forge/Minecraft dependencies.
 
 Do not attempt this phase in your full CurseForge modpack first. `runClient` creates a dedicated Forge development instance.
 
@@ -66,8 +66,10 @@ Create a **single-player test world with Allow Cheats: ON**, because the command
 
 1. Type `/npcortex status` — expected: `Backend online | model: qwen3:8b`. **This does not confirm that Ollama can generate text.**
 2. Type `/npcortex ask yui Hey Yui, want to explore?` — expected: `NPCortex: Thinking...`, then a generated English reply. This command **does not create or move an NPC**.
-3. Type `/npcortex ask unknown Hello` — expected: an error; see backend terminal for HTTP 400.
-4. Stop the Python backend and type `/npcortex status` — expected: backend unreachable (the game should remain responsive).
+3. Type `/npcortex ask unknown Hello` — expected: a readable `Backend returned HTTP 400` error mentioning the unknown character.
+4. Stop the Python backend and type `/npcortex status` — expected: a readable connection error (the game should remain responsive).
+5. Restart the backend, stop Ollama, then use `/npcortex ask yui Hello` — expected: HTTP 502 with a provider-unavailable message (the game should remain responsive).
+6. Send two chat requests quickly to the same character. Confirm no crash, that completed turns are ordered, and that a busy error may appear if the wait threshold is exceeded.
 
 If commands do not appear, check that the Forge game is loading `NPCortex` under the Mods menu and that cheats are enabled in the test world.
 

@@ -6,13 +6,13 @@
 
 NPCortex connects Minecraft Forge 1.20.1 to a local LLM backend, with room for future provider adapters. The first development milestone uses **Ollama + Qwen 3 8B**, runs entirely on your computer and uses **English dialogue**. Custom character packs are plain JSON.
 
-**Project status: `v0.1.1-alpha` Phase 3 scaffold.** The Python HTTP backend, in-memory chat sessions, example character packs and a Forge `/npcortex status` and `/npcortex ask` developer command bridge are implemented as starter source. They have *not* been tested together inside Minecraft. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, persistent memory, or multiplayer authentication yet**.
+**Project status: `v0.1.1-alpha` B1 World & Actor Identity Foundation candidate (pending Minecraft/Forge gates).** The Python HTTP backend, bounded and expiring legacy chat sessions, SQLite-backed B1 actor conversations, example character packs and a Forge `/npcortex status` and `/npcortex ask` developer command bridge are implemented as starter source. The A2 legacy Forge bridge was accepted in a user-reported Minecraft smoke test; **new B1 actor identity/persistence has not yet been tested inside Minecraft**. There is **no spawned NPC entity, NPC UI, pathfinding, combat, TaCZ integration, semantic memory, NPC-to-NPC dialogue, or multiplayer authentication yet**.
 
 ## Repository layout
 
 ```text
 NPCortex/
-├── backend/                # Python server; model adapter, sessions, character loader
+├── backend/                # Python server; model, legacy sessions, SQLite world/actor registry
 │   ├── src/npcortex_backend/
 │   └── tests/
 ├── forge-mod/              # Forge 1.20.1 mod (Java 17)
@@ -67,7 +67,7 @@ The backend communicates with Ollama at `http://127.0.0.1:11434/api/chat`. Qwen 
 
 ## Quick start — Forge mod (developer setup)
 
-The Forge sources and Gradle build files are included. The official Forge MDK Gradle wrapper binary is deliberately **not** shipped inside this scaffold. Our launcher bootstraps it from the recommended MDK (SHA-1 checked). **Use a JDK 17 (not Java 21)**:
+The Forge sources and Gradle build files are included. The official Gradle wrapper files **are included** in `forge-mod/`. Only if they are missing, `scripts/setup-forge-wrapper.ps1` can retrieve them from the Forge MDK (SHA-1 checked). **Use JDK 17 (not Java 21)**:
 
 ```powershell
 .\scripts\phase3-check.ps1
@@ -86,7 +86,32 @@ Start the Python backend and create a **single-player test world with Allow Chea
 /npcortex ask yui Hey Yui! Want to explore the forest?
 ```
 
-The server sends the chat request to the local backend asynchronously and sends the reply back to the player's chat. **This command is a developer integration test, not an actual NPC dialogue UI.** The Forge command bridge is currently source-only and **not verified through a complete ForgeGradle build or game launch**.
+The server sends the chat request to the local backend asynchronously and sends the reply back to the player's chat. **This command is a developer integration test, not an actual NPC dialogue UI.** The Forge command bridge source is included, but a **new ForgeGradle build and B1-specific real-world integration test remain unverified in this delivery**. The A2 automated Python tests do not replace those gates.
+
+## B1 — World & Actor Identity Foundation
+
+B1 adds `POST /v1/worlds`, `POST /v1/actors`, `POST /v1/actor-chat`,
+`GET /v1/actors/<uuid>`, and `GET /v1/conversations/<uuid>` for localhost
+headless tests. Two Yui actors can have separate stable UUIDs and independently
+persisted conversation transcripts in `backend/data/npcortex.sqlite3` across
+backend restarts. The original Forge `/npcortex ask` still uses legacy `/v1/chat`
+(in-memory only) and **does not yet refer to an Actor UUID**. B1 implements no
+NPC-to-NPC communication, Forge entities, spatial world simulation or behavior.
+
+[Full API contract](docs/api.md) · [B1 Windows verification](docs/b1-verification.md)
+· [Future C roadmap — not implemented](docs/future-autonomy-roadmap.md).
+
+## Baseline stabilization (A2)
+
+A2 keeps `GET /health` and `POST /v1/chat` success responses unchanged. Same-session requests are ordered, with bounded waiting and explicit HTTP busy errors; histories are limited to six turns, expire after idle time, and can be evicted when the configured maximum session count is reached. Backend/model resources have configurable limits. See [A2 Changelog](CHANGELOG.md), [API](docs/api.md), and [Windows verification](docs/a2-verification.md).
+
+Run all Python tests from repository root:
+
+```powershell
+python -m unittest discover -s backend/tests -v
+```
+
+**No authentication was added**: keep the backend on loopback, and do not forward port 8765.
 
 ## How to customize
 
@@ -94,12 +119,11 @@ Copy `character-packs/guide/` to `character-packs/my_npc/`; change the JSON fiel
 
 ## Roadmap
 
-- **v0.1:** Local English chat, character packs, minimal Forge command (starter implementation).
-- **v0.2:** Real NPC entity and in-game conversation UI.
-- **v0.3:** Persistent NPC memory, relationship state and player profiles.
-- **v0.4:** Safe validated action execution, follow/stay/pathfinding.
-- **v0.5:** Optional TaCZ / other mod integrations, combat compatibility testing.
-- **Later:** Thai localization, richer behaviors, more LLM providers.
+- **A2:** baseline stability; accepted Minecraft conversation smoke test.
+- **B1 (candidate):** persisted world/actor identity, player-to-actor transcripts.
+- **B2/B3:** NPC-NPC conversation engine, headless multi-NPC social verification.
+- **After B:** Forge NPC entity, UI and optional game integrations.
+- **Future C (not implemented):** autonomous world behavior/goals/action planning.
 
 See [Roadmap](docs/roadmap.md) and [Architecture](docs/architecture.md).
 

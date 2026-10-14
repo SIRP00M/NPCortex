@@ -36,7 +36,7 @@ public final class NPCortex {
                                     CompletableFuture<String> future = ChatBridge.health();
                                     future.whenComplete((result, error) -> source.getServer().execute(() -> {
                                         if (error != null) {
-                                            source.sendFailure(Component.literal("NPCortex: Backend unreachable. Check the Python server."));
+                                            source.sendFailure(Component.literal("NPCortex: " + ChatBridge.describeFailure(error)));
                                         } else {
                                             source.sendSuccess(() -> Component.literal("NPCortex: " + result)
                                                     .withStyle(ChatFormatting.GREEN), false);
@@ -59,7 +59,7 @@ public final class NPCortex {
                                                     future.whenComplete((reply, error) -> source.getServer().execute(() -> {
                                                         if (error != null) {
                                                             source.sendFailure(Component.literal(
-                                                                    "NPCortex: Chat failed. Check backend console and character ID."));
+                                                                    "NPCortex: " + ChatBridge.describeFailure(error)));
                                                         } else {
                                                             source.sendSuccess(() -> Component.literal(
                                                                     characterId + ": " + reply), false);
