@@ -7,7 +7,8 @@ public class ScaffoldPolicyTest {
         if (!value) throw new AssertionError("ScaffoldPolicy #" + count);
     }
     public static void main(String[] args) {
-        check(ScaffoldPolicy.MAX_HEIGHT > 0 && ScaffoldPolicy.MAX_HEIGHT <= 6);
+        check(ScaffoldPolicy.mayBuild(12,true,true));
+        check(ScaffoldPolicy.mayBuild(80,true,true));
         check(ScaffoldPolicy.MAX_TREE_HEIGHT >= 12 && ScaffoldPolicy.MAX_TREE_HEIGHT <= 20);
         check(ScaffoldPolicy.validMaterial("minecraft:oak_log"));
         check(ScaffoldPolicy.validMaterial("minecraft:cobblestone"));
@@ -19,7 +20,8 @@ public class ScaffoldPolicyTest {
         check(!ScaffoldPolicy.sameTrunk(3, 3, 2, 3));
         check(ScaffoldPolicy.mayBuild(0, true, true));
         check(ScaffoldPolicy.mayBuild(5, true, true));
-        check(!ScaffoldPolicy.mayBuild(6, true, true));
+        check(ScaffoldPolicy.mayBuild(6, true, true));
+        check(!ScaffoldPolicy.mayBuild(ScaffoldPolicy.MAX_HEIGHT, true, true));
         check(!ScaffoldPolicy.mayBuild(1, false, true));
         check(!ScaffoldPolicy.mayBuild(1, true, false));
         check(!ScaffoldPolicy.jumpClearance(65.99, 65, 0.0));

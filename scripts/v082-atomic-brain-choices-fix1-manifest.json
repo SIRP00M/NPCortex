@@ -1,0 +1,30 @@
+{
+  "base": "NPCortex v0.8.2-alpha 3D Ground Access Fix 1",
+  "files": [
+    {
+      "path": "backend/src/npcortex_backend/brain.py",
+      "old_sha256": "7999cb2fee4eeef39d08374b1a48feed80319a8147e488877de4654b8d1e6d06",
+      "new_sha256": "8b624792373dffecaa19f8db084a117763bb85a896da494e513afdb9d6c81aed"
+    },
+    {
+      "path": "backend/src/npcortex_backend/service.py",
+      "old_sha256": "b3c02fdc545e363ae5d284f0b15f640de0c2b89cbb692ce392bfc617d7595af7",
+      "new_sha256": "568e65a69c3ed6dc8de1500c3a4d7cd11241c52a7e81f610915103a7f1211487"
+    },
+    {
+      "path": "backend/tests/test_agentic_brain_v085.py",
+      "old_sha256": "a90fb24a2332272fe1e23fb0cf67f1fcb8b9cf576292ce05fc41c5776db08998",
+      "new_sha256": "8243a8a3daa77e895c3eeff4f8fafd2d20b20c355d5189b912286679d839b1ff"
+    },
+    {
+      "path": "backend/tests/test_atomic_brain_choice_v082.py",
+      "old_sha256": null,
+      "new_sha256": "ae887aecbf7295726c0fdb04cf198eda78a244d3495379336b5c82488aaa63f1"
+    },
+    {
+      "path": "docs/releases/v0.8.2-alpha-atomic-brain-choices-fix1.md",
+      "old_sha256": null,
+      "new_sha256": "e253c5cdaee2cc8f3d783f5cb8804e883b57b6476b45ce5403e322283500011d"
+    }
+  ]
+}

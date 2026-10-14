@@ -24,16 +24,19 @@ from threading import Thread
 
 def state():
     return {"goal_item": "minecraft:oak_log", "goal_count": 6, "collected": 0,
-            "mined": 0, "calls": 0, "failures": 0, "same_failures": 0, "stalls": 0,
+            "mined": 1, "calls": 0, "failures": 0, "same_failures": 0, "stalls": 0,
             "last_result": "[Task accepted by server.]", "scaffold": 0, "paused": False,
             "equipment": {"holding": "minecraft:air", "bag": [
                 {"id": "minecraft:dirt", "count": 8}], "can_scaffold": True},
             "surroundings": {"below": "minecraft:grass_block", "feet": "minecraft:air",
                              "ahead": "minecraft:air"}, "owner_distance": 3.0,
+            "tree": {"active": False, "remaining": 0, "size": 0, "completed": 0, "terrain_edits": 0},
             "targets": [{"ref": "b0", "id": "minecraft:oak_log", "dx": 2,
-                         "dy": 1, "dz": 0, "visible": True, "reachable": True},
+                         "dy": 1, "dz": 0, "visible": True, "reachable": True,
+                         "obstruction": "none", "leaf_clearable": False, "ground_stand_possible": True, "soft_clearable": False},
                         {"ref": "b1", "id": "minecraft:oak_log", "dx": 2,
-                         "dy": 5, "dz": 0, "visible": False, "reachable": False}],
+                         "dy": 5, "dz": 0, "visible": False, "reachable": False,
+                         "obstruction": "natural_tree_leaf", "leaf_clearable": True, "ground_stand_possible": True, "soft_clearable": False}],
             "drops": [{"ref": "d0", "id": "minecraft:oak_log", "distance": 2.5,
                        "uuid": "f2c31393-a4ce-4e7c-91d2-fdc946f38ce8",
                        "pickup_reachable": False}]}
@@ -56,6 +59,30 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_state(s)
 
+    def test_owned_mined_drop_provenance_is_backward_compatible_and_strict(self):
+        # Old Forge snapshots still omit npc_mined; Runtime Sprint 1 sends it.
+        old = state()
+        self.assertNotIn("npc_mined", validate_state(old)["drops"][0])
+        for mined in (True, False):
+            observed = state()
+            observed["drops"][0]["npc_mined"] = mined
+            accepted = validate_state(observed)
+            self.assertIs(accepted["drops"][0]["npc_mined"], mined)
+            # Provenance alone cannot grant new executor authority.
+            self.assertEqual(
+                schema_for_observation(accepted)["properties"]["target"]["enum"],
+                schema_for_observation(validate_state(old))["properties"]["target"]["enum"])
+        for invalid in ("true", 1, None, [], {}):
+            observed = state()
+            observed["drops"][0]["npc_mined"] = invalid
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                    ValueError, "Invalid mined-drop provenance"):
+                validate_state(observed)
+        observed = state()
+        observed["drops"][0].update({"npc_mined": True, "unknown": False})
+        with self.assertRaisesRegex(ValueError, "Unexpected drop observation fields"):
+            validate_state(observed)
+
     def test_reject_invented_ref_and_wrong_kind(self):
         s = validate_state(state())
         for tool, target in [("mine", "b9"), ("mine", "d0"), ("approach_drop", "b0"),
@@ -76,6 +103,8 @@ class ValidationTests(unittest.TestCase):
         s["drops"][0]["pickup_reachable"] = True
         self.assertEqual(validate_decision(decision("pickup", "d0"), s)["target"], "")
         s["collected"] = s["goal_count"]
+        s["mined"] = s["goal_count"]
+        s["tree"]["completed"] = 1
         self.assertEqual(validate_decision(decision("finish", "b0"), s)["target"], "")
         # Only the unused argument is normalized. Invented actionable targets,
         # extra keys and overlength strings are still rejected.
@@ -152,18 +181,47 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_state(s)
 
-    def test_mined_quota_masks_further_block_navigation_but_not_drop_route(self):
+    def test_minimum_met_does_not_interrupt_committed_tree(self):
         s = state()
         s["goal_count"] = 1
         s["mined"] = 1
-        schema = schema_for_observation(validate_state(s))
-        available = schema["properties"]["tool"]["enum"]
-        for action in ("mine", "approach", "climb", "clear_leaf"):
-            self.assertNotIn(action, available)
-        self.assertIn("approach_drop", available)
-        with self.assertRaisesRegex(ValueError, "Tool unavailable"):
-            validate_decision(decision("approach", "b1"), validate_state(s))
-        self.assertEqual(validate_decision(decision("approach_drop", "d0"), s)["target"], "d0")
+        s["collected"] = 1
+        s["tree"] = {"active": True, "remaining": 3, "size": 4,
+                     "completed": 0, "terrain_edits": 0}
+        tools = schema_for_observation(validate_state(s))["properties"]["tool"]["enum"]
+        self.assertIn("mine", tools)
+        self.assertIn("approach", tools)
+        self.assertNotIn("finish", tools)
+        self.assertEqual(validate_decision(decision("mine", "b0"), validate_state(s))["tool"], "mine")
+
+    def test_new_tree_denied_after_minimum_and_cleanup(self):
+        s = state()
+        s["goal_count"] = 1
+        s["mined"] = 1
+        s["collected"] = 1
+        s["tree"]["completed"] = 1
+        tools = schema_for_observation(validate_state(s))["properties"]["tool"]["enum"]
+        for tool in ("mine", "approach", "clear_leaf", "climb", "clear_soft"):
+            self.assertNotIn(tool, tools)
+        self.assertIn("finish", tools)
+
+    def test_grounded_reversible_soil_edit(self):
+        s = state()
+        s["tree"] = {"active": True, "remaining": 2, "size": 3,
+                     "completed": 0, "terrain_edits": 1}
+        s["targets"][0]["soft_clearable"] = True
+        tools = schema_for_observation(validate_state(s))["properties"]["tool"]["enum"]
+        self.assertIn("clear_soft", tools)
+        self.assertIn("restore", tools)
+        self.assertNotIn("finish", tools)
+        self.assertEqual(validate_decision(decision("clear_soft", "b0"), validate_state(s))["tool"], "clear_soft")
+        with self.assertRaises(ValueError):
+            validate_decision(decision("clear_soft", "b1"), validate_state(s))
+        s["tree"]["active"] = False
+        s["tree"]["size"] = 0
+        s["tree"]["remaining"] = 0
+        with self.assertRaises(ValueError):
+            validate_state(s)
 
     def test_collect_affordances_keep_ai_choice_without_auto_actions(self):
         s = state()
@@ -176,18 +234,21 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_decision(decision("finish"), s)
         s["collected"] = s["goal_count"]
+        s["tree"]["completed"] = 1
         available = schema_for_observation(validate_state(s))["properties"]["tool"]["enum"]
         self.assertIn("finish", available)
         self.assertEqual(validate_decision(decision("finish"), s)["tool"], "finish")
 
-    def test_missing_drops_does_not_claim_bag_success_or_mine_more(self):
+    def test_missing_drops_does_not_claim_bag_success(self):
         s = state()
         s["goal_count"] = 1
         s["mined"] = 1
         s["targets"] = []
         s["drops"] = []  # player could have picked it up; goal is not met
         allowed = schema_for_observation(validate_state(s))["properties"]["tool"]["enum"]
-        self.assertEqual(allowed, ["pause", "wait"])
+        self.assertIn("pause", allowed)
+        self.assertIn("wait", allowed)
+        self.assertNotIn("finish", allowed)
         self.assertEqual(s["collected"], 0)
 
     def test_agent_prompt_explains_no_op_and_effective_replanning(self):
@@ -219,25 +280,27 @@ class AgentCycleTests(unittest.TestCase):
         return self.service.brain_step("yui", "owner1", "Yui, chop 6 oak logs.",
                                        "npc1", observation)
 
-    def test_redundant_approach_feedback_is_exposed_for_next_decision(self):
+    def test_redundant_approach_is_rejected_before_wasting_an_execution_cycle(self):
         self.provider.chat_structured.side_effect = [
             json.dumps(decision("approach", "b0", "Check the block")),
             json.dumps(decision("mine", "b0", "Already visible and reachable")),
         ]
         s = state()
-        self.assertEqual(self.step(s)["tool"], "approach")
+        with self.assertRaisesRegex(ModelError, "no executable affordance"):
+            self.step(s)
         s["calls"] = 1
         s["stalls"] = 1
         s["last_result"] = "[Action unchanged: block already visible and in reach; no movement or task progress.]"
         self.assertEqual(self.step(s)["tool"], "mine")
         messages = self.provider.chat_structured.call_args.args[0]
         self.assertIn('"stalls": 1', messages[-1]["content"])
-        self.assertIn("Action unchanged", messages[-1]["content"])
+        self.assertIn('"mine": ["b0"]', messages[-1]["content"])
+        self.assertIn('"approach": ["b1"]', messages[-1]["content"])
         self.assertEqual(self.provider.chat_structured.call_count, 2)
 
     def test_feedback_driven_replan_is_new_model_decision_each_cycle(self):
         self.provider.chat_structured.side_effect = [
-            json.dumps(decision("mine", "b1", "Try upper trunk")),
+            json.dumps(decision("mine", "b0", "Try lower trunk")),
             json.dumps(decision("approach", "b1", "Out of reach")),
             json.dumps(decision("clear_leaf", "b1", "Foliage obstructs")),
             json.dumps(decision("pause", "", "Need owner assistance")),
@@ -282,7 +345,7 @@ class AgentCycleTests(unittest.TestCase):
         s["drops"] = []
         self.assertEqual(self.step(s)["tool"], "pause")
         used_schema = self.provider.chat_structured.call_args.args[1]
-        self.assertEqual(used_schema["properties"]["target"]["enum"], [""])
+        self.assertEqual(used_schema["properties"]["choice"]["enum"], ["pause", "wait"])
         self.assertEqual(self.provider.chat_structured.call_count, 1)
 
     def test_validation_failure_reports_reason_without_dumping_character_memory(self):

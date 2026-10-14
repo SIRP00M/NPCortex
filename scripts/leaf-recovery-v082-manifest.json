@@ -1,0 +1,47 @@
+[
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldBlockActions.java",
+    "old_sha256": "8fb7fdf30b1ccef05d02b5fa3b06b359d39b7b0c08a5d8d10572aa8e4bf78c72",
+    "new_sha256": "02b0f34cc4c2a814c7c56b57b2b5f4788d8555ee9023ba13b7b5aa717909e674"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkills.java",
+    "old_sha256": "990da01155a5e6ac639ab1590cf9d9398159c6e08092a807a8dc9784fb73bc8a",
+    "new_sha256": "734c8ef869c6ace389937801c07d75d07cb22ccbe9bff3750fe1c55898b64fc2"
+  },
+  {
+    "path": "backend/src/npcortex_backend/brain.py",
+    "old_sha256": "ba8dcb2a64ad8b8250b49c47bb757f499c65bfe1e8264526098d05641a75652f",
+    "new_sha256": "b481126b3a3542fb8f6277970d8f6e0f6ed044ab38925f0c6cc87bf9b433eca6"
+  },
+  {
+    "path": "backend/src/npcortex_backend/service.py",
+    "old_sha256": "ae8a7add4c3fac831f2a7e66241a746782b19be713c5088e516962e14ae77289",
+    "new_sha256": "b3c02fdc545e363ae5d284f0b15f640de0c2b89cbb692ce392bfc617d7595af7"
+  },
+  {
+    "path": "backend/tests/test_agentic_brain_v085.py",
+    "old_sha256": "b498bc3b0ea9baa97fd99a11eca6fd0b1c3c76ac23bfe365506067e302bd9b92",
+    "new_sha256": "8f3617a50180a98d4e1b0f499ed2ed74a9cf8119626766f60da5a42800f3d2bd"
+  },
+  {
+    "path": "backend/tests/test_grounded_leaf_recovery_v082.py",
+    "old_sha256": null,
+    "new_sha256": "bfcfa340b06c47c2b47e9ed23d03273a96bee44365d1c2f47eee68fc3755205b"
+  },
+  {
+    "path": "docs/releases/v0.8.2-alpha-leaf-recovery-fix2.md",
+    "old_sha256": null,
+    "new_sha256": "3fce2fbe7a7e6c5456c9aa5c3e05a7cd9e2336b746c9e1aca9ab9a8c120aeccf"
+  },
+  {
+    "path": "ReadMe.md",
+    "old_sha256": "5ec07c804384edf9aa37f4e86a1d3ca29128c4c380d55314336f9dc3774ce4db",
+    "new_sha256": "edec8b258f6043a1a24b62d1b4c5f55fc8ca2f88674fa12fe3bc63617339b075"
+  },
+  {
+    "path": "UPDATE_NOTES.md",
+    "old_sha256": "e4d2e68ed4f3c26e3825aadbd4448e5f8b720c5fa95551997ef97b178e98a709",
+    "new_sha256": "9c425ff18543c4acc590bb06aee1c3d1214047feef89fd1b511e53765c60380e"
+  }
+]

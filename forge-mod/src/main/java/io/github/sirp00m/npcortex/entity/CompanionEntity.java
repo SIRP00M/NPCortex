@@ -1,5 +1,6 @@
 package io.github.sirp00m.npcortex.entity;
 
+import io.github.sirp00m.npcortex.CompanionItemPickup;
 import io.github.sirp00m.npcortex.network.NpcNetwork;
 import io.github.sirp00m.npcortex.network.OpenDialoguePacket;
 import java.util.UUID;
@@ -168,6 +169,8 @@ public class CompanionEntity extends PathfinderMob {
     @Override
     public void aiStep() {
         super.aiStep();
+        // Baseline player-like pickup is a physical NPC mechanic, not an LLM skill.
+        if (!level().isClientSide) CompanionItemPickup.tick(this);
         if (!level().isClientSide && retreatTicks > 0 && --retreatTicks == 0) {
             clearRetreat();
         }

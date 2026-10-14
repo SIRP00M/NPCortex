@@ -1,0 +1,9 @@
+Architecture Stabilization Sprint 1 — validation
+Baseline: user-supplied AtomicBrainChoiceFix1 FullRepository ZIP
+Backend: 191 tests PASSED (mock Ollama; legacy + Registry v2)
+Java 17 core: 193 assertions PASSED (registry/lifecycle/events/failure history/voxel navigation)
+Java source parse: 65 files, 0 syntax errors
+Forge compile/build: NOT VERIFIED — JVM Gradle distribution download blocked: Network is unreachable
+Minecraft physics / original Fancy Oak / real Qwen: NOT RUN
+No compiled mod JAR is included. Gradle wrapper JAR is the verified official MDK wrapper only.
+See docs/runtime-sprint1/README_TH.md and FANCY_OAK_ACCEPTANCE.md.

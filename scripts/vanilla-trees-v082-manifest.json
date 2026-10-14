@@ -1,0 +1,162 @@
+[
+  {
+    "path": "ReadMe.md",
+    "old_sha256": "edec8b258f6043a1a24b62d1b4c5f55fc8ca2f88674fa12fe3bc63617339b075",
+    "new_sha256": "e805b53aadbf2431a6865f7497f2bc0c2fb8301414e309e7bcacb596fbfe6211"
+  },
+  {
+    "path": "UPDATE_NOTES.md",
+    "old_sha256": "9c425ff18543c4acc590bb06aee1c3d1214047feef89fd1b511e53765c60380e",
+    "new_sha256": "56634d04c12b1459756eaad5ac6b151cc47c9df5cf4572b6f363f6aa76b80ce4"
+  },
+  {
+    "path": "backend/src/npcortex_backend/brain.py",
+    "old_sha256": "b481126b3a3542fb8f6277970d8f6e0f6ed044ab38925f0c6cc87bf9b433eca6",
+    "new_sha256": "183847da729e01a215c2f894bcb638f2081397b1f4c82a5a951c27e5d9a64524"
+  },
+  {
+    "path": "backend/tests/test_agentic_brain_v085.py",
+    "old_sha256": "8f3617a50180a98d4e1b0f499ed2ed74a9cf8119626766f60da5a42800f3d2bd",
+    "new_sha256": "56e739f46f8e2560bf534d06959138b05c81e92a04ef2466c8bbf9231c061cc4"
+  },
+  {
+    "path": "backend/tests/test_grounded_leaf_recovery_v082.py",
+    "old_sha256": "bfcfa340b06c47c2b47e9ed23d03273a96bee44365d1c2f47eee68fc3755205b",
+    "new_sha256": "f65eb198ca3ea0bad99c3425d181d061736b86ff5118e16ffb7082ac43f33bc6"
+  },
+  {
+    "path": "backend/tests/test_smart_harvest_v083.py",
+    "old_sha256": "b20acbd6551a79180a1c12781d033a89a32eb98f32fdf84809233e65c5a8011f",
+    "new_sha256": "05aab6edb27254876d455ff47631fd5afc09344363c7833af55853778e2b0f49"
+  },
+  {
+    "path": "backend/tests/test_tree_recovery_v082.py",
+    "old_sha256": "a986978dea31c10a8bbbe209a5d932da138f7228cc974c0cfab94e2b466a7f68",
+    "new_sha256": "3db6926ea1485906e153fbd97832517e99640584b7ded2fd1c5bcfb03ca9add0"
+  },
+  {
+    "path": "backend/tests/test_tree_species_v082.py",
+    "old_sha256": null,
+    "new_sha256": "95d3609d0b78858ce98fd125b21e18337287361080c82d3c5d2703152b859c61"
+  },
+  {
+    "path": "backend/tests/test_whole_tree_v082.py",
+    "old_sha256": "6461d7bf3915142ce65c678e1f2ba0904a05e2e1b28e29a2fdffeb54f5ac2c43",
+    "new_sha256": "0a599bd2e8eb52b6e6d65e00df42680ff4fc8d3f61213a658a304e9f48198b50"
+  },
+  {
+    "path": "docs/releases/v0.8.2-alpha-general-trees-foundation1.md",
+    "old_sha256": null,
+    "new_sha256": "8aa053b52ae8220a8ab42073d8f4802332fbc7b2e03d8744138ec1dc261a9d6c"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java",
+    "old_sha256": "fd41714f3c4aea973cb056ea2d85af5510599b177fd3a74ab57de74b6dddfcb1",
+    "new_sha256": "591b34cbe2dc2b4f67ba96c459137aa008aa5e19c43732a63329291886a654ec"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainObservation.java",
+    "old_sha256": "775d4db688a324ba4a8ff76076f03ad31ca9c19fa40c919681c224b2900ee1a3",
+    "new_sha256": "2c7bf26b6c61c04e8c9c996b70ee967967323cdbb272f89275a6e3395530ea31"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkills.java",
+    "old_sha256": "734c8ef869c6ace389937801c07d75d07cb22ccbe9bff3750fe1c55898b64fc2",
+    "new_sha256": "4285f4ff85e4396f1a439d719099cd2caf1a308297b23922e890e5c44c825c21"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskIntent.java",
+    "old_sha256": "8eaf28e146468d54aa51d51946edf017efffd99cec58349b0aaf86e59c128462",
+    "new_sha256": "23269f50f65c1e3fdf11843bb95e5ec5f8431cb9ebdcbb232f950f4ea8b9360a"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskPolicy.java",
+    "old_sha256": "a37104798e3820005642b77efacf1459e1451932f1d96e12c559740b2b358a0b",
+    "new_sha256": "78fa89339280ea5ecb960a7311751788839b5b9dc7ceade335e3bde0b4c7442d"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/NPCortex.java",
+    "old_sha256": "b9e75c2f988779f084bfdc1cd1e1d37d8a45eda328ad971430c703dfa81da22e",
+    "new_sha256": "f867dd0a445d0c33c516e323bc82da56f8b3d8ffe1dd687620fcc3593124e462"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/ScaffoldPolicy.java",
+    "old_sha256": "5092746dcd1e1e81b3840fa6766cd9291cc9d4811a46ad43949adb939cf07cea",
+    "new_sha256": "ade9260a457e1ecaa92b62a2d4b86f880b026c1fc431c8a1dbba345da49edc72"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeScaffold.java",
+    "old_sha256": "944b43a4b11d74a4aa5cd3c2b18c1f8cbd04f84700335920452bd6b5349e26c5",
+    "new_sha256": "bfdbf316009dc21b83c7ce8a2b97aafea793d019ddbe80095a9b952ba4e7052d"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeSpecies.java",
+    "old_sha256": null,
+    "new_sha256": "d39008817e4386bddf144b8e28ebbfaada679b3f279fd84aceddc0bce3f1d964"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WholeTreePolicy.java",
+    "old_sha256": "838a8ed62d3230d6492d61d98eb479c3a0e8c77a9fdfd4e9566660da020ec1a3",
+    "new_sha256": "c0a645fde5de27cc42f4b6336884729b00c476d07aa7a29b398c0e3b00089374"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WholeTreeTracker.java",
+    "old_sha256": "36775f41c80a580be63c66d4192f9a5bc9e53fbe199a9aefe8bb0ad1c98971ec",
+    "new_sha256": "c861d029f7a71b6cf802dcbe55bd22470262e05f89144368158e0eea26d521a4"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldBlockActions.java",
+    "old_sha256": "02b0f34cc4c2a814c7c56b57b2b5f4788d8555ee9023ba13b7b5aa717909e674",
+    "new_sha256": "2ac8da3b76ab482297860a8efadb290eb3d718a50d58b5d16638de09bbeb7bcb"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldInteractionPolicy.java",
+    "old_sha256": "9598dbb5ea577b9a0cdb8a6548723e31d746400223bbead39f29db4bf1d7e579",
+    "new_sha256": "c3ad759d172eb642518f8b4f49037e3dcb8c4788a22f9d6a72dd6c0a5ab9f293"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/network/DialogueRequestPacket.java",
+    "old_sha256": "3dd9d053a825502cca050004f64ab158f0acb39daeb821bb4faa7aa53eff0ce3",
+    "new_sha256": "321c1054127fda9df5f0a0cab5c5bf6e6264cf2094747b533db54d939883de87"
+  },
+  {
+    "path": "forge-mod/src/test/java/io/github/sirp00m/npcortex/TreeSpeciesSelfTest.java",
+    "old_sha256": null,
+    "new_sha256": "b0fcc5f65f8a1fb1caef5d64e18dcf0944a5f77ce35fe2266a88c592e86f6d71"
+  },
+  {
+    "path": "forge-mod/src/test/java/io/github/sirp00m/npcortex/WholeTreePolicySelfTest.java",
+    "old_sha256": "702c436fbafbaea62fb7c8d2ff94ccb630f85eaffce34510a5894bb82b6aab6c",
+    "new_sha256": "ab473bcaf507e6619bba92829bb190734d7fa70c424106923a7276bcb4030d54"
+  },
+  {
+    "path": "scripts/intelligent-task-check.ps1",
+    "old_sha256": "f0bfaaf711921fe0e6130fe74aad5ac06882e884464c7284974eb230befadef5",
+    "new_sha256": "d72c2a3bc1befc470900a59773b2b7d6524bb52c638f18e525c6431446dbd19f"
+  },
+  {
+    "path": "scripts/quantity-hotfix-check.ps1",
+    "old_sha256": "7c7c6b7438bb6566089d71cefc9acdb24af91b56cedad95487384213ac604dea",
+    "new_sha256": "dc9bc36e6c9d852e6fbd634c319c885dc9954261f007d68a922621f9a5a47114"
+  },
+  {
+    "path": "scripts/smart-harvest-check.ps1",
+    "old_sha256": "c7f2c12fa4c5ee28e9c9b309ba5869aeabd21d9d3dd71a1d193ffa7af15e1f5e",
+    "new_sha256": "7fb9d5c279b5825b658569fab458a3699db6d0407056367770b24489fd659792"
+  },
+  {
+    "path": "scripts/test-agentic-v085.ps1",
+    "old_sha256": "305b567e3008928e5080bee0ca630e01bbca00cccd1018b8f9f2628da13d760f",
+    "new_sha256": "05ace7040b0c0378b993c7fd531e84b072f9ad5d45d794cb5c55a3a3085278f7"
+  },
+  {
+    "path": "scripts/tree-scaffold-check.ps1",
+    "old_sha256": "3d336e93554e3f2207d83507b89c8a8a750a9098952e1995e92669a00a155f3d",
+    "new_sha256": "dea51858e6f5c2d36ddddd32363d5af11d036ca25bb7be0c028067781493fd29"
+  },
+  {
+    "path": "scripts/world-interaction-check.ps1",
+    "old_sha256": "5a32571a0fc4aad76e6631ecf46217b78fad35654afbd4d8049a3919256bfe07",
+    "new_sha256": "ccc6490411f07665942b2010928d1b69a72b0b57565cd82c03a4218b38916aa2"
+  }
+]

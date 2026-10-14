@@ -30,7 +30,10 @@ public final class WorldActions {
             return "[Action blocked: NPC has an active agentic task.]";
         if (GatherTaskController.isBusy(npc) && !"follow".equals(action) && !"stay".equals(action))
             return "[Action blocked: NPC is gathering resources. Cancel its task first.]";
-        if (GatherTaskController.isBusy(npc)) GatherTaskController.cancel(npc);
+        if (GatherTaskController.isBusy(npc)) {
+            GatherTaskController.cancel(npc);
+            if (GatherTaskController.isBusy(npc)) return "[Action blocked: task cleanup must finish first.]";
+        }
         // An explicit owner command always supersedes a temporary autonomous retreat.
         npc.clearRetreat();
         return switch (action) {
@@ -87,7 +90,7 @@ public final class WorldActions {
                 || !owner.isAlive() || !npc.isAlive()
                 || !owner.getUUID().equals(npc.getOwnerUUID()))
             return "[Action blocked: only the nearby owner can control this NPC.]";
-        if (GatherTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
+        if (AgentRuntime.isBusy(npc))
             return "[Action blocked: NPC is busy with a task/plan; cancel that first.]";
         int remaining = request.count();
         int moved = 0;
@@ -110,6 +113,7 @@ public final class WorldActions {
                 accepted = offered - portion.getCount();
             } else {
                 ItemEntity drop = npc.spawnAtLocation(portion);
+                CompanionItemPickup.intentionalDrop(npc, drop);
                 accepted = drop == null ? 0 : offered;
             }
             if (accepted > 0) {
@@ -158,6 +162,7 @@ public final class WorldActions {
     public static boolean reachableGatherDrop(CompanionEntity npc, ItemEntity drop,
             boolean ownerCreative) {
         return drop.isAlive() && !drop.getItem().isEmpty()
+                && !CompanionItemPickup.isDeliberatelyDroppedBy(npc, drop)
                 && AgenticTaskPolicy.pickupNear(npc.distanceToSqr(drop))
                 && npc.level().clip(new ClipContext(npc.getEyePosition(),
                       drop.getBoundingBox().getCenter(), ClipContext.Block.COLLIDER,
@@ -167,7 +172,7 @@ public final class WorldActions {
     public static int pickupForGather(ServerPlayer owner, CompanionEntity npc,
             String targetId, int limit) {
         if (limit <= 0 || !owner.getUUID().equals(npc.getOwnerUUID())
-                || owner.level() != npc.level() || owner.distanceToSqr(npc) > 1024.0D) return 0;
+                || owner.level() != npc.level()) return 0;
         double pickupBounds = Math.sqrt(AgenticTaskPolicy.PICKUP_RADIUS_SQUARED);
         List<ItemEntity> found = npc.level().getEntitiesOfClass(ItemEntity.class,
                 npc.getBoundingBox().inflate(pickupBounds), item ->
@@ -341,6 +346,7 @@ public final class WorldActions {
         one.setCount(1);
         ItemEntity dropped = npc.spawnAtLocation(one);
         if (dropped == null) return "[Action failed: could not drop held item.]";
+        CompanionItemPickup.intentionalDrop(npc, dropped);
         ItemStack remainder = held.copy();
         remainder.shrink(1);
         npc.setItemSlot(EquipmentSlot.MAINHAND, remainder);
@@ -360,6 +366,7 @@ public final class WorldActions {
         one.setCount(1);
         ItemEntity dropped = npc.spawnAtLocation(one);
         if (dropped == null) return "[Action failed: could not drop stored item.]";
+        CompanionItemPickup.intentionalDrop(npc, dropped);
         npc.bag().removeItem(slot, 1);
         return "[Action confirmed: dropped 1 " + item + " from NPC inventory onto ground.]";
     }
@@ -401,7 +408,7 @@ public final class WorldActions {
         npc.setItemSlot(EquipmentSlot.MAINHAND, stack.copy());
         if (!old.isEmpty()) {
             ItemStack leftover = npc.bag().addItem(old);
-            if (!leftover.isEmpty()) npc.spawnAtLocation(leftover);
+            if (!leftover.isEmpty()) CompanionItemPickup.intentionalDrop(npc, npc.spawnAtLocation(leftover));
         }
         return "[Action confirmed: equipped " + item + " from NPC inventory.]";
     }
@@ -411,6 +418,7 @@ public final class WorldActions {
         if (held.isEmpty()) return "[Action failed: NPC holds no item.]";
         ItemEntity dropped = npc.spawnAtLocation(held.copy());
         if (dropped == null) return "[Action failed: could not drop held item.]";
+        CompanionItemPickup.intentionalDrop(npc, dropped);
         npc.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
         return "[Action confirmed: dropped held item nearby.]";
     }

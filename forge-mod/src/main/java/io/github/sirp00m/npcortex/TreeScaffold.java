@@ -29,6 +29,13 @@ public final class TreeScaffold {
     public static int size(CompoundTag task) {
         return task.getList(LIST, Tag.TAG_COMPOUND).size();
     }
+    /** Distinguish a borrowed target-log scaffold from an original committed tree log. */
+    public static boolean ownsPlacedBlock(CompoundTag task,BlockPos pos) {
+        if(pos==null) return false;
+        for(var entry:task.getList(LIST,Tag.TAG_COMPOUND))
+            if(((CompoundTag)entry).getLong("pos")==pos.asLong()) return true;
+        return false;
+    }
 
     public static boolean treeHasLogs(ServerLevel level, CompoundTag task) {
         if (!task.getBoolean("treeLocked")) return false;
@@ -37,19 +44,15 @@ public final class TreeScaffold {
         for (int y = base - 1; y <= base + ScaffoldPolicy.MAX_TREE_HEIGHT; y++) {
             BlockPos pos = new BlockPos(x, y, z);
             if (!level.isLoaded(pos)) return true; // unknown != empty
-            if (level.getBlockState(pos).is(net.minecraft.world.level.block.Blocks.OAK_LOG)) return true;
+            if (task.getString("item").equals(BuiltInRegistries.BLOCK.getKey(
+                    level.getBlockState(pos).getBlock()).toString())) return true;
         }
         return false;
     }
 
-    private static String material(CompanionEntity npc) {
-        for (int slot = 0; slot < npc.bag().getContainerSize(); slot++) {
-            ItemStack s = npc.bag().getItem(slot);
-            if (s.isEmpty() || !(s.getItem() instanceof BlockItem)) continue;
-            String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
-            if (ScaffoldPolicy.validMaterial(id)) return id;
-        }
-        return "";
+    private static String material(CompanionEntity npc, CompoundTag task) {
+        int slot=BuildMaterials.preferredSlot(npc,task);
+        return slot<0 ? "" : BuiltInRegistries.ITEM.getKey(npc.bag().getItem(slot).getItem()).toString();
     }
 
     private static double offset(CompanionEntity npc, int x, int z) {
@@ -61,9 +64,7 @@ public final class TreeScaffold {
     public static String ascend(ServerLevel level, ServerPlayer owner, CompanionEntity npc,
             CompoundTag task, long now) {
         if (!task.getBoolean("treeLocked")) return BLOCKED + "no locked tree";
-        if (size(task) >= ScaffoldPolicy.MAX_HEIGHT)
-            return BLOCKED + "maximum safe pillar height reached";
-        if (material(npc).isBlank())
+        if (material(npc, task).isBlank())
             return BLOCKED + "NPC needs a solid block (dirt/stone/cobble/planks/log) in bag for a temporary pillar";
         if (!task.contains("pillarX")) {
             BlockPos best = null;
@@ -73,7 +74,7 @@ public final class TreeScaffold {
             int[][] sides = {{1,0},{-1,0},{0,1},{0,-1}};
             for (int[] s : sides) for (int dy = -1; dy <= 1; dy++) {
                 BlockPos pos = new BlockPos(x + s[0], baseY + dy, z + s[1]);
-                if (!safeStanding(level, pos)) continue;
+                if (!safeStanding(level, pos, task.getString("item"))) continue;
                 double sq = npc.distanceToSqr(Vec3.atCenterOf(pos));
                 if (sq < nearest) { best = pos; nearest = sq; }
             }
@@ -86,7 +87,8 @@ public final class TreeScaffold {
         int x = task.getInt("pillarX"), z = task.getInt("pillarZ");
         int feetY = task.getInt("pillarY") + size(task);
         BlockPos foot = new BlockPos(x, feetY, z);
-        if (!level.isLoaded(foot) || !level.isLoaded(foot.above(2)))
+        if (level.isOutsideBuildHeight(foot.above(2)) || !level.getWorldBorder().isWithinBounds(foot)
+                || !level.isLoaded(foot) || !level.isLoaded(foot.above(2)))
             return BLOCKED + "pillar chunk not loaded";
         if (offset(npc, x, z) > 0.40D || !npc.onGround()
                 || npc.blockPosition().getY() != feetY) {
@@ -125,30 +127,33 @@ public final class TreeScaffold {
             BlockPos leaf = foot.above(dy);
             if (level.getBlockState(leaf).isAir()) continue;
             BlockState state = level.getBlockState(leaf);
-            if (!state.is(net.minecraft.world.level.block.Blocks.OAK_LEAVES)
+            if (!TreeSpecies.matchingFoliage(task.getString("item"),
+                        BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString())
                     || !state.hasProperty(net.minecraft.world.level.block.LeavesBlock.PERSISTENT)
                     || state.getValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT)
                     || Math.abs(leaf.getX() - task.getInt("treeX")) > 2
                     || Math.abs(leaf.getZ() - task.getInt("treeZ")) > 2
                     || npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(leaf))
                          > InteractionReach.squared(owner.isCreative())) return false;
-            if (!level.destroyBlock(leaf, true, npc)) return false;
+            if (!CompanionMinedDrops.destroy(level, leaf, npc)) return false;
             task.putInt("leavesCleared", task.getInt("leavesCleared") + 1);
             return true;
         }
         return false;
     }
 
-    private static boolean safeStanding(ServerLevel level, BlockPos pos) {
+    private static boolean safeStanding(ServerLevel level, BlockPos pos, String itemId) {
         return level.isLoaded(pos) && level.isLoaded(pos.below())
                 && level.isLoaded(pos.above(2))
                 && level.getBlockState(pos).isAir()
                 && (level.getBlockState(pos.above()).isAir()
-                   || (level.getBlockState(pos.above()).is(net.minecraft.world.level.block.Blocks.OAK_LEAVES)
+                   || (TreeSpecies.matchingFoliage(itemId, BuiltInRegistries.BLOCK.getKey(
+                           level.getBlockState(pos.above()).getBlock()).toString())
                        && !level.getBlockState(pos.above()).getValue(
                               net.minecraft.world.level.block.LeavesBlock.PERSISTENT)))
                 && (level.getBlockState(pos.above(2)).isAir()
-                   || (level.getBlockState(pos.above(2)).is(net.minecraft.world.level.block.Blocks.OAK_LEAVES)
+                   || (TreeSpecies.matchingFoliage(itemId, BuiltInRegistries.BLOCK.getKey(
+                           level.getBlockState(pos.above(2)).getBlock()).toString())
                        && !level.getBlockState(pos.above(2)).getValue(
                               net.minecraft.world.level.block.LeavesBlock.PERSISTENT)))
                 && level.getBlockState(pos.below()).isSolidRender(level, pos.below());
@@ -171,9 +176,10 @@ public final class TreeScaffold {
         if (!ScaffoldPolicy.jumpClearance(npc.getBoundingBox().minY, y, offset(npc, x, z)))
             return WAIT;
         BlockPos pos = new BlockPos(x, y, z);
-        String blockId = material(npc);
+        String blockId = material(npc, task);
         if (blockId.isBlank()) return BLOCKED + "scaffold material ran out";
-        if (!level.isLoaded(pos) || !level.getBlockState(pos).isAir()
+        if (level.isOutsideBuildHeight(pos.above(2)) || !level.getWorldBorder().isWithinBounds(pos)
+                || !level.isLoaded(pos) || !level.getBlockState(pos).isAir()
                 || !level.getBlockState(pos.below()).isSolidRender(level, pos.below()))
             return BLOCKED + "pillar position changed while jumping";
         ItemStack source = ItemStack.EMPTY;
@@ -193,6 +199,7 @@ public final class TreeScaffold {
         CompoundTag record = new CompoundTag();
         record.putLong("pos", pos.asLong());
         record.putString("block", blockId);
+        record.putString("state",state.toString());
         ListTag placed = task.getList(LIST, Tag.TAG_COMPOUND);
         placed.add(record);
         task.put(LIST, placed);
@@ -211,6 +218,8 @@ public final class TreeScaffold {
             return BLOCKED + "scaffold chunk unloaded; no blocks were removed";
         if (!BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).toString().equals(expected))
             return BLOCKED + "scaffold was changed externally; do not remove another player's block";
+        if(top.contains("state") && !top.getString("state").equals(level.getBlockState(pos).toString()))
+            return BLOCKED + "scaffold properties changed externally";
         if (!npc.onGround()) return WAIT; // descent from the previous block is in progress
         if (!ScaffoldPolicy.safeDisassembly(pos.getY(), npc.blockPosition().getY(),
                 offset(npc, pos.getX(), pos.getZ()), npc.onGround(), true,
@@ -226,6 +235,7 @@ public final class TreeScaffold {
         if (!leftover.isEmpty()) Block.popResource(level, pos, leftover);
         placed.remove(placed.size()-1);
         task.put(LIST, placed);
-        return placed.isEmpty() ? DONE : WAIT;
+        task.putLong("cleanupStarted",level.getGameTime());
+        return WAIT; // verify real landing before finishing
     }
 }

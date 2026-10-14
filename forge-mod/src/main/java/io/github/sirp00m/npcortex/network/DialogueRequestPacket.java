@@ -5,6 +5,7 @@ import io.github.sirp00m.npcortex.DirectIntent;
 import io.github.sirp00m.npcortex.ActionPlanRunner;
 import io.github.sirp00m.npcortex.GatherTaskController;
 import io.github.sirp00m.npcortex.AgenticTaskController;
+import io.github.sirp00m.npcortex.TreeSpecies;
 import io.github.sirp00m.npcortex.GatherTaskIntent;
 import io.github.sirp00m.npcortex.BulkTransferIntent;
 import io.github.sirp00m.npcortex.WorldActions;
@@ -73,7 +74,7 @@ public record DialogueRequestPacket(int entityId, String message) {
                 String result = gather == null
                         ? (AgenticTaskController.isBusy(npc) ? AgenticTaskController.cancel(npc)
                                 : GatherTaskController.cancel(npc))
-                        : ("minecraft:oak_log".equals(gather.itemId())
+                        : (TreeSpecies.supportedLog(gather.itemId())
                                 ? AgenticTaskController.start(player, npc, text, gather.itemId(), gather.count())
                                 : GatherTaskController.start(player, npc, gather.itemId(), gather.count()));
                 send(player, packet.entityId, result, result.startsWith("[Task started:")

@@ -1,0 +1,2695 @@
+--- a/.github/workflows/backend-tests.yml
++++ b/.github/workflows/backend-tests.yml
+@@ -1,4 +1,4 @@
+-name: Backend tests
++name: Backend and runtime tests
+ on:
+   push:
+   pull_request:
+@@ -10,5 +10,9 @@
+       - uses: actions/setup-python@v5
+         with:
+           python-version: '3.11'
+-      - name: Run backend unit tests
+-        run: python -m unittest discover -s backend/tests -v
++      - uses: actions/setup-java@v4
++        with:
++          distribution: temurin
++          java-version: '17'
++      - name: Backend, runtime core and Java syntax
++        run: python scripts/test-runtime.py
+--- a/ReadMe.md
++++ b/ReadMe.md
+@@ -1,3 +1,5 @@
++> **Development snapshot: Architecture Stabilization Sprint 1** — Registry v2, lifecycle, failure memory and experimental 3D access. See [Thai notes and validation limits](docs/runtime-sprint1/README_TH.md). Forge build and in-game Fancy Oak acceptance are still pending.
++
+ > **Vanilla Trees Foundation 1 (development patch):** Added Vanilla 1.20.1 overworld wood registry, bounded branched/2x2 tree recognition, and species-matched leaf observations. **Not all trees are harvestable yet:** high branches, huge trees, Nether fungi, and complex navigation still need testing and new access skills. See [release experiment](docs/releases/v0.8.2-alpha-general-trees-foundation1.md).
+ 
+ <div align="center">
+--- a/UPDATE_NOTES.md
++++ b/UPDATE_NOTES.md
+@@ -1,3 +1,7 @@
++# Architecture Stabilization Sprint 1 (development snapshot)
++
++See [implementation notes](docs/runtime-sprint1/README_TH.md) and [Minecraft acceptance checklist](docs/runtime-sprint1/FANCY_OAK_ACCEPTANCE.md). Update backend and mod together. This is not a new published release.
++
+ **Vanilla Trees Foundation 1 (experimental):** See `docs/releases/v0.8.2-alpha-general-trees-foundation1.md`. Adds species/branch/2x2 tree recognition groundwork; does not certify universal tree navigation or Nether fungi.
+ 
+ ## v0.8.2-alpha — Agent Recovery Fix 2 (leaf affordance validation)
+--- a/backend/src/npcortex_backend/brain.py
++++ b/backend/src/npcortex_backend/brain.py
+@@ -43,7 +43,15 @@
+ tool with a different target. The backend converts that choice to the
+ validated Java tool/target contract. Reason is NOT a confirmed achievement. Actual success is determined by the Minecraft server.
+ 
+-TOOLS:
++When skills.version=2 is present, its catalog describes the installed runtime
++skills and its choices are the authoritative available pairs. Do not infer extra
++choices from the legacy notes below. Failure memory records unsuccessful attempts;
++choose a different offered strategy when a repeated option has been suppressed.
++navigate_3d uses a bounded Java path search and reversible temporary blocks;
++choose descend to reverse that route before collecting distant drops. Only server
++verification can establish arrival or cleanup. No success claim from a plan alone.
++
++Legacy tool notes (v1 compatibility):
+ - approach(bN): navigate on the ground ONLY if ground_stand_possible=true;
+   this means a safe visible standing point exists geometrically, NOT that a path is guaranteed.
+   A floating branch with no ground standing point CANNOT be solved by approach.
+@@ -136,6 +144,14 @@
+     This is an affordance filter, NOT an action sequence or Java plan. Qwen
+     still chooses among feasible tools; Forge rechecks every world mutation.
+     """
++    if "skills" in state:
++        refs = {entry["id"]: [] for entry in state["skills"]["catalog"]
++                if entry["target"] in {"block", "drop"}}
++        for choice in state["skills"]["choices"]:
++            tool, sep, ref = choice.partition(":")
++            if sep:
++                refs[tool].append(ref)
++        return refs
+     blocks = state["targets"]
+     drops = state["drops"]
+     tree = state["tree"]
+@@ -163,6 +179,8 @@
+     Rejecting preconditions like 'no scaffold to descend' prevents no-op loops.
+     The Java executor always revalidates tool effects against real game state.
+     """
++    if "skills" in state:
++        return {choice.partition(":")[0] for choice in allowed_brain_choices(state)}
+     # An exhausted budget cannot authorize any further world action.
+     # The schema must agree with Java validation, or Qwen could select an
+     # option that will inevitably be rejected with HTTP 502.
+@@ -221,6 +239,12 @@
+     enums allow `mine:b2` even when `b2` is only eligible for `climb`.
+     This constructs legal *options*, not a fixed behavior/order. Qwen chooses.
+     """
++    if "skills" in state:
++        if (state["paused"] or state["calls"] >= MAX_CALLS
++                or state["failures"] >= MAX_FAILURES or state["stalls"] >= MAX_STALLED
++                or state["same_failures"] >= MAX_SAME_FAILURES):
++            return ["pause"]
++        return list(state["skills"]["choices"])
+     tools = available_tools(state)
+     refs = eligible_tool_refs(state)
+     choices = [f"{tool}:{ref}" for tool in sorted(BLOCK_TOOLS | DROP_TOOLS)
+@@ -257,7 +281,7 @@
+     if not isinstance(obj, dict) or set(obj) != {"choice", "reason"}:
+         raise ValueError("Unexpected brain choice payload")
+     choice, reason = obj["choice"], obj["reason"]
+-    if (not isinstance(choice, str) or len(choice) > 32
++    if (not isinstance(choice, str) or len(choice) > 36
+             or not isinstance(reason, str) or len(reason) > 180):
+         raise ValueError("Malformed brain choice")
+     if choice not in allowed_brain_choices(state):
+@@ -282,7 +306,7 @@
+     expected = {"goal_item", "goal_count", "collected", "mined", "calls", "failures",
+                 "same_failures", "stalls", "last_result", "targets", "drops", "scaffold", "paused",
+                 "equipment", "surroundings", "owner_distance", "tree"}
+-    if set(state) != expected:
++    if set(state) not in (expected, expected | {"skills", "failure_memory"}):
+         raise ValueError("Missing or unexpected brain state field")
+     item = state["goal_item"]
+     if not isinstance(item, str) or not ITEM_RE.fullmatch(item):
+@@ -382,7 +406,52 @@
+     distance = state["owner_distance"]
+     if isinstance(distance, bool) or not isinstance(distance, (int, float)) or not 0 <= distance <= 64:
+         raise ValueError("Invalid owner distance")
++    if "skills" in state:
++        _validate_manifest(state)
+     return result
++
++
++def _validate_manifest(state: dict) -> None:
++    manifest = state["skills"]
++    if (not isinstance(manifest, dict) or set(manifest) != {"version", "catalog", "choices"}
++            or type(manifest["version"]) is not int or manifest["version"] != 2):
++        raise ValueError("Unsupported server skill contract")
++    catalog, choices = manifest["catalog"], manifest["choices"]
++    if not isinstance(catalog, list) or not 1 <= len(catalog) <= 64:
++        raise ValueError("Invalid skill catalog")
++    kinds = {}
++    for entry in catalog:
++        if (not isinstance(entry, dict) or set(entry) != {"id", "target", "description"}
++                or not isinstance(entry["id"], str)
++                or not re.fullmatch(r"[a-z][a-z0-9_]{0,31}", entry["id"])
++                or entry["id"] in kinds or entry["target"] not in ("none", "block", "drop")
++                or not isinstance(entry["description"], str) or len(entry["description"]) > 240):
++            raise ValueError("Invalid skill descriptor")
++        kinds[entry["id"]] = entry["target"]
++    if kinds.get("pause") != "none":
++        raise ValueError("Server must offer safe pause")
++    if (not isinstance(choices, list) or not 1 <= len(choices) <= 256
++            or any(not isinstance(c, str) or len(c) > 36 for c in choices)
++            or len(set(choices)) != len(choices) or "pause" not in choices):
++        raise ValueError("Invalid grounded choices")
++    targets = {b["ref"] for b in state["targets"]}
++    drops = {d["ref"] for d in state["drops"]}
++    for choice in choices:
++        tool, sep, ref = choice.partition(":")
++        kind = kinds.get(tool)
++        if (kind is None or (kind == "none" and sep)
++                or (kind == "block" and (not sep or ref not in targets))
++                or (kind == "drop" and (not sep or ref not in drops))):
++            raise ValueError("Ungrounded server choice")
++    failures = state["failure_memory"]
++    if not isinstance(failures, list) or len(failures) > 8:
++        raise ValueError("Invalid failure history")
++    for entry in failures:
++        if (not isinstance(entry, dict) or set(entry) != {"attempt", "reason", "count"}
++                or not isinstance(entry["reason"], str) or len(entry["reason"]) > 180):
++            raise ValueError("Invalid failure evidence")
++        _integer(entry["attempt"], 0, 31)
++        _integer(entry["count"], 1, 2)
+ 
+ 
+ def validate_decision(raw: str | dict, state: dict) -> dict:
+@@ -393,6 +462,14 @@
+     if not isinstance(obj, dict) or set(obj) != {"tool", "target", "reason"}:
+         raise ValueError("Unexpected tool payload")
+     tool, target, reason = obj["tool"], obj["target"], obj["reason"]
++    if "skills" in state:
++        if (not isinstance(tool, str) or not isinstance(target, str) or len(target) > 3
++                or not isinstance(reason, str) or len(reason) > 180):
++            raise ValueError("Malformed registry decision")
++        choice = tool + (":" + target if target else "")
++        if choice not in allowed_brain_choices(state):
++            raise ValueError("Skill/target pair not offered by server registry")
++        return {"tool": tool, "target": target, "reason": reason}
+     if (not isinstance(tool, str) or tool not in TOOLS
+             or not isinstance(target, str) or len(target) > 3
+             or not isinstance(reason, str) or len(reason) > 180):
+--- /dev/null
++++ b/backend/tests/test_runtime_registry_v2.py
+@@ -0,0 +1,81 @@
++"""Registry v2 transport tests: options come from Forge, not a second Python planner."""
++import copy
++import unittest
++from unittest.mock import Mock
++from test_agentic_brain_v085 import state, ROOT
++from npcortex_backend.brain import validate_state, validate_brain_choice, allowed_brain_choices, eligible_tool_refs
++from npcortex_backend.service import ChatService
++from npcortex_backend.session import SessionStore
++
++
++def registered():
++    s=state()
++    s['skills']={'version':2,'catalog':[
++        {'id':'pause','target':'none','description':'Preserve goal'},
++        {'id':'navigate_3d','target':'block','description':'Walk, pillar and bridge to an observed block'},
++        {'id':'mine','target':'block','description':'Mine observed block'},
++        {'id':'approach_drop','target':'drop','description':'Approach a real entity'},
++    ],'choices':['pause','navigate_3d:b1','mine:b0','approach_drop:d0']}
++    s['failure_memory']=[{'attempt':0,'reason':'No path from previous pose','count':2}]
++    return s
++
++
++class RegistryV2Tests(unittest.TestCase):
++    def test_nav_is_transported_without_python_skill_definition(self):
++        s=validate_state(registered())
++        self.assertEqual(validate_brain_choice({'choice':'navigate_3d:b1','reason':'high branch'},s),
++                         {'tool':'navigate_3d','target':'b1','reason':'high branch'})
++        self.assertEqual(eligible_tool_refs(s)['navigate_3d'],['b1'])
++
++    def test_new_registered_skill_needs_no_python_planner_change(self):
++        s=registered(); s['skills']['catalog'].append({'id':'inspect','target':'block','description':'Read block state'})
++        s['skills']['choices'].append('inspect:b0')
++        self.assertEqual(validate_brain_choice({'choice':'inspect:b0','reason':'observe'},validate_state(s))['tool'],'inspect')
++
++    def test_only_exact_server_pairs_can_execute(self):
++        s=validate_state(registered())
++        for choice in ('mine:b1','navigate_3d:b0','approach_drop:b0','navigate_3d:b9','/give','pause:b0'):
++            with self.subTest(choice=choice), self.assertRaises(ValueError):
++                validate_brain_choice({'choice':choice,'reason':'x'},s)
++
++    def test_server_suppressed_failure_is_not_readded_by_python(self):
++        s=registered(); s['skills']['choices'].remove('mine:b0')
++        self.assertNotIn('mine:b0',allowed_brain_choices(validate_state(s)))
++
++    def test_exhaustion_and_pause_override_old_offers(self):
++        for field,value in [('calls',80),('failures',8),('stalls',5),('same_failures',3),('paused',True)]:
++            s=registered(); s[field]=value
++            self.assertEqual(allowed_brain_choices(validate_state(s)),['pause'])
++
++    def test_malformed_manifest_fails_closed(self):
++        cases=[]
++        for choice in ['missing:b0','mine:d0','mine:b9','pause:','navigate_3d']:
++            s=registered(); s['skills']['choices'].append(choice); cases.append(s)
++        s=registered(); s['skills']['choices'].remove('pause'); cases.append(s)
++        s=registered(); s['skills']['catalog'].append(copy.deepcopy(s['skills']['catalog'][0])); cases.append(s)
++        s=registered(); s['skills']['version']=True; cases.append(s)
++        s=registered(); s['skills']['choices'].append('mine:b0'); cases.append(s)
++        s=registered(); s['skills']['catalog'][0]['execute']='arbitrary code'; cases.append(s)
++        s=registered(); s.pop('failure_memory'); cases.append(s)
++        for s in cases:
++            with self.subTest(s=s), self.assertRaises(ValueError): validate_state(s)
++
++    def test_bounded_failure_history(self):
++        s=registered(); s['failure_memory']*=9
++        with self.assertRaises(ValueError): validate_state(s)
++        s=registered(); s['failure_memory'][0]['reason']='x'*181
++        with self.assertRaises(ValueError): validate_state(s)
++
++    def test_end_to_end_service_prompt_and_schema_use_registry(self):
++        provider=Mock(spec=['chat_structured'])
++        provider.chat_structured.return_value='{"choice":"navigate_3d:b1","reason":"verified route"}'
++        service=ChatService(ROOT/'character-packs','qwen3:8b',provider,SessionStore())
++        reply=service.brain_step('yui','owner','Finish tree','npc',registered())
++        self.assertEqual(reply['tool'],'navigate_3d')
++        messages,schema=provider.chat_structured.call_args.args
++        self.assertEqual(schema['properties']['choice']['enum'],registered()['skills']['choices'])
++        self.assertIn('failure_memory',messages[-1]['content'])
++        self.assertEqual(provider.chat_structured.call_count,1)
++
++    def test_legacy_transport_still_works(self):
++        self.assertEqual(validate_brain_choice({'choice':'mine:b0','reason':'old mod'},validate_state(state()))['tool'],'mine')
+--- a/backend/tests/test_tree_recovery_v082.py
++++ b/backend/tests/test_tree_recovery_v082.py
+@@ -39,7 +39,7 @@
+         self.assertIn("approach", tools)
+ 
+     def test_java_climb_anchors_to_committed_root_not_branch(self):
+-        c = (JAVA/"AgenticTaskController.java").read_text()
++        c = (JAVA/"AgenticTaskController.java").read_text() + (JAVA/"HarvestGoalSkills.java").read_text()
+         tracker = (JAVA/"WholeTreeTracker.java").read_text()
+         self.assertIn("WholeTreeTracker.verifiedRoot(owner.serverLevel(), proposedTree)", c)
+         self.assertIn('t.putInt("treeX", t.getInt("wholeTreeRootX"))', c)
+--- a/backend/tests/test_tree_species_v082.py
++++ b/backend/tests/test_tree_species_v082.py
+@@ -38,7 +38,7 @@
+         self.assertNotIn("Blocks.OAK_LOG", source)
+ 
+     def test_only_registered_species_can_start_ai_task(self):
+-        source = (JAVA / "AgenticTaskController.java").read_text()
++        source = (JAVA / "AgenticTaskController.java").read_text() + (JAVA / "HarvestGoalSkills.java").read_text()
+         self.assertIn("TreeSpecies.supportedLog(item)", source)
+         self.assertIn("WholeTreeTracker.commit(t, proposedTree)", source)
+         self.assertIn("WholeTreeTracker.pending(owner.serverLevel(), t)", source)
+--- a/backend/tests/test_whole_tree_v082.py
++++ b/backend/tests/test_whole_tree_v082.py
+@@ -92,7 +92,7 @@
+ 
+     def test_no_implied_claim_of_world_test(self):
+         self.assertIn('natural', BRAIN_POLICY)
+-        controller = (JAVA / 'AgenticTaskController.java').read_text()
++        controller = (JAVA / 'AgenticTaskController.java').read_text() + (JAVA / 'HarvestGoalSkills.java').read_text()
+         self.assertIn('WholeTreeTracker.commit(t, proposedTree)', controller)
+         self.assertIn('WholeTreeTracker.releaseCompleted(t)', controller)
+         self.assertIn('WorldActions.pickupForGather(owner, npc', controller)
+--- /dev/null
++++ b/docs/runtime-sprint1/FANCY_OAK_ACCEPTANCE.md
+@@ -0,0 +1,39 @@
++# Fancy Oak acceptance — NOT RUN
++
++ใช้ต้นเดิมของผู้เล่นในสำเนา world save เป็นกรณี A ก่อน แล้วจึงเพิ่มต้นใหม่
++สถานะทุกแถวเริ่มเป็น **NOT RUN**; ห้ามนับ simulation เป็นผลเกมจริง
++
++## เงื่อนไขร่วม
++
++- Forge 1.20.1 และ mod/backend snapshot เดียวกัน; บันทึก Forge version, Java version, Qwen model tag และ world seed
++- เก็บ world backup เพื่อ reset ต้น/พื้นที่/กระเป๋าเท่ากันทุกครั้ง
++- เจ้าของอยู่ในระยะอนุญาต เปิด cheats + world-edit opt-in ตามข้อจำกัด alpha เดิม
++- NPC bag มีวัสดุชั่วคราวที่ไม่ใช่ oak_log 32 ก้อน, พื้นที่ว่างเก็บไม้ และเครื่องมือ
++- นับไม้ในต้นก่อนเริ่ม เก็บภาพพื้นที่ และจด inventory เริ่มต้น
++- สั่ง gather oak_log 6; ต้องตัด **ต้นที่ commit ทั้งต้น** แม้เกิน 6
++- บันทึก `/npcortex task status`, `/npcortex task trace` และ `logs/latest.log`
++
++| กรณี | วิธีทดสอบ | เกณฑ์ผ่าน | ผล |
++|---|---|---|---|
++| A: Fancy Oak ต้นเดิม | สั่งเก็บไม้โดยไม่ช่วยเดิน/วางบล็อกให้ | log ใน committed tree เหลือ 0, bag เพิ่มตาม mined, temporary blocks/terrain edits 0 และ SUCCEEDED | NOT RUN |
++| B: กิ่งด้านข้าง | ต้นที่ต้องเปลี่ยนจุดยืนหรือสร้างทางข้าง | เห็น navigate_3d execute/verify และรื้อทางได้จริง; ไม่ mine เกิน reach | NOT RUN |
++| C: ต้นเล็ก | ทำงานเดิมกับ oak/birch/spruce ขนาดเล็ก | ยังเก็บครบโดยไม่สร้างโครงสร้างเกินจำเป็น | NOT RUN |
++| D: Cancel ระหว่าง jump | cancel ก่อน/หลังวาง pillar | ไม่มี Qwen เก่าสั่งต่อ; รอร่อน/cleanup ปลอดภัย; เก็บของเดิมไว้ | NOT RUN |
++| E: Cancel บน bridge | cancel หลังวางทาง 2–3 ก้อน | เดินย้อนก่อนรื้อ ไม่มีการรื้อพื้นใต้คนอื่น | NOT RUN |
++| F: ทำลายเสาระหว่างทำงาน | ผู้เล่นขุด support ที่ NPC ใช้ | ตรวจพบสภาพเปลี่ยน หยุดหรือ pause อย่างตรงไปตรงมา ไม่วางกลางอากาศ/teleport | NOT RUN |
++| G: เปลี่ยนบล็อกที่บันทึก | เปลี่ยน temporary block เป็นชนิดอื่นก่อน cleanup | ไม่ลบบล็อกใหม่; pause และรักษา ledger | NOT RUN |
++| H: วัสดุหมด | เริ่มด้วยวัสดุเพียง 1–2 ก้อน | ไม่มีการสร้างของฟรี ไม่ใช้ไม้เป้าหมายชดเชย และไม่วนวิธีเดิมไม่จำกัด | NOT RUN |
++| I: Inventory เต็ม | เติมของให้กระเป๋าใกล้เต็ม | ไม่กล่าวว่าครบถ้าของยังไม่อยู่ใน bag; วัสดุรื้อคืนไม่หาย (อาจตกพื้น) | NOT RUN |
++| J: Reload / เจ้าของออก | save & quit ระหว่าง thinking, access และ cleanup | ไม่รับคำตอบเก่าข้ามงาน; งาน/ledger ยังอยู่และ resume อย่างปลอดภัย | NOT RUN |
++| K: Qwen หยุดตอบ | ปิด backend ระหว่างรอ | pause ไม่ใช้ fallback ที่ทำลายโลกเอง | NOT RUN |
++| L: คำสั่งแทรก | give/drop/follow/stay ขณะ task และ cleanup กำลังทำ | ไม่ทำให้ inventory ledger หรือ movement เสีย ownership | NOT RUN |
++| M: เปลี่ยน dimension | ย้าย NPC ไปโลกอื่นระหว่างงาน แล้วกลับ | ไม่แก้พิกัดเดิมในโลกใหม่; เก็บงานไว้จนกลับโลกเดิม | NOT RUN |
++| N: ความล้มเหลวสลับวิธี | ให้ approach เป้าหมายเดิมล้มเหลวสองครั้งโดยคั่น skill อื่น | ตัวเลือกเดิมถูก suppress เมื่อหลักฐานไม่เปลี่ยน และกลับมาได้เมื่อ geometry/material เปลี่ยน | NOT RUN |
++
++บันทึกต่อ run: run_id, seed, target description, expected_logs, mined, bag_delta,
++remaining_logs, temporary_blocks_remaining, material_delta, elapsed_ticks,
++brain_calls, failures, stalls, interventions, final_state และเหตุผลที่ไม่ผ่าน
++
++Gate เริ่มต้น: A–E และกรณีป้องกันความเสียหายทั้งหมดต้องมีผลจริงก่อนอนุมัติใช้โลกหลัก
++หลังผ่านต้นเดิม ให้ทำซ้ำหลายต้น/หลาย seed แล้วรายงานจำนวนผ่าน/จำนวนทั้งหมดจริง
++ยังไม่มีการรับรอง 95% และยังไม่ใช่ benchmark เทียบมนุษย์ภายใต้ Survival ที่เหมือนกันทุกข้อ
+--- /dev/null
++++ b/docs/runtime-sprint1/README_TH.md
+@@ -0,0 +1,103 @@
++# NPCortex — Architecture Stabilization Sprint 1
++
++ฐาน: ZIP `v0.8.2-alpha_AtomicBrainChoiceFix1_FullRepository(1)` ที่แนบมา
++สถานะ: **development snapshot / experimental — ยังไม่รับรอง Forge build หรือผ่านเกมจริง**
++ไม่ใช่การประกาศ Release ใหม่บน GitHub และไม่ใช่ Autonomous Companion ที่เสร็จสมบูรณ์
++
++## สิ่งที่เปลี่ยนจริง
++
++| ส่วน | การเปลี่ยนแปลง |
++|---|---|
++| Skill Registry | `agent/SkillRegistry.java` กำหนด Precondition, Execute, Verify, Recovery และชนิดเป้าหมาย; ปิดการแก้ Registry หลังเริ่ม runtime |
++| Server registry | `BrainSkillRegistry` มี 13 skills และสร้างรายการคู่ `skill:ref` ที่เสนอได้จากข้อมูลจริง |
++| Task adapter | แยก executor ของแต่ละ skill ไป `HarvestGoalSkills`; controller ไม่ dispatch ด้วย if/else รายชื่อ tool อีก |
++| Backend | Contract v2 รับ catalog/choices จาก Java; เพิ่ม skill ฝั่งเซิร์ฟเวอร์ได้โดยไม่เพิ่มรายชื่อ tool หรือเงื่อนไขใน Python; v1 ยังรองรับ mod เก่า |
++| Lifecycle | `AgentRuntime` และ `GoalState` แยก READY → THINKING → EXECUTING → VERIFYING ออกจาก phase ทางกายภาพ พร้อม CLEANING / PAUSED / SUCCEEDED / CANCELLED |
++| Event bus | Typed events, history 128 events ในหน่วยความจำ; เก็บ journal 32 entries ต่อ task ใน NBT และเก็บงานล่าสุดหลังจบ |
++| Ownership | จุดรับงาน gather/agentic/bulk transfer ใช้การตรวจ busy ร่วมกัน; follow/stay จะไม่แทรกระหว่าง legacy cleanup |
++| Recovery | จำความล้มเหลวด้วย skill + block position / item UUID ไม่ใช่ b0/d0; เก็บได้ 32 ข้อ; ซ้ำสองครั้งในเงื่อนไขเดิมจะตัดตัวเลือกนั้นออก |
++| 3D access | `Navigation3D` เป็น bounded weighted A* ที่ไม่รู้จักต้นไม้; รองรับ WALK, PILLAR, BRIDGE และคิดพื้นที่ยืน/หัว/พื้นรองรับ |
++| Execution | `Navigation3DAccess` ใช้การเดินและกระโดดจริง วางบล็อกจากกระเป๋า ตรวจโลกซ้ำทุก primitive และเก็บเส้นทางย้อนกลับ |
++| Cleanup | รื้อเส้นทาง 3D ย้อนลำดับก่อนรื้อเสาเดิม; โลกเปลี่ยน/พื้นหาย/มีคนยืนบนบล็อกจะหยุดพร้อมคง ledger |
++| Diagnostics | `/npcortex task trace [npc]` อ่าน 10 events ล่าสุด; status แสดง lifecycle และจำนวน access blocks |
++
++นี่เป็นการย้ายผ่าน adapter: `ActionPlanRunner` และ `GatherTaskController` ยังมี execution loop เดิมสำหรับความเข้ากันได้ ยังไม่ได้รวมทั้งหมดเป็น scheduler ตัวเดียว และ general goal ที่รับจากผู้เล่นใน sprint นี้ยังเป็น `harvest_logs` ระบบนำทางและ Registry ถูกแยกให้ใช้กับ goal อื่นได้ใน sprint ถัดไป ไม่ควรเรียกว่า General Minecraft Agent ที่ครบแล้ว
++
++## สิ่งที่แก้ระหว่างตรวจความเสถียร
++
++- `ChatBridge` เดิมมีรายการ tool ซ้ำและไม่มี `clear_soft`/`restore` แม้ส่วนอื่นเสนอได้: เปลี่ยนให้ตรวจจาก Registry เดียวกัน
++- Bulk transfer เดิมไม่ตรวจ Agentic task: ปิดช่องทางเปลี่ยน inventory ระหว่าง task กำลังนับผล
++- ไม่อนุญาตให้ approach ปกติเดินหนีจากเสาที่ยังต้องรื้อ
++- หยุด navigation เมื่อถึงจุดหมายแล้ว ป้องกันเดินต่อหลังยืนยันผล
++- เงื่อนไข cleanup รวมโครงสร้าง 3D และ terrain edits; cleanup มีเวลาสิ้นสุด 2,400 ticks แล้ว pause ถ้าไม่สำเร็จ
++- งานยกเลิกต้อง cleanup ก่อน; resume สามารถกลับเข้า cleanup แม้งบ Qwen หมดแล้ว
++- ผล HTTP เก่ายังตรวจ task UUID, request nonce, generation และ state; เพิ่ม dimension guard
++- เจ้าของหายไปจะ pause; เมื่อกลับมาใช้ resume โดยไม่ลบความคืบหน้า
++- เสาและทางเดินใหม่ไม่ใช้ log ชนิดที่กำลังเก็บเป็นวัสดุ เพื่อไม่ทำให้ตัวนับไม้เข้า/ออกกระเป๋าคลาดเคลื่อน
++- เป้าหมายใน chunk ที่ไม่โหลดจะไม่ถูกเสนอให้ Qwen แต่ยังไม่นับว่าต้นไม้เสร็จ
++
++## ขอบเขตของ Navigation3D
++
++- ไม่ teleport / fly / force-load chunk และ Qwen ส่งพิกัดเองไม่ได้
++- ใช้ air เป็นช่องว่างของ body; ไม่ว่ายน้ำ ไม่ปีน ladder และไม่ขุด tunnel อัตโนมัติ
++- เส้นทางใหม่มีได้ไม่เกิน 12 temporary blocks, 48 steps, 1,600 expanded nodes; จำกัด queue ด้วย
++- สร้าง candidate plans ได้ไม่เกิน 2 เป้าหมายต่อ observation; คำนวณใหม่เมื่อลงมือ
++- เสา `climb` เดิมยังมีเพดาน 6 ระดับ; แยกจากงบโครงสร้างของ `navigate_3d`
++- กิ่งที่มีใบปิดทางทั้งหมดอาจยังต้องใช้ `clear_leaf`/`climb` หรือ pause; ไม่รับประกันหาเส้นทางได้ทุก Fancy Oak
++- ความล้มเหลวจำจาก pose, บล็อกใกล้เป้าหมาย/ใกล้ตัว, วัสดุ และ ledger ที่สังเกต; ไม่ใช่แผนที่โลกถาวร
++- จำกัดคำขอเดิม 1–16 logs, 80 Brain calls, 8 failures, 5 stalls และ 96 logs/tree ยังคงอยู่
++- กติกา world edit เดิมยังต้อง singleplayer + cheats + opt-in; ระยะเข้าถึงขึ้นกับโหมดของเจ้าของ ยังไม่ใช่ executor ที่เทียบเท่า Survival ทุกด้าน (เช่นเวลา mining/tool durability)
++- Ledger ตรวจตำแหน่งและชนิดบล็อก; หากผู้เล่นทำลายแล้ววางบล็อกชนิดเดียวกันกลับตำแหน่งเดิม ระบบยังพิสูจน์เจ้าของใหม่ไม่ได้
++
++## วิธีตรวจและเปิดใช้งาน
++
++อัปเดต **backend และ Forge mod พร้อมกัน** จาก snapshot นี้; backend รุ่นเก่าจะไม่เข้าใจ contract v2
++แนะนำใช้สำเนาโลกทดสอบสำหรับ acceptance และ backup งานเดิมก่อนอัปเดต ไม่ลบฐานข้อมูล memory / character packs / config เดิม
++
++จาก root ของ repository:
++
++```powershell
++python scripts/test-runtime.py
++.\scripts\setup-forge-wrapper.ps1
++cd forge-mod
++.\gradlew.bat build --no-daemon
++```
++
++นำ JAR ที่ build สำเร็จจาก `forge-mod/build/libs` ไปใช้กับ Forge 1.20.1 ตามการติดตั้งเดิม (อย่าใส่ JAR รุ่นเก่าซ้ำ)
++เริ่ม backend ตาม README เดิม และ restart Minecraft หลังเปลี่ยน JAR
++
++ให้ NPC ถือเครื่องมือและมี dirt/cobblestone สำหรับสร้างทางใน **NPC bag** เช่น 32 ก้อน ไม่ใช่เฉพาะกระเป๋าผู้เล่น
++เปิด world edits ด้วยวิธีเดิมก่อนทดสอบ
++
++```text
++/npcortex task gather minecraft:oak_log 6
++/npcortex task status
++/npcortex task trace
++/npcortex task cancel
++/npcortex task resume
++```
++
++`goal_count` คือขั้นต่ำของไม้ที่เพิ่มในกระเป๋า ยังต้องตัดต้นที่ commit แล้วจนหมด เก็บไม้ที่ขุด และ cleanup ให้ครบก่อน finish
++Trace ใช้แยกว่า Qwen เลือกอะไร executor ทำจริงหรือไม่ และติดขัดตรงไหน
++หากเสาหรือทางเดินถูกขุดจน cleanup ไม่ปลอดภัย งานจะ pause พร้อม ledger; ซ่อมทางที่จำเป็นก่อน resume ห้ามลบ ledger เพื่อหลอกว่ารื้อเสร็จ
++
++## ผลตรวจในสภาพแวดล้อมที่จัดทำ
++
++| Gate | ผล |
++|---|---|
++| Backend regression + Registry v2 | 191 tests ผ่าน (รวมเดิม 182 + ใหม่ 9) |
++| Java 17 core compile/run | 193 assertions ผ่าน: registry, lifecycle, events, failure history, เส้นทางและ inverse route ใน voxel simulation |
++| Parse Java source ทั้งหมด | 65 files, syntax errors 0 |
++| Forge compile/type-check/build | **ยังไม่ผ่านการรับรอง**: Gradle distribution download ผ่าน JVM ติด `Network is unreachable`; ไม่มี Forge dependency build สำเร็จ |
++| Qwen/Ollama จริง | **ยังไม่ได้ทดสอบ**; API tests ใช้ mock provider |
++| Fancy Oak ใน Minecraft จริง | **ยังไม่ได้ทดสอบ**; ไม่มี world save / game instance ของต้นเดิมใน environment นี้ |
++
++Syntax/core tests ไม่ใช่หลักฐานว่า Forge APIs ถูกต้องทุกจุดหรือ Minecraft physics ทำงานตามคาด ยังต้องผ่าน build และ acceptance ในไฟล์ `FANCY_OAK_ACCEPTANCE.md` ก่อนเรียก snapshot นี้ว่าเสถียรในเกม
++
++## งานต่อจาก sprint นี้
++
++1. ให้ Forge build ผ่านและเก็บผลจากต้น Fancy Oak เดิมพร้อม trace; แก้ executor จากหลักฐานที่ได้
++2. ย้าย ActionPlan และ legacy Gather เข้า scheduler/lifecycle/skill catalog เดียวกันจนหมด พร้อม migration ของงานเก่า
++3. แยก Goal interface จาก harvest ledger และเพิ่ม non-tree goal ที่มี verifier ชัดเจน
++4. เพิ่มการสังเกตพื้นที่/วางแผนแบบ incremental ต่อ tick ถ้า profiling แสดงว่า 3D search กระทบ server tick
++5. เพิ่ม survival-consistent mining/crafting และ benchmark หลาย seed ก่อนขยายบุคลิก/ชีวิตประจำวัน
+--- /dev/null
++++ b/docs/runtime-sprint1/VALIDATION.txt
+@@ -0,0 +1,9 @@
++Architecture Stabilization Sprint 1 — validation
++Baseline: user-supplied AtomicBrainChoiceFix1 FullRepository ZIP
++Backend: 191 tests PASSED (mock Ollama; legacy + Registry v2)
++Java 17 core: 193 assertions PASSED (registry/lifecycle/events/failure history/voxel navigation)
++Java source parse: 65 files, 0 syntax errors
++Forge compile/build: NOT VERIFIED — JVM Gradle distribution download blocked: Network is unreachable
++Minecraft physics / original Fancy Oak / real Qwen: NOT RUN
++No compiled mod JAR is included. Gradle wrapper JAR is the verified official MDK wrapper only.
++See docs/runtime-sprint1/README_TH.md and FANCY_OAK_ACCEPTANCE.md.
+--- /dev/null
++++ b/forge-mod/gradle/wrapper/gradle-wrapper.properties
+@@ -0,0 +1,6 @@
++distributionBase=GRADLE_USER_HOME
++distributionPath=wrapper/dists
++distributionUrl=https\://services.gradle.org/distributions/gradle-8.8-bin.zip
++networkTimeout=10000
++zipStoreBase=GRADLE_USER_HOME
++zipStorePath=wrapper/dists
+--- /dev/null
++++ b/forge-mod/gradlew
+@@ -0,0 +1,245 @@
++#!/bin/sh
++
++#
++# Copyright © 2015-2021 the original authors.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++##############################################################################
++#
++#   Gradle start up script for POSIX generated by Gradle.
++#
++#   Important for running:
++#
++#   (1) You need a POSIX-compliant shell to run this script. If your /bin/sh is
++#       noncompliant, but you have some other compliant shell such as ksh or
++#       bash, then to run this script, type that shell name before the whole
++#       command line, like:
++#
++#           ksh Gradle
++#
++#       Busybox and similar reduced shells will NOT work, because this script
++#       requires all of these POSIX shell features:
++#         * functions;
++#         * expansions «$var», «${var}», «${var:-default}», «${var+SET}»,
++#           «${var#prefix}», «${var%suffix}», and «$( cmd )»;
++#         * compound commands having a testable exit status, especially «case»;
++#         * various built-in commands including «command», «set», and «ulimit».
++#
++#   Important for patching:
++#
++#   (2) This script targets any POSIX shell, so it avoids extensions provided
++#       by Bash, Ksh, etc; in particular arrays are avoided.
++#
++#       The "traditional" practice of packing multiple parameters into a
++#       space-separated string is a well documented source of bugs and security
++#       problems, so this is (mostly) avoided, by progressively accumulating
++#       options in "$@", and eventually passing that to Java.
++#
++#       Where the inherited environment variables (DEFAULT_JVM_OPTS, JAVA_OPTS,
++#       and GRADLE_OPTS) rely on word-splitting, this is performed explicitly;
++#       see the in-line comments for details.
++#
++#       There are tweaks for specific operating systems such as AIX, CygWin,
++#       Darwin, MinGW, and NonStop.
++#
++#   (3) This script is generated from the Groovy template
++#       https://github.com/gradle/gradle/blob/HEAD/subprojects/plugins/src/main/resources/org/gradle/api/internal/plugins/unixStartScript.txt
++#       within the Gradle project.
++#
++#       You can find Gradle at https://github.com/gradle/gradle/.
++#
++##############################################################################
++
++# Attempt to set APP_HOME
++
++# Resolve links: $0 may be a link
++app_path=$0
++
++# Need this for daisy-chained symlinks.
++while
++    APP_HOME=${app_path%"${app_path##*/}"}  # leaves a trailing /; empty if no leading path
++    [ -h "$app_path" ]
++do
++    ls=$( ls -ld "$app_path" )
++    link=${ls#*' -> '}
++    case $link in             #(
++      /*)   app_path=$link ;; #(
++      *)    app_path=$APP_HOME$link ;;
++    esac
++done
++
++# This is normally unused
++# shellcheck disable=SC2034
++APP_BASE_NAME=${0##*/}
++APP_HOME=$( cd "${APP_HOME:-./}" && pwd -P ) || exit
++
++# Use the maximum available, or set MAX_FD != -1 to use that value.
++MAX_FD=maximum
++
++warn () {
++    echo "$*"
++} >&2
++
++die () {
++    echo
++    echo "$*"
++    echo
++    exit 1
++} >&2
++
++# OS specific support (must be 'true' or 'false').
++cygwin=false
++msys=false
++darwin=false
++nonstop=false
++case "$( uname )" in                #(
++  CYGWIN* )         cygwin=true  ;; #(
++  Darwin* )         darwin=true  ;; #(
++  MSYS* | MINGW* )  msys=true    ;; #(
++  NONSTOP* )        nonstop=true ;;
++esac
++
++CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
++
++
++# Determine the Java command to use to start the JVM.
++if [ -n "$JAVA_HOME" ] ; then
++    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
++        # IBM's JDK on AIX uses strange locations for the executables
++        JAVACMD=$JAVA_HOME/jre/sh/java
++    else
++        JAVACMD=$JAVA_HOME/bin/java
++    fi
++    if [ ! -x "$JAVACMD" ] ; then
++        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
++
++Please set the JAVA_HOME variable in your environment to match the
++location of your Java installation."
++    fi
++else
++    JAVACMD=java
++    which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
++
++Please set the JAVA_HOME variable in your environment to match the
++location of your Java installation."
++fi
++
++# Increase the maximum file descriptors if we can.
++if ! "$cygwin" && ! "$darwin" && ! "$nonstop" ; then
++    case $MAX_FD in #(
++      max*)
++        # In POSIX sh, ulimit -H is undefined. That's why the result is checked to see if it worked.
++        # shellcheck disable=SC3045
++        MAX_FD=$( ulimit -H -n ) ||
++            warn "Could not query maximum file descriptor limit"
++    esac
++    case $MAX_FD in  #(
++      '' | soft) :;; #(
++      *)
++        # In POSIX sh, ulimit -n is undefined. That's why the result is checked to see if it worked.
++        # shellcheck disable=SC3045
++        ulimit -n "$MAX_FD" ||
++            warn "Could not set maximum file descriptor limit to $MAX_FD"
++    esac
++fi
++
++# Collect all arguments for the java command, stacking in reverse order:
++#   * args from the command line
++#   * the main class name
++#   * -classpath
++#   * -D...appname settings
++#   * --module-path (only if needed)
++#   * DEFAULT_JVM_OPTS, JAVA_OPTS, and GRADLE_OPTS environment variables.
++
++# For Cygwin or MSYS, switch paths to Windows format before running java
++if "$cygwin" || "$msys" ; then
++    APP_HOME=$( cygpath --path --mixed "$APP_HOME" )
++    CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )
++
++    JAVACMD=$( cygpath --unix "$JAVACMD" )
++
++    # Now convert the arguments - kludge to limit ourselves to /bin/sh
++    for arg do
++        if
++            case $arg in                                #(
++              -*)   false ;;                            # don't mess with options #(
++              /?*)  t=${arg#/} t=/${t%%/*}              # looks like a POSIX filepath
++                    [ -e "$t" ] ;;                      #(
++              *)    false ;;
++            esac
++        then
++            arg=$( cygpath --path --ignore --mixed "$arg" )
++        fi
++        # Roll the args list around exactly as many times as the number of
++        # args, so each arg winds up back in the position where it started, but
++        # possibly modified.
++        #
++        # NB: a `for` loop captures its iteration list before it begins, so
++        # changing the positional parameters here affects neither the number of
++        # iterations, nor the values presented in `arg`.
++        shift                   # remove old arg
++        set -- "$@" "$arg"      # push replacement arg
++    done
++fi
++
++
++# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
++DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
++
++# Collect all arguments for the java command;
++#   * $DEFAULT_JVM_OPTS, $JAVA_OPTS, and $GRADLE_OPTS can contain fragments of
++#     shell script including quotes and variable substitutions, so put them in
++#     double quotes to make sure that they get re-expanded; and
++#   * put everything else in single quotes, so that it's not re-expanded.
++
++set -- \
++        "-Dorg.gradle.appname=$APP_BASE_NAME" \
++        -classpath "$CLASSPATH" \
++        org.gradle.wrapper.GradleWrapperMain \
++        "$@"
++
++# Stop when "xargs" is not available.
++if ! command -v xargs >/dev/null 2>&1
++then
++    die "xargs is not available"
++fi
++
++# Use "xargs" to parse quoted args.
++#
++# With -n1 it outputs one arg per line, with the quotes and backslashes removed.
++#
++# In Bash we could simply go:
++#
++#   readarray ARGS < <( xargs -n1 <<<"$var" ) &&
++#   set -- "${ARGS[@]}" "$@"
++#
++# but POSIX shell has neither arrays nor command substitution, so instead we
++# post-process each arg (as a line of input to sed) to backslash-escape any
++# character that might be a shell metacharacter, then use eval to reverse
++# that process (while maintaining the separation between arguments), and wrap
++# the whole thing up as a single "set" statement.
++#
++# This will of course break if any of these variables contains a newline or
++# an unmatched quote.
++#
++
++eval "set -- $(
++        printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
++        xargs -n1 |
++        sed ' s~[^-[:alnum:]+,./:=@_]~\\&~g; ' |
++        tr '\n' ' '
++    )" '"$@"'
++
++exec "$JAVACMD" "$@"
+--- /dev/null
++++ b/forge-mod/gradlew.bat
+@@ -0,0 +1,92 @@
++@rem
++@rem Copyright 2015 the original author or authors.
++@rem
++@rem Licensed under the Apache License, Version 2.0 (the "License");
++@rem you may not use this file except in compliance with the License.
++@rem You may obtain a copy of the License at
++@rem
++@rem      https://www.apache.org/licenses/LICENSE-2.0
++@rem
++@rem Unless required by applicable law or agreed to in writing, software
++@rem distributed under the License is distributed on an "AS IS" BASIS,
++@rem WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++@rem See the License for the specific language governing permissions and
++@rem limitations under the License.
++@rem
++
++@if "%DEBUG%"=="" @echo off
++@rem ##########################################################################
++@rem
++@rem  Gradle startup script for Windows
++@rem
++@rem ##########################################################################
++
++@rem Set local scope for the variables with windows NT shell
++if "%OS%"=="Windows_NT" setlocal
++
++set DIRNAME=%~dp0
++if "%DIRNAME%"=="" set DIRNAME=.
++@rem This is normally unused
++set APP_BASE_NAME=%~n0
++set APP_HOME=%DIRNAME%
++
++@rem Resolve any "." and ".." in APP_HOME to make it shorter.
++for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
++
++@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
++set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
++
++@rem Find java.exe
++if defined JAVA_HOME goto findJavaFromJavaHome
++
++set JAVA_EXE=java.exe
++%JAVA_EXE% -version >NUL 2>&1
++if %ERRORLEVEL% equ 0 goto execute
++
++echo.
++echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
++echo.
++echo Please set the JAVA_HOME variable in your environment to match the
++echo location of your Java installation.
++
++goto fail
++
++:findJavaFromJavaHome
++set JAVA_HOME=%JAVA_HOME:"=%
++set JAVA_EXE=%JAVA_HOME%/bin/java.exe
++
++if exist "%JAVA_EXE%" goto execute
++
++echo.
++echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME%
++echo.
++echo Please set the JAVA_HOME variable in your environment to match the
++echo location of your Java installation.
++
++goto fail
++
++:execute
++@rem Setup the command line
++
++set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
++
++
++@rem Execute Gradle
++"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*
++
++:end
++@rem End local scope for the variables with windows NT shell
++if %ERRORLEVEL% equ 0 goto mainEnd
++
++:fail
++rem Set variable GRADLE_EXIT_CONSOLE if you need the _script_ return code instead of
++rem the _cmd.exe /c_ return code!
++set EXIT_CODE=%ERRORLEVEL%
++if %EXIT_CODE% equ 0 set EXIT_CODE=1
++if not ""=="%GRADLE_EXIT_CONSOLE%" exit %EXIT_CODE%
++exit /b %EXIT_CODE%
++
++:mainEnd
++if "%OS%"=="Windows_NT" endlocal
++
++:omega
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/ActionPlanRunner.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/ActionPlanRunner.java
+@@ -27,6 +27,7 @@
+     private static final Map<UUID, RunningPlan> ACTIVE = new HashMap<>();
+ 
+     private ActionPlanRunner() {}
++    public static void clearTransient() { ACTIVE.clear(); }
+ 
+     private static final class RunningPlan {
+         final UUID npcId;
+@@ -76,7 +77,10 @@
+         if (GatherTaskController.isBusy(npc)) {
+             String first = steps.get(0).action();
+             if (steps.size() == 1 && ("follow".equals(first) || "stay".equals(first)))
++                {
+                 GatherTaskController.cancel(npc);
++                if (GatherTaskController.isBusy(npc)) return "[Plan busy: safe task cleanup must finish first.]";
++            }
+             else return "[Plan busy: NPC is gathering. Cancel that task first.]";
+         }
+         if (ACTIVE.containsKey(npc.getUUID())) {
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/AgentRuntime.java
+@@ -0,0 +1,53 @@
++package io.github.sirp00m.npcortex;
++
++import io.github.sirp00m.npcortex.agent.EventBus;
++import io.github.sirp00m.npcortex.agent.GoalState;
++import io.github.sirp00m.npcortex.entity.CompanionEntity;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++
++/** Shared lifecycle/ownership adapter for the three existing task front ends.
++ * NBT is authoritative, so unload/reload never loses an ownership lock.
++ * Task-specific progress remains in the adapter until each goal type is migrated.
++ */
++public final class AgentRuntime {
++    public static final EventBus EVENTS = new EventBus();
++    private AgentRuntime() {}
++    public static boolean isBusy(CompanionEntity npc) {
++        return AgenticTaskController.isBusy(npc) || GatherTaskController.isBusy(npc)
++                || ActionPlanRunner.isBusy(npc);
++    }
++    public static void event(CompanionEntity npc, CompoundTag task, String type, String detail) {
++        String bounded = detail.substring(0, Math.min(240, detail.length()));
++        String goal = task.hasUUID("taskId") ? task.getUUID("taskId").toString() : "legacy";
++        EVENTS.publish(new EventBus.Event(npc.getUUID(), goal, type, bounded, npc.level().getGameTime()));
++        ListTag journal = task.getList("runtimeEvents", Tag.TAG_COMPOUND);
++        if (journal.size() >= 32) journal.remove(0);
++        CompoundTag entry = new CompoundTag();
++        entry.putString("type", type); entry.putString("detail", bounded);
++        entry.putLong("tick", npc.level().getGameTime());
++        journal.add(entry); task.put("runtimeEvents", journal);
++    }
++    public static void transition(CompanionEntity npc, CompoundTag task, GoalState next) {
++        GoalState previous;
++        try { previous = GoalState.valueOf(task.getString("goalState")); }
++        catch (IllegalArgumentException ex) { previous = task.contains("goalState") ? GoalState.PAUSED : GoalState.phase(task.getString("state")); }
++        if (!previous.permits(next)) {
++            // Corrupted/unknown saved transitions fail closed and retain the ledger.
++            task.putString("state", "paused");
++            task.putString("lastResult", "[Runtime paused: invalid lifecycle transition " + previous + " -> " + next + ".]");
++            next = GoalState.PAUSED;
++        }
++        if (previous != next) event(npc, task, "goal_state", previous + " -> " + next);
++        task.putString("goalState", next.name());
++    }
++    public static void savePhase(CompanionEntity npc, CompoundTag task) {
++        transition(npc, task, GoalState.phase(task.getString("state")));
++    }
++    public static void clearTransient(net.minecraftforge.event.server.ServerStoppedEvent event) {
++        EVENTS.clear();
++        ActionPlanRunner.clearTransient();
++        AgenticTaskController.clearTransient();
++    }
++}
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java
+@@ -34,7 +34,11 @@
+ 
+     public static boolean isBusy(CompanionEntity npc) { return npc.getPersistentData().contains(KEY); }
+     private static CompoundTag task(CompanionEntity npc) { return npc.getPersistentData().getCompound(KEY); }
+-    private static void save(CompanionEntity npc, CompoundTag t) { npc.getPersistentData().put(KEY, t); }
++    static void save(CompanionEntity npc, CompoundTag t) {
++        AgentRuntime.savePhase(npc, t);
++        npc.getPersistentData().put(KEY, t);
++    }
++    public static void clearTransient() { IN_FLIGHT.clear(); }
+     private static int itemCount(CompanionEntity npc, String id) {
+         int n = 0;
+         for (int i = 0; i < npc.bag().getContainerSize(); i++) {
+@@ -52,10 +56,10 @@
+         }
+         return false;
+     }
+-    private static int collected(CompanionEntity npc, CompoundTag t) {
++    static int collected(CompanionEntity npc, CompoundTag t) {
+         return Math.max(0, itemCount(npc, t.getString("item")) - t.getInt("initial"));
+     }
+-    private static void tell(ServerPlayer owner, CompanionEntity npc, String msg) {
++    static void tell(ServerPlayer owner, CompanionEntity npc, String msg) {
+         owner.sendSystemMessage(Component.literal("NPCortex " + npc.getName().getString() + ": " + msg));
+     }
+     public static String status(CompanionEntity npc) {
+@@ -66,6 +70,8 @@
+                 + " stored; mined=" + t.getInt("mined") + "; AI requests=" + t.getInt("calls")
+                 + "/" + MAX_CALLS + "; failures=" + t.getInt("failures") + "/" + MAX_FAILURES
+                 + "; stalls=" + t.getInt("stalls") + "/" + MAX_STALLED
++                + "; lifecycle=" + t.getString("goalState")
++                + "; accessBlocks=" + Navigation3DAccess.size(t)
+                 + "; scaffold=" + TreeScaffold.size(t)
+                 + "; scaffoldMaterial=" + hasScaffoldMaterial(npc)
+                 + "; observedDrops=" + t.getInt("observedDrops")
+@@ -79,14 +85,28 @@
+                 + "; chosen=" + t.getString("lastChoice")
+                 + "; last=" + t.getString("lastResult") + "]";
+     }
++    public static String trace(CompanionEntity npc) {
++        CompoundTag t = isBusy(npc) ? task(npc) : npc.getPersistentData().getCompound("NPCortexLastGoal");
++        var journal = t.getList("runtimeEvents", net.minecraft.nbt.Tag.TAG_COMPOUND);
++        StringBuilder out = new StringBuilder("[Runtime sprint1: " + t.getString("goalState") + "]");
++        for (int n=Math.max(0,journal.size()-10); n<journal.size(); n++) {
++            var row=journal.getCompound(n);
++            out.append("\n").append(row.getLong("tick")).append(" ").append(row.getString("type"))
++                .append(": ").append(row.getString("detail"));
++        }
++        return out.toString();
++    }
+     public static String start(ServerPlayer owner, CompanionEntity npc, String message, String item, int goal) {
+         if (!BrainSkills.authorized(owner, npc) || owner.distanceToSqr(npc) > 64.0D)
+             return "[Agentic task blocked: nearby owner, cheats and world-edits opt-in required.]";
+         if (!GatherTaskPolicy.valid(item, goal) || !TreeSpecies.supportedLog(item))
+             return "[Agentic task blocked: supported vanilla overworld wood log and quantity 1–16 required.]";
+-        if (isBusy(npc) || GatherTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
++        if (AgentRuntime.isBusy(npc))
+             return "[Agentic task busy: cancel current NPC work first.]";
+         CompoundTag t = new CompoundTag();
++        t.putString("goalType", "harvest_logs");
++        t.putString("originDimension", npc.level().dimension().location().toString());
++        t.putString("goalState", "READY");
+         t.putUUID("taskId", UUID.randomUUID()); // forbid stale answers crossing task restarts
+         t.putString("item", item); t.putInt("goal", goal); t.putInt("initial", itemCount(npc, item));
+         t.putInt("calls", 0); t.putInt("failures", 0); t.putInt("sameFailures", 0);
+@@ -101,6 +121,7 @@
+         t.putLong("nextAt", owner.level().getGameTime() + 1);
+         t.putBoolean("previousFollow", npc.isFollowing());
+         npc.setFollowing(false);
++        npc.clearRetreat();
+         save(npc, t);
+         return "[Agentic whole-tree task started: collect at least " + goal + " " + item
+                 + ", finish each committed verified tree, restore task terrain and keep ALL logs in NPC bag.]";
+@@ -111,12 +132,16 @@
+         IN_FLIGHT.remove(npc.getUUID());
+         npc.getNavigation().stop();
+         if (AgenticTaskPolicy.mustCleanBeforeCancel(TreeScaffold.size(t))
+-                || WorldTerrainEdits.size(t) > 0) {
++                || WorldTerrainEdits.size(t) > 0 || Navigation3DAccess.needsCleanup(t)
++                || "access_3d".equals(t.getString("state")) || "scaffold_jump".equals(t.getString("state"))) {
+             t.putBoolean("cancelRequested", true);
++            Navigation3DAccess.abortRoute(npc, t);
++            t.putLong("cleanupStarted", npc.level().getGameTime());
+             t.putString("state", "cleanup");
+             save(npc, t);
+             return "[Agentic task cancelled: guarded scaffold cleanup pending; bag retained.]";
+         }
++        t.putBoolean("cancelRequested", true);
+         finish(npc, t);
+         return "[Agentic task cancelled: collected items retained in NPC bag.]";
+     }
+@@ -125,6 +150,10 @@
+         CompoundTag t = task(npc);
+         IN_FLIGHT.remove(npc.getUUID());
+         npc.getNavigation().stop();
++        if (!"paused".equals(t.getString("state"))) {
++            t.putString("pausedFrom", t.getString("state"));
++            t.putLong("pausedAt", npc.level().getGameTime());
++        }
+         t.putString("state", "paused"); t.putString("lastResult", reason);
+         save(npc, t);
+         return "[Agentic task paused: " + reason + "; progress preserved.]";
+@@ -133,23 +162,38 @@
+         if (!isBusy(npc)) return "[Agentic task: no saved work.]";
+         CompoundTag t = task(npc);
+         if (!"paused".equals(t.getString("state"))) return status(npc);
+-        if (!AgenticTaskPolicy.canPlan(t.getInt("calls"), t.getInt("failures"),
++        boolean cleanup = t.getBoolean("cancelRequested") || "cleanup".equals(t.getString("pausedFrom"))
++                || Navigation3DAccess.needsCleanup(t);
++        if (!cleanup && !AgenticTaskPolicy.canPlan(t.getInt("calls"), t.getInt("failures"),
+                 t.getInt("sameFailures"), t.getInt("stalls")))
+             return "[Agentic task blocked: budget exhausted; cancel and issue a new task.]";
+-        t.putString("state", t.getBoolean("cancelRequested") && TreeScaffold.size(t) > 0
+-                ? "cleanup" : "ready");
++        if (t.contains("pausedAt")) {
++            t.putLong("started", t.getLong("started") + Math.max(0,npc.level().getGameTime()-t.getLong("pausedAt")));
++            t.remove("pausedAt");
++        }
++        t.putString("state", cleanup ? "cleanup" : "ready");
++        if (cleanup) {
++            Navigation3DAccess.abortRoute(npc, t);
++            t.putLong("cleanupStarted", npc.level().getGameTime());
++        }
+         t.putLong("nextAt", npc.level().getGameTime() + 1);
+         t.putString("lastResult", "[Task resumed after explicit owner approval.]");
+         save(npc, t);
+         return "[Agentic task resumed.]";
+     }
+-    private static void finish(CompanionEntity npc, CompoundTag t) {
++    static void finish(CompanionEntity npc, CompoundTag t) {
+         IN_FLIGHT.remove(npc.getUUID());
+         npc.getNavigation().stop();
++        if (!t.getBoolean("cancelRequested"))
++            AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.VERIFYING);
++        AgentRuntime.transition(npc, t, t.getBoolean("cancelRequested")
++                ? io.github.sirp00m.npcortex.agent.GoalState.CANCELLED
++                : io.github.sirp00m.npcortex.agent.GoalState.SUCCEEDED);
++        npc.getPersistentData().put("NPCortexLastGoal", t.copy());
+         npc.getPersistentData().remove(KEY);
+         npc.setFollowing(t.getBoolean("previousFollow"));
+     }
+-    private static void result(CompanionEntity npc, CompoundTag t, String tool, String ref,
++    static void result(CompanionEntity npc, CompoundTag t, String tool, String ref,
+             String feedback, boolean actualProgress) {
+         // A tool may have its precondition already satisfied without changing the
+         // world or NPC position. This MUST NOT reset the no-progress watchdog.
+@@ -157,7 +201,19 @@
+         boolean okay = feedback.startsWith("[Action confirmed:")
+                 || feedback.startsWith("[Action started:")
+                 || feedback.startsWith("[Action unchanged:");
+-        String signature = tool + "/" + ref;
++        String signature = t.getString("activeSkillKey");
++        if (signature.isEmpty()) signature = tool + "/" + ref;
++        t.putBoolean("verifiedEffect", actualProgress);
++        ServerPlayer owner = npc.getOwnerUUID() == null ? null : npc.getServer().getPlayerList().getPlayer(npc.getOwnerUUID());
++        var context = new BrainSkillRegistry.Context(owner, npc, t, new JsonObject(), npc.blockPosition());
++        if (actualProgress && !BrainSkillRegistry.REGISTRY.verify(tool, context, ref)) {
++            actualProgress = false; okay = false;
++            feedback = "[Action failed: registry could not verify executor effect.]";
++        }
++        t.putString("lastResult", feedback.substring(0, Math.min(350, feedback.length())));
++        AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.VERIFYING);
++        AgentRuntime.event(npc, t, actualProgress ? "skill_verified" : "skill_no_progress", tool + ": " + feedback);
++        if (!okay || !actualProgress) BrainSkillRegistry.REGISTRY.recover(tool, context, ref);
+         if (!okay) {
+             t.putInt("failures", t.getInt("failures") + 1);
+             int same = AgenticTaskPolicy.nextSameFailures(t.getString("lastFailedTool"),
+@@ -179,157 +235,24 @@
+     }
+     private static void action(ServerPlayer owner, CompanionEntity npc, CompoundTag t,
+             String tool, String ref, JsonObject snapshot, BlockPos origin) {
+-        String item = t.getString("item");
+-        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
+-        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
+-        String outcome;
+-        if (tool.equals("finish")) {
+-            if (t.getInt("completedTrees") > 0 && WholeTreePolicy.complete(
+-                    collected(npc, t), t.getInt("mined"), t.getInt("goal"),
+-                    WholeTreeTracker.pending(owner.serverLevel(), t),
+-                    TreeScaffold.size(t) + WorldTerrainEdits.size(t))) {
+-                int count = collected(npc, t);
+-                finish(npc, t);
+-                tell(owner, npc, "[Agentic task complete: " + count + "/" + t.getInt("goal")
+-                        + " " + item + " verified in NPC bag; items NOT transferred.]");
+-                return;
+-            }
+-            outcome = "[Action failed: finish denied; goal, complete tree, all mined logs collected or cleanup not verified.]";
+-        } else if (tool.equals("pause")) {
+-            tell(owner, npc, pause(npc, "Qwen requested owner intervention"));
+-            return;
+-        } else if (tool.equals("wait")) {
+-            outcome = "[Action confirmed: waited for new server observation.]";
+-        } else if (tool.equals("pickup")) {
+-            int remaining = Math.max(0, t.getInt("mined") - collected(npc, t));
+-            int taken = WorldActions.pickupForGather(owner, npc, item, remaining);
+-            outcome = taken > 0 ? "[Action confirmed: picked up " + taken + " " + item + " into NPC bag.]"
+-                    : "[Action failed: no reachable drops or NPC inventory full.]";
+-        } else if (tool.equals("approach_drop")) {
+-            ItemEntity drop = BrainObservation.resolveDrop(owner, snapshot, ref, item);
+-            if (drop == null || npc.distanceToSqr(drop) > 144.0D)
+-                outcome = "[Action failed: dropped item no longer available.]";
+-            else {
+-                outcome = BrainSkills.approachDrop(owner, npc, drop, t);
+-                if (outcome.startsWith("[Action started:")) {
+-                    t.putString("state", "navigating_drop");
+-                    t.putUUID("drop", drop.getUUID());
+-                    t.putLong("navStart", npc.level().getGameTime());
+-                    recordNavOrigin(npc, t);
+-                    t.putString("lastResult", outcome);
+-                    save(npc, t);
+-                    return;
+-                }
+-            }
+-        } else if (tool.equals("restore")) {
+-            if (WorldTerrainEdits.size(t) == 0)
+-                outcome = "[Action unchanged: no task-owned terrain changes to restore.]";
+-            else {
+-                t.putString("state", "cleanup");
+-                t.putString("lastResult", "[Action started: restore only recorded task terrain.] ");
+-                save(npc, t);
+-                return;
+-            }
+-        } else if (tool.equals("descend")) {
+-            if (TreeScaffold.size(t) == 0)
+-                outcome = "[Action confirmed: no scaffold remains.]";
+-            else {
+-                t.putString("state", "cleanup");
+-                t.putString("lastResult", "[Action started: dismantle only recorded scaffold blocks.]");
+-                save(npc, t);
+-                return;
+-            }
+-        } else if (!BrainSkills.validBlock(owner, npc, pos, item, t)) {
+-            outcome = "[Action blocked: target changed, unloaded, out of home range or not authorized.]";
+-        } else if (tool.equals("mine")) {
+-            // Inspect the tree BEFORE removing any logs. Once committed, only
+-            // known members can be destroyed. No Qwen-supplied coordinates.
+-            long[] proposedTree = null;
+-            if (!WholeTreeTracker.isCommitted(t)) {
+-                if (!WholeTreePolicy.canStartTree(t.getInt("completedTrees"), t.getInt("mined"),
+-                        collected(npc, t), t.getInt("goal")))
+-                    outcome = "[Action blocked: no additional tree is needed or task tree budget exhausted.]";
+-                else {
+-                    proposedTree = WholeTreeTracker.inspect(owner.serverLevel(), pos,
+-                            new BlockPos(t.getInt("homeX"),t.getInt("homeY"),t.getInt("homeZ")));
+-                    if (proposedTree == null || t.getInt("mined") + proposedTree.length > WholeTreePolicy.MAX_TASK_LOGS)
+-                        outcome = "[Action blocked: tree not verified natural/bounded, or too large for task budget.]";
+-                    else {
+-                        BlockPos root = WholeTreeTracker.verifiedRoot(owner.serverLevel(), proposedTree);
+-                        if (root == null) {
+-                            outcome = "[Action blocked: natural tree root could not be verified.]";
+-                        } else {
+-                            outcome = BrainSkills.mine(owner, npc, pos, item);
+-                            if (outcome.startsWith("[Action confirmed:")) {
+-                                // Record this BEFORE any later choice of a branch-log
+-                                // climb target. Tree root may already be air by then.
+-                                t.putInt("wholeTreeRootX", root.getX());
+-                                t.putInt("wholeTreeRootY", root.getY());
+-                                t.putInt("wholeTreeRootZ", root.getZ());
+-                                WholeTreeTracker.commit(t, proposedTree);
+-                                t.putInt("mined", t.getInt("mined") + 1);
+-                            }
+-                        }
+-                    }
+-                }
+-            } else if (!WholeTreeTracker.contains(t, pos)
+-                    || !WholeTreePolicy.canMine(t.getInt("mined"),
+-                            WholeTreeTracker.pending(owner.serverLevel(), t)))
+-                outcome = "[Action blocked: not a remaining log on committed tree.]";
+-            else {
+-                outcome = BrainSkills.mine(owner, npc, pos, item);
+-                if (outcome.startsWith("[Action confirmed:")) t.putInt("mined", t.getInt("mined") + 1);
+-            }
+-        } else if (tool.equals("clear_leaf")) {
+-            outcome = BrainSkills.clearLeaf(owner, npc, pos);
+-        } else if (tool.equals("clear_soft")) {
+-            if (!WholeTreeTracker.isCommitted(t))
+-                outcome = "[Action blocked: must commit a verified natural tree before soil excavation.]";
+-            else outcome = WorldTerrainEdits.clear(owner, npc, pos, t);
+-        } else if (tool.equals("approach")) {
+-            outcome = BrainSkills.approach(owner, npc, pos, t);
+-            if (outcome.startsWith("[Action started:")) {
+-                t.putString("state", "navigating_block");
+-                t.putInt("targetX", pos.getX()); t.putInt("targetY", pos.getY()); t.putInt("targetZ", pos.getZ());
+-                t.putLong("navStart", npc.level().getGameTime());
+-                recordNavOrigin(npc, t);
+-                t.putString("lastResult", outcome);
+-                save(npc, t);
+-                return;
+-            }
+-        } else if (tool.equals("climb")) {
+-            // The AI selects climb for a committed remaining log. The skill
+-            // anchors to the verified *root* rather than accidentally treating
+-            // a horizontal branch as a new vertical trunk.
+-            if (!WholeTreeTracker.isCommitted(t) || !WholeTreeTracker.contains(t, pos)
+-                    || !t.contains("wholeTreeRootX") || !t.contains("wholeTreeRootY")
+-                    || !t.contains("wholeTreeRootZ")) {
+-                outcome = "[Action blocked: no verified committed tree root for scaffold.]";
+-            } else if (TreeScaffold.size(t) >= ScaffoldPolicy.MAX_HEIGHT) {
+-                outcome = "[Action blocked: scaffold height limit reached; select another safe method.]";
+-            } else {
+-                t.putBoolean("treeLocked", true);
+-                t.putInt("treeX", t.getInt("wholeTreeRootX"));
+-                t.putInt("treeZ", t.getInt("wholeTreeRootZ"));
+-                t.putInt("treeBaseY", t.getInt("wholeTreeRootY"));
+-                t.putString("state", "scaffold_prepare");
+-                t.putLong("navStart", npc.level().getGameTime());
+-                t.putString("lastResult", "[Action started: guarded scaffold beside committed tree root, not branch target.]");
+-                save(npc, t);
+-                return;
+-            }
+-        } else {
+-            outcome = "[Action blocked: unknown tool.]";
+-        }
+-        // State-changing effects are verified by the Minecraft executor, not the
+-        // LLM reason string. Navigation progress is measured independently below.
+-        boolean changed = outcome.startsWith("[Action confirmed:")
+-                && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf")
+-                    || tool.equals("clear_soft"));
+-        result(npc, t, tool, ref, outcome, changed);
+-        if ("paused".equals(t.getString("state"))) tell(owner, npc, status(npc));
+-    }
+-    private static void recordNavOrigin(CompanionEntity npc, CompoundTag t) {
++        AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.EXECUTING);
++        BlockPos target = BrainObservation.resolveBlock(snapshot, ref, origin, t.getString("item"));
++        t.putString("activeSkill", tool); t.putString("activeRef", ref);
++        t.putString("activeSkillKey", FailureMemory.identity(tool, ref, snapshot, origin, t.getString("item")));
++        t.putLong("activeFingerprint", FailureMemory.fingerprint(npc, t, target));
++        t.remove("activeBlock");
++        if (target != null) t.putLong("activeBlock", target.asLong());
++        AgentRuntime.event(npc, t, "skill_started", tool + ":" + ref);
++        try {
++            if (!BrainSkillRegistry.REGISTRY.execute(tool,
++                    new BrainSkillRegistry.Context(owner,npc,t,snapshot,origin),ref))
++                result(npc,t,tool,ref,"[Action blocked: skill/target not offered by server registry.]",false);
++        } catch (RuntimeException error) {
++            AgentRuntime.event(npc,t,"executor_exception",tool + ": " + error.getClass().getSimpleName());
++            tell(owner,npc,pause(npc,"executor exception; inspect task trace before resuming"));
++        }
++    }
++    static void recordNavOrigin(CompanionEntity npc, CompoundTag t) {
+         t.putDouble("navOriginX", npc.getX());
+         t.putDouble("navOriginY", npc.getY());
+         t.putDouble("navOriginZ", npc.getZ());
+@@ -372,6 +295,7 @@
+         world.addProperty("last_result", t.getString("lastResult"));
+         world.addProperty("scaffold", TreeScaffold.size(t));
+         world.addProperty("paused", false);
++        BrainSkillRegistry.attach(new BrainSkillRegistry.Context(owner,npc,t,world,origin));
+         int generation = t.getInt("calls") + 1;
+         t.putInt("calls", generation);
+         t.putString("state", "thinking");
+@@ -388,7 +312,8 @@
+             CompoundTag now = task(npc);
+             if (!now.hasUUID("taskId") || !taskNonce.equals(now.getUUID("taskId"))
+                     || !now.hasUUID("pendingRequest") || !requestNonce.equals(now.getUUID("pendingRequest"))
+-                    || now.getInt("calls") != generation || !"thinking".equals(now.getString("state"))) return;
++                    || now.getInt("calls") != generation || !"thinking".equals(now.getString("state"))
++                    || !now.getString("originDimension").equals(npc.level().dimension().location().toString())) return;
+             if (!BrainSkills.authorized(online, npc)) {
+                 tell(online, npc, pause(npc, "owner permissions or world-edit safeguard changed")); return;
+             }
+@@ -405,10 +330,16 @@
+             if (!(entity instanceof CompanionEntity npc) || !isBusy(npc) || ++visited > 16) continue;
+             CompoundTag t = task(npc);
+             String phase = t.getString("state");
++            String dimension = level.dimension().location().toString();
++            if (!t.contains("originDimension")) t.putString("originDimension", dimension); // old saves
++            if (!dimension.equals(t.getString("originDimension"))) {
++                if (!"paused".equals(phase)) pause(npc,"NPC changed dimension; return to task world before resuming");
++                continue;
++            }
+             ServerPlayer owner = npc.getOwnerUUID() == null ? null
+                     : level.getServer().getPlayerList().getPlayer(npc.getOwnerUUID());
+             if (owner == null || owner.level() != level || !owner.isAlive()) {
+-                npc.getNavigation().stop(); continue;
++                if (!"paused".equals(phase)) pause(npc, "owner unavailable; resume when owner returns"); continue;
+             }
+             if ("paused".equals(phase)) continue;
+             if ("cleanup".equals(phase) && !BrainSkills.authorized(owner, npc)) {
+@@ -416,8 +347,18 @@
+                 continue;
+             }
+             if ("cleanup".equals(phase)) {
+-                String feedback = TreeScaffold.size(t) > 0
+-                        ? TreeScaffold.dismantle(level, npc, t) : TreeScaffold.DONE;
++                if (!t.contains("cleanupStarted")) t.putLong("cleanupStarted", level.getGameTime());
++                if (level.getGameTime() - t.getLong("cleanupStarted") > 2400) {
++                    tell(owner,npc,pause(npc,"cleanup timed out; temporary structures retained")); continue;
++                }
++                String feedback = Navigation3DAccess.needsCleanup(t)
++                        ? Navigation3DAccess.cleanup(owner,npc,t)
++                        : (TreeScaffold.size(t) > 0 ? TreeScaffold.dismantle(level,npc,t)
++                            : (npc.onGround() ? TreeScaffold.DONE : TreeScaffold.WAIT));
++                // General route must be undone before the legacy root pillar.
++                if (TreeScaffold.DONE.equals(feedback) && TreeScaffold.size(t) > 0) {
++                    save(npc,t); continue;
++                }
+                 if (TreeScaffold.DONE.equals(feedback)) {
+                     if (WorldTerrainEdits.size(t) > 0) {
+                         String restored = WorldTerrainEdits.restore(level, npc, owner, t);
+@@ -459,7 +400,7 @@
+                 }
+             }
+             if (WholeTreeTracker.isCommitted(t) && WholeTreeTracker.pending(level, t) == 0
+-                    && TreeScaffold.size(t) == 0 && WorldTerrainEdits.size(t) == 0) {
++                    && TreeScaffold.size(t) == 0 && !Navigation3DAccess.needsCleanup(t) && WorldTerrainEdits.size(t) == 0) {
+                 WholeTreeTracker.releaseCompleted(t);
+                 t.remove("treeLocked"); // no scaffold remains; allow another tree
+                 t.putInt("stalls", 0);
+@@ -471,9 +412,19 @@
+                             t.getInt("calls"), t.getInt("failures"), t.getInt("sameFailures"), t.getInt("stalls")))) {
+                 tell(owner, npc, pause(npc, "task time/LLM/replanning budget exhausted")); continue;
+             }
++            if ("access_3d".equals(phase)) {
++                String outcome = Navigation3DAccess.tick(owner,npc,t);
++                if (TreeScaffold.DONE.equals(outcome))
++                    result(npc,t,"navigate_3d",t.getString("activeRef"),"[Action confirmed: reached the target with verified 3D access.]",true);
++                else if (outcome.startsWith(TreeScaffold.BLOCKED)) {
++                    Navigation3DAccess.abortRoute(npc,t);
++                    result(npc,t,"navigate_3d",t.getString("activeRef"),"[Action failed: " + outcome + "]",false);
++                } else save(npc,t);
++                continue;
++            }
+             if ("scaffold_prepare".equals(phase) || "scaffold_jump".equals(phase)) {
+                 if (level.getGameTime() - t.getLong("navStart") > NAV_TIMEOUT) {
+-                    result(npc, t, "climb", "", "[Action failed: guarded scaffold skill timed out.]", false);
++                    result(npc, t, "climb", t.getString("activeRef"), "[Action failed: guarded scaffold skill timed out.]", false);
+                     continue;
+                 }
+                 String outcome = "scaffold_jump".equals(phase)
+@@ -481,10 +432,10 @@
+                         : TreeScaffold.ascend(level, owner, npc, t, level.getGameTime());
+                 if (TreeScaffold.DONE.equals(outcome)) {
+                     if ("scaffold_jump".equals(phase))
+-                        result(npc, t, "climb", "", "[Action confirmed: climbed one verified scaffold level.]", true);
++                        result(npc, t, "climb", t.getString("activeRef"), "[Action confirmed: climbed one verified scaffold level.]", true);
+                     else { t.putString("state", "scaffold_jump"); save(npc, t); }
+                 } else if (outcome.startsWith(TreeScaffold.BLOCKED)) {
+-                    result(npc, t, "climb", "", "[Action failed: " + outcome + "]", false);
++                    result(npc, t, "climb", t.getString("activeRef"), "[Action failed: " + outcome + "]", false);
+                 } else save(npc, t);
+                 continue;
+             }
+@@ -502,15 +453,16 @@
+                             && WorldActions.reachableGatherDrop(npc, item, owner.isCreative());
+                 }
+                 if (reached) {
++                    npc.getNavigation().stop();
+                     boolean moved = navigationMoved(npc, t);
+-                    result(npc, t, "approach", "",
++                    result(npc, t, t.getString("activeSkill"), t.getString("activeRef"),
+                             moved ? "[Action confirmed: navigated to a newly reachable position.]"
+                                   : "[Action unchanged: destination reachable, but NPC position did not change.]",
+                             moved);
+                 }
+                 else if (npc.getNavigation().isDone() || level.getGameTime() - t.getLong("navStart") > NAV_TIMEOUT) {
+                     npc.getNavigation().stop();
+-                    result(npc, t, "approach", "", "[Action failed: navigation ended before target became reachable.]", false);
++                    result(npc, t, t.getString("activeSkill"), t.getString("activeRef"), "[Action failed: navigation ended before target became reachable.]", false);
+                 }
+                 continue;
+             }
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainObservation.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainObservation.java
+@@ -48,6 +48,7 @@
+                 task.getInt("goal"))) {
+             candidates.clear();
+         }
++        candidates.removeIf(p -> !owner.serverLevel().isLoaded(p));
+         candidates.sort(Comparator.comparingDouble(p -> npc.distanceToSqr(Vec3.atCenterOf(p))));
+         for (int i = 0; i < Math.min(16, candidates.size()); i++) {
+             BlockPos p = candidates.get(i);
+@@ -113,7 +114,7 @@
+             slot.addProperty("id", id);
+             slot.addProperty("count", stack.getCount());
+             bag.add(slot);
+-            scaffoldMaterial |= ScaffoldPolicy.validMaterial(id);
++            scaffoldMaterial |= ScaffoldPolicy.validMaterial(id) && !id.equals(item);
+         }
+         equipment.add("bag", bag);
+         equipment.addProperty("can_scaffold", scaffoldMaterial);
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkillRegistry.java
+@@ -0,0 +1,130 @@
++package io.github.sirp00m.npcortex;
++
++import com.google.gson.JsonArray;
++import com.google.gson.JsonObject;
++import io.github.sirp00m.npcortex.agent.SkillRegistry;
++import io.github.sirp00m.npcortex.entity.CompanionEntity;
++import net.minecraft.core.BlockPos;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerPlayer;
++import java.util.LinkedHashSet;
++import java.util.Set;
++
++/** Authoritative skill manifest + affordances. Python only transports this v2 contract.
++ * Existing task execution is an adapter; this registry owns dispatch and result hooks.
++ */
++public final class BrainSkillRegistry {
++    public record Context(ServerPlayer owner, CompanionEntity npc, CompoundTag task,
++            JsonObject world, BlockPos origin) {}
++    public static final SkillRegistry<Context> REGISTRY=new SkillRegistry<>();
++    static {
++        register("mine",SkillRegistry.Target.BLOCK,"Mine an observed visible in-reach goal block.", HarvestGoalSkills::mine);
++        register("approach",SkillRegistry.Target.BLOCK,"Walk to a collision-safe standing point; path rechecked at execution.", HarvestGoalSkills::approach);
++        register("clear_leaf",SkillRegistry.Target.BLOCK,"Clear verified natural leaves obstructing this goal block.", HarvestGoalSkills::clear_leaf);
++        register("clear_soft",SkillRegistry.Target.BLOCK,"Clear a bounded reversible soil obstruction.", HarvestGoalSkills::clear_soft);
++        register("climb",SkillRegistry.Target.BLOCK,"Legacy guarded pillar beside a verified tree root, one level.", HarvestGoalSkills::climb);
++        register("navigate_3d",SkillRegistry.Target.BLOCK,"Reach a block with a bounded walk, jump-pillar or bridge plan using bag materials; reversible edits.", HarvestGoalSkills::navigate_3d);
++        register("approach_drop",SkillRegistry.Target.DROP,"Walk into physical pickup range of the observed item entity.", HarvestGoalSkills::approach_drop);
++        register("pickup",SkillRegistry.Target.NONE,"Collect reachable task drops into the NPC bag.", HarvestGoalSkills::pickup);
++        register("descend",SkillRegistry.Target.NONE,"Reverse the recorded access route and remove task-owned temporary supports.", HarvestGoalSkills::descend);
++        register("restore",SkillRegistry.Target.NONE,"Restore task-owned terrain after safe descent.", HarvestGoalSkills::restore);
++        register("finish",SkillRegistry.Target.NONE,"Ask the goal adapter to verify completion from the real ledger.", HarvestGoalSkills::finish);
++        register("pause",SkillRegistry.Target.NONE,"Preserve goal and request owner assistance.", HarvestGoalSkills::pause);
++        register("wait",SkillRegistry.Target.NONE,"Wait for a changed observation when no immediate task interaction exists.", HarvestGoalSkills::wait);
++        REGISTRY.freeze();
++    }
++    private BrainSkillRegistry() {}
++    private static void register(String id,SkillRegistry.Target target,String description,
++            java.util.function.BiConsumer<Context,String> execute) {
++        REGISTRY.register(new SkillRegistry.Skill<>(id,target,description,
++            (c,ref)->BrainSkills.authorized(c.owner,c.npc) && offered(c.world,id,ref)
++                    && (target!=SkillRegistry.Target.BLOCK || BrainSkills.validBlock(c.owner,c.npc,
++                        BrainObservation.resolveBlock(c.world,ref,c.origin,c.task.getString("item")),c.task.getString("item"),c.task)),
++            execute,
++            (c,ref)->verifyEffect(c,id,ref),
++            (c,ref)->{ c.npc.getNavigation().stop(); FailureMemory.remember(c.task,c.task.getString("lastResult")); }));
++    }
++    public static boolean offered(JsonObject world,String skill,String ref) {
++        if(!world.has("skills")) return false;
++        String choice=skill+(ref.isEmpty()?"":":"+ref);
++        for(var entry:world.getAsJsonObject("skills").getAsJsonArray("choices"))
++            if(choice.equals(entry.getAsString())) return true;
++        return false;
++    }
++    private static boolean flag(JsonObject b,String key) { return b.has(key) && b.get(key).getAsBoolean(); }
++    public static void attach(Context c) {
++        var w=c.world; var t=c.task;
++        var tree=w.getAsJsonObject("tree");
++        boolean active=flag(tree,"active"), work=active||w.get("collected").getAsInt()<w.get("goal_count").getAsInt();
++        boolean access=Navigation3DAccess.needsCleanup(t);
++        Set<String> choices=new LinkedHashSet<>(); choices.add("pause");
++        if(AgenticTaskPolicy.canPlan(t.getInt("calls"),t.getInt("failures"),t.getInt("sameFailures"),t.getInt("stalls"))) {
++            int plans=0;
++            for(var value:w.getAsJsonArray("targets")) {
++                var b=value.getAsJsonObject(); String ref=b.get("ref").getAsString();
++                boolean reachable=flag(b,"reachable")&&flag(b,"visible");
++                if(!work) continue;
++                if(reachable) choices.add("mine:"+ref);
++                else {
++                    if(!access && TreeScaffold.size(t)==0 && flag(b,"ground_stand_possible")) choices.add("approach:"+ref);
++                    if(flag(b,"leaf_clearable")) choices.add("clear_leaf:"+ref);
++                    if(active && flag(b,"soft_clearable") && WorldTerrainEdits.size(t)<2) choices.add("clear_soft:"+ref);
++                    if(!access && active && flag(w.getAsJsonObject("equipment"),"can_scaffold")
++                            && TreeScaffold.size(t)<ScaffoldPolicy.MAX_HEIGHT) choices.add("climb:"+ref);
++                    // At most two bounded path searches per inference, nearest candidates first.
++                    if(active && plans<2) {
++                        BlockPos target=BrainObservation.resolveBlock(w,ref,c.origin,t.getString("item"));
++                        if (FailureMemory.blocked(t,FailureMemory.identity("navigate_3d",ref,w,c.origin,t.getString("item")),
++                                FailureMemory.fingerprint(c.npc,t,target))) continue;
++                        plans++;
++                        var route=Navigation3DAccess.plan(c.owner,c.npc,t,target);
++                        if(route!=null && !route.steps().isEmpty()) choices.add("navigate_3d:"+ref);
++                    }
++                }
++            }
++            boolean pickup=false;
++            if(w.get("collected").getAsInt()<w.get("mined").getAsInt()) for(var value:w.getAsJsonArray("drops")) {
++                var d=value.getAsJsonObject();
++                if(flag(d,"pickup_reachable")) pickup=true;
++                else if(!access && TreeScaffold.size(t)==0) choices.add("approach_drop:"+d.get("ref").getAsString());
++            }
++            if(pickup) choices.add("pickup");
++            if(access || TreeScaffold.size(t)>0) choices.add("descend");
++            if(WorldTerrainEdits.size(t)>0) choices.add("restore");
++            if(!(active && !w.getAsJsonArray("targets").isEmpty()) && !pickup) choices.add("wait");
++            if(!active && t.getInt("completedTrees")>0 && WholeTreePolicy.complete(
++                    w.get("collected").getAsInt(),t.getInt("mined"),t.getInt("goal"),
++                    tree.get("remaining").getAsInt(),TreeScaffold.size(t)+Navigation3DAccess.size(t)+WorldTerrainEdits.size(t))
++                    && !access) choices.add("finish");
++        }
++        choices.removeIf(choice->{
++            if(choice.equals("pause")) return false;
++            String[] pair=choice.split(":",2); String ref=pair.length==2?pair[1]:"";
++            BlockPos target=BrainObservation.resolveBlock(w,ref,c.origin,t.getString("item"));
++            return FailureMemory.blocked(t,FailureMemory.identity(pair[0],ref,w,c.origin,t.getString("item")),
++                    FailureMemory.fingerprint(c.npc,t,target));
++        });
++        JsonObject manifest=new JsonObject(); manifest.addProperty("version",2);
++        JsonArray catalog=new JsonArray();
++        for(String id:REGISTRY.ids().stream().sorted().toList()) {
++            var skill=REGISTRY.get(id); JsonObject row=new JsonObject();
++            row.addProperty("id",id); row.addProperty("target",skill.target().name().toLowerCase(java.util.Locale.ROOT));
++            row.addProperty("description",skill.description()); catalog.add(row);
++        }
++        JsonArray options=new JsonArray(); choices.forEach(options::add);
++        manifest.add("catalog",catalog); manifest.add("choices",options);
++        w.add("skills",manifest); w.add("failure_memory",FailureMemory.observation(t));
++    }
++    /** Outcomes are verified from executor evidence, never a model reason. */
++    private static boolean verifyEffect(Context c,String id,String ref) {
++        if(id.equals("mine")) {
++            BlockPos p=c.task.contains("activeBlock") ? BlockPos.of(c.task.getLong("activeBlock")) : null;
++            return p!=null && c.owner!=null && c.owner.serverLevel().isLoaded(p)
++                && !c.task.getString("item").equals(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
++                    c.owner.serverLevel().getBlockState(p).getBlock()).toString());
++        }
++        // Specialized effects are measured by their existing guarded executors and
++        // deferred movement handlers, then passed to this common verification hook.
++        return c.task.getBoolean("verifiedEffect");
++    }
++}
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/ChatBridge.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/ChatBridge.java
+@@ -257,13 +257,12 @@
+                     String tool = obj.get("tool").getAsString();
+                     String target = obj.get("target").getAsString();
+                     String reason = obj.get("reason").getAsString();
+-                    if (!java.util.Set.of("mine", "approach", "pickup", "approach_drop",
+-                            "clear_leaf", "climb", "descend", "wait", "finish", "pause").contains(tool)
++                    if (BrainSkillRegistry.REGISTRY.get(tool) == null
+                             || !target.matches("(?:b|d)(?:[0-9]|1[0-5])|"
+                             ) || reason.length() > 180)
+                         throw new IllegalArgumentException("Invalid brain decision");
+-                    boolean block = java.util.Set.of("mine", "approach", "clear_leaf", "climb").contains(tool);
+-                    boolean drop = "approach_drop".equals(tool);
++                    boolean block = BrainSkillRegistry.REGISTRY.get(tool).target() == io.github.sirp00m.npcortex.agent.SkillRegistry.Target.BLOCK;
++                    boolean drop = BrainSkillRegistry.REGISTRY.get(tool).target() == io.github.sirp00m.npcortex.agent.SkillRegistry.Target.DROP;
+                     if ((block && !target.matches("b(?:[0-9]|1[0-5])"))
+                             || (drop && !target.matches("d(?:[0-9]|1[0-5])"))
+                             || (!block && !drop && !target.isEmpty()))
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/FailureMemory.java
+@@ -0,0 +1,77 @@
++package io.github.sirp00m.npcortex;
++
++import com.google.gson.JsonArray;
++import com.google.gson.JsonObject;
++import io.github.sirp00m.npcortex.entity.CompanionEntity;
++import net.minecraft.core.BlockPos;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.core.registries.BuiltInRegistries;
++
++/** Persistent, bounded evidence about failures. Snapshot refs are never identities. */
++public final class FailureMemory {
++    private static final String KEY="skillFailures";
++    private FailureMemory() {}
++    public static String identity(String skill, String ref, JsonObject world, BlockPos origin, String item) {
++        BlockPos block=BrainObservation.resolveBlock(world,ref,origin,item);
++        if(block!=null) return skill+"/block/"+block.asLong();
++        if(ref.startsWith("d")) for(var e:world.getAsJsonArray("drops")) {
++            var d=e.getAsJsonObject();
++            if(ref.equals(d.get("ref").getAsString())) return skill+"/drop/"+d.get("uuid").getAsString();
++        }
++        return skill+"/goal";
++    }
++    public static long fingerprint(CompanionEntity npc, CompoundTag task, BlockPos target) {
++        long hash=npc.blockPosition().asLong();
++        // Pose, nearby geometry and relevant material inventory invalidate a failed hypothesis.
++        BlockPos center=target==null ? npc.blockPosition() : target;
++        for(int x=-1;x<=1;x++) for(int y=-1;y<=2;y++) for(int z=-1;z<=1;z++) {
++            BlockPos p=center.offset(x,y,z);
++            hash=31*hash+(npc.level().isLoaded(p) ? npc.level().getBlockState(p).toString().hashCode() : -1);
++        }
++        for(int x=-2;x<=2;x++) for(int y=-1;y<=2;y++) for(int z=-2;z<=2;z++) {
++            BlockPos p=npc.blockPosition().offset(x,y,z);
++            hash=31*hash+(npc.level().isLoaded(p) ? npc.level().getBlockState(p).toString().hashCode() : -1);
++        }
++        for(int i=0;i<npc.bag().getContainerSize();i++) {
++            var s=npc.bag().getItem(i);
++            hash=31*hash+BuiltInRegistries.ITEM.getKey(s.getItem()).hashCode(); hash=31*hash+s.getCount();
++        }
++        return 31*hash+TreeScaffold.size(task)+Navigation3DAccess.size(task);
++    }
++    private static io.github.sirp00m.npcortex.agent.FailureHistory read(CompoundTag task) {
++        var rows=new java.util.ArrayList<io.github.sirp00m.npcortex.agent.FailureHistory.Entry>();
++        for(var tag:task.getList(KEY,Tag.TAG_COMPOUND)) {
++            var r=(CompoundTag)tag;
++            rows.add(new io.github.sirp00m.npcortex.agent.FailureHistory.Entry(
++                r.getString("key"),r.getLong("fingerprint"),r.getInt("count"),r.getString("reason")));
++        }
++        return new io.github.sirp00m.npcortex.agent.FailureHistory(rows);
++    }
++    public static boolean blocked(CompoundTag task,String key,long fingerprint) {
++        return read(task).blocked(key,fingerprint);
++    }
++    public static void remember(CompoundTag task,String reason) {
++        var memory=read(task);
++        memory.record(task.getString("activeSkillKey"),task.getLong("activeFingerprint"),reason);
++        ListTag rows=new ListTag();
++        for(var entry:memory.entries()) {
++            CompoundTag row=new CompoundTag(); row.putString("key",entry.key());
++            row.putLong("fingerprint",entry.fingerprint()); row.putInt("count",entry.count());
++            row.putString("reason",entry.reason()); rows.add(row);
++        }
++        task.put(KEY,rows);
++    }
++    public static JsonArray observation(CompoundTag task) {
++        JsonArray out=new JsonArray();
++        var rows=task.getList(KEY,Tag.TAG_COMPOUND);
++        for(int i=Math.max(0,rows.size()-8);i<rows.size();i++) {
++            var row=rows.getCompound(i); JsonObject obj=new JsonObject();
++            // No coordinates exposed. Stable opaque task-local identity, diagnostic only.
++            obj.addProperty("attempt",i); obj.addProperty("reason",row.getString("reason"));
++            obj.addProperty("count",row.getInt("count")); out.add(obj);
++        }
++        return out;
++    }
++}
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskController.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskController.java
+@@ -62,7 +62,7 @@
+         if (!NPCortexConfig.WORLD_EDITS_ENABLED.get() || !owner.getServer().isSingleplayer()
+                 || !owner.hasPermissions(2)) return "[Task blocked: world edits require singleplayer, cheats and opt-in.]";
+         if (!GatherTaskPolicy.valid(item, count)) return "[Task blocked: unsupported resource or count (1–16).]";
+-        if (isBusy(npc) || AgenticTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
++        if (AgentRuntime.isBusy(npc))
+             return "[Task busy: cancel the current task/plan first.]";
+         CompoundTag t = new CompoundTag();
+         t.putString("item", item);
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/HarvestGoalSkills.java
+@@ -0,0 +1,338 @@
++package io.github.sirp00m.npcortex;
++
++import com.google.gson.JsonObject;
++import io.github.sirp00m.npcortex.entity.CompanionEntity;
++import net.minecraft.core.BlockPos;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.item.ItemEntity;
++import static io.github.sirp00m.npcortex.AgenticTaskController.*;
++
++/** Harvest-goal adapter. Each registered skill has its own executor; the runtime
++ * has no tool-name switch. New goal adapters may reuse navigation and inventory
++ * primitives without changing the Qwen transport or registry lifecycle. */
++final class HarvestGoalSkills {
++    private HarvestGoalSkills() {}
++    static void finish(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="finish";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            if (t.getInt("completedTrees") > 0 && WholeTreePolicy.complete(
++                    collected(npc, t), t.getInt("mined"), t.getInt("goal"),
++                    WholeTreeTracker.pending(owner.serverLevel(), t),
++                    TreeScaffold.size(t) + Navigation3DAccess.size(t) + WorldTerrainEdits.size(t))
++                    && !Navigation3DAccess.needsCleanup(t)) {
++                int count = collected(npc, t);
++                AgenticTaskController.finish(npc, t);
++                tell(owner, npc, "[Agentic task complete: " + count + "/" + t.getInt("goal")
++                        + " " + item + " verified in NPC bag; items NOT transferred.]");
++                return;
++            }
++            outcome = "[Action failed: finish denied; goal, complete tree, all mined logs collected or cleanup not verified.]";
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void pause(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="pause";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            tell(owner, npc, AgenticTaskController.pause(npc, "Qwen requested owner intervention"));
++            return;
++    }
++    static void wait(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="wait";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            outcome = "[Action confirmed: waited for new server observation.]";
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void pickup(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="pickup";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            int remaining = Math.max(0, t.getInt("mined") - collected(npc, t));
++            int taken = WorldActions.pickupForGather(owner, npc, item, remaining);
++            outcome = taken > 0 ? "[Action confirmed: picked up " + taken + " " + item + " into NPC bag.]"
++                    : "[Action failed: no reachable drops or NPC inventory full.]";
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void approach_drop(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="approach_drop";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            ItemEntity drop = BrainObservation.resolveDrop(owner, snapshot, ref, item);
++            if (drop == null || npc.distanceToSqr(drop) > 144.0D)
++                outcome = "[Action failed: dropped item no longer available.]";
++            else {
++                outcome = BrainSkills.approachDrop(owner, npc, drop, t);
++                if (outcome.startsWith("[Action started:")) {
++                    t.putString("state", "navigating_drop");
++                    t.putUUID("drop", drop.getUUID());
++                    t.putLong("navStart", npc.level().getGameTime());
++                    recordNavOrigin(npc, t);
++                    t.putString("lastResult", outcome);
++                    save(npc, t);
++                    return;
++                }
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void restore(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="restore";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            if (WorldTerrainEdits.size(t) == 0 && !Navigation3DAccess.needsCleanup(t) && TreeScaffold.size(t) == 0)
++                outcome = "[Action unchanged: no task-owned terrain changes to restore.]";
++            else {
++                t.putString("state", "cleanup");
++                t.putLong("cleanupStarted", npc.level().getGameTime());
++                t.putString("lastResult", "[Action started: restore only recorded task terrain.] ");
++                save(npc, t);
++                return;
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void descend(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="descend";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++            if (TreeScaffold.size(t) == 0 && !Navigation3DAccess.needsCleanup(t))
++                outcome = "[Action confirmed: no scaffold remains.]";
++            else {
++                t.putString("state", "cleanup");
++                t.putLong("cleanupStarted", npc.level().getGameTime());
++                t.putString("lastResult", "[Action started: dismantle only recorded scaffold blocks.]");
++                save(npc, t);
++                return;
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void mine(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="mine";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            // Inspect the tree BEFORE removing any logs. Once committed, only
++            // known members can be destroyed. No Qwen-supplied coordinates.
++            long[] proposedTree = null;
++            if (!WholeTreeTracker.isCommitted(t)) {
++                if (!WholeTreePolicy.canStartTree(t.getInt("completedTrees"), t.getInt("mined"),
++                        collected(npc, t), t.getInt("goal")))
++                    outcome = "[Action blocked: no additional tree is needed or task tree budget exhausted.]";
++                else {
++                    proposedTree = WholeTreeTracker.inspect(owner.serverLevel(), pos,
++                            new BlockPos(t.getInt("homeX"),t.getInt("homeY"),t.getInt("homeZ")));
++                    if (proposedTree == null || t.getInt("mined") + proposedTree.length > WholeTreePolicy.MAX_TASK_LOGS)
++                        outcome = "[Action blocked: tree not verified natural/bounded, or too large for task budget.]";
++                    else {
++                        BlockPos root = WholeTreeTracker.verifiedRoot(owner.serverLevel(), proposedTree);
++                        if (root == null) {
++                            outcome = "[Action blocked: natural tree root could not be verified.]";
++                        } else {
++                            outcome = BrainSkills.mine(owner, npc, pos, item);
++                            if (outcome.startsWith("[Action confirmed:")) {
++                                // Record this BEFORE any later choice of a branch-log
++                                // climb target. Tree root may already be air by then.
++                                t.putInt("wholeTreeRootX", root.getX());
++                                t.putInt("wholeTreeRootY", root.getY());
++                                t.putInt("wholeTreeRootZ", root.getZ());
++                                WholeTreeTracker.commit(t, proposedTree);
++                                t.putInt("mined", t.getInt("mined") + 1);
++                            }
++                        }
++                    }
++                }
++            } else if (!WholeTreeTracker.contains(t, pos)
++                    || !WholeTreePolicy.canMine(t.getInt("mined"),
++                            WholeTreeTracker.pending(owner.serverLevel(), t)))
++                outcome = "[Action blocked: not a remaining log on committed tree.]";
++            else {
++                outcome = BrainSkills.mine(owner, npc, pos, item);
++                if (outcome.startsWith("[Action confirmed:")) t.putInt("mined", t.getInt("mined") + 1);
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void clear_leaf(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="clear_leaf";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            outcome = BrainSkills.clearLeaf(owner, npc, pos);
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void clear_soft(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="clear_soft";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            if (!WholeTreeTracker.isCommitted(t))
++                outcome = "[Action blocked: must commit a verified natural tree before soil excavation.]";
++            else outcome = WorldTerrainEdits.clear(owner, npc, pos, t);
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void approach(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="approach";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            outcome = BrainSkills.approach(owner, npc, pos, t);
++            if (outcome.startsWith("[Action started:")) {
++                t.putString("state", "navigating_block");
++                t.putInt("targetX", pos.getX()); t.putInt("targetY", pos.getY()); t.putInt("targetZ", pos.getZ());
++                t.putLong("navStart", npc.level().getGameTime());
++                recordNavOrigin(npc, t);
++                t.putString("lastResult", outcome);
++                save(npc, t);
++                return;
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void navigate_3d(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="navigate_3d";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            if (!WholeTreeTracker.isCommitted(t) || !WholeTreeTracker.contains(t, pos))
++                outcome = "[Action blocked: 3D access requires a committed observed goal block.]";
++            else {
++                outcome = Navigation3DAccess.start(owner,npc,t,pos);
++                if (outcome.startsWith("[Action started:")) {
++                    t.putString("state", "access_3d"); t.putString("lastResult", outcome);
++                    save(npc,t); return;
++                }
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++    static void climb(BrainSkillRegistry.Context c, String ref) {
++        ServerPlayer owner=c.owner(); CompanionEntity npc=c.npc(); CompoundTag t=c.task();
++        JsonObject snapshot=c.world(); BlockPos origin=c.origin();
++        String tool="climb";
++        String item = t.getString("item");
++        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
++        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
++        String outcome;
++        if (!BrainSkills.validBlock(owner,npc,pos,item,t)) {
++            result(npc,t,tool,ref,"[Action blocked: target changed, unloaded or unauthorized.]",false);
++            return;
++        }
++            // The AI selects climb for a committed remaining log. The skill
++            // anchors to the verified *root* rather than accidentally treating
++            // a horizontal branch as a new vertical trunk.
++            if (!WholeTreeTracker.isCommitted(t) || !WholeTreeTracker.contains(t, pos)
++                    || !t.contains("wholeTreeRootX") || !t.contains("wholeTreeRootY")
++                    || !t.contains("wholeTreeRootZ")) {
++                outcome = "[Action blocked: no verified committed tree root for scaffold.]";
++            } else if (TreeScaffold.size(t) >= ScaffoldPolicy.MAX_HEIGHT) {
++                outcome = "[Action blocked: scaffold height limit reached; select another safe method.]";
++            } else {
++                t.putBoolean("treeLocked", true);
++                t.putInt("treeX", t.getInt("wholeTreeRootX"));
++                t.putInt("treeZ", t.getInt("wholeTreeRootZ"));
++                t.putInt("treeBaseY", t.getInt("wholeTreeRootY"));
++                t.putString("state", "scaffold_prepare");
++                t.putLong("navStart", npc.level().getGameTime());
++                t.putString("lastResult", "[Action started: guarded scaffold beside committed tree root, not branch target.]");
++                save(npc, t);
++                return;
++            }
++        boolean changed=outcome.startsWith("[Action confirmed:")
++            && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf") || tool.equals("clear_soft"));
++        result(npc,t,tool,ref,outcome,changed);
++        if ("paused".equals(t.getString("state"))) tell(owner,npc,status(npc));
++    }
++}
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/NPCortex.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/NPCortex.java
+@@ -33,6 +33,7 @@
+         MinecraftForge.EVENT_BUS.addListener(AutonomyController::tick);
+         MinecraftForge.EVENT_BUS.addListener(GatherTaskController::tick);
+         MinecraftForge.EVENT_BUS.addListener(AgenticTaskController::tick);
++        MinecraftForge.EVENT_BUS.addListener(AgentRuntime::clearTransient);
+     }
+ 
+     private static void registerCommands(RegisterCommandsEvent event) {
+@@ -154,6 +155,11 @@
+                                         .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
+                                                 "craft_item", StringArgumentType.getString(context, "item_id"))))))
+                 .then(Commands.literal("task")
++                        .then(Commands.literal("trace")
++                                .executes(context -> taskCommand(context.getSource().getPlayerOrException(), "trace", null))
++                                .then(Commands.argument("npc", StringArgumentType.word())
++                                        .executes(context -> taskCommand(context.getSource().getPlayerOrException(),
++                                                "trace", StringArgumentType.getString(context, "npc")))))
+                         .then(Commands.literal("gather")
+                                 .then(Commands.argument("request", StringArgumentType.greedyString())
+                                         .executes(context -> gatherCommand(context.getSource().getPlayerOrException(),
+@@ -379,6 +385,10 @@
+             player.sendSystemMessage(Component.literal("NPCortex: No matching loaded owned NPC."));
+             return 0;
+         }
++        if ("trace".equals(operation)) {
++            player.sendSystemMessage(Component.literal(AgenticTaskController.trace(npc)));
++            return 1;
++        }
+         String result = AgenticTaskController.isBusy(npc) ? switch (operation) {
+             case "cancel" -> AgenticTaskController.cancel(npc);
+             case "resume" -> AgenticTaskController.resume(npc);
+@@ -406,6 +416,10 @@
+         }
+         ActionPlanRunner.cancel(npc);
+         GatherTaskController.cancel(npc);
++        if (GatherTaskController.isBusy(npc)) {
++            player.sendSystemMessage(Component.literal("Wait for safe task cleanup before follow/stay."));
++            return 0;
++        }
+         npc.getPersistentData().putInt("NPCortexRequestRevision",
+                 npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
+         npc.setFollowing(following);
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/Navigation3DAccess.java
+@@ -0,0 +1,226 @@
++package io.github.sirp00m.npcortex;
++
++import io.github.sirp00m.npcortex.agent.Navigation3D;
++import io.github.sirp00m.npcortex.agent.Navigation3D.Cell;
++import io.github.sirp00m.npcortex.entity.CompanionEntity;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.item.BlockItem;
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.phys.Vec3;
++
++/** Forge body adapter: rechecks every primitive, keeps an inverse route in NBT,
++ * and never teleports, force-loads, or accepts coordinates from the language model.
++ * Experimental bounded access, not full Survival navigation (no swimming/ladders).
++ */
++public final class Navigation3DAccess {
++    private static final String ROUTE="accessRoute", HISTORY="accessHistory";
++    private static final int TIMEOUT=160, MAX_HISTORY=96;
++    private Navigation3DAccess() {}
++    private static Cell cell(BlockPos p) { return new Cell(p.getX(),p.getY(),p.getZ()); }
++    private static BlockPos pos(Cell p) { return new BlockPos(p.x(),p.y(),p.z()); }
++    public static int size(CompoundTag task) {
++        int n=0;
++        for (var tag:task.getList(HISTORY,Tag.TAG_COMPOUND))
++            if (((CompoundTag)tag).getBoolean("placed")) n++;
++        return n;
++    }
++    public static boolean needsCleanup(CompoundTag task) { return !task.getList(HISTORY,Tag.TAG_COMPOUND).isEmpty(); }
++    private static boolean allowed(ServerPlayer owner, CompoundTag task, BlockPos p) {
++        return Math.abs(p.getX()-task.getInt("homeX"))<=WholeTreePolicy.MAX_HOME_HORIZONTAL
++            && Math.abs(p.getZ()-task.getInt("homeZ"))<=WholeTreePolicy.MAX_HOME_HORIZONTAL
++            && Math.abs(p.getY()-task.getInt("homeY"))<=WholeTreePolicy.MAX_HOME_VERTICAL
++            && owner.serverLevel().isLoaded(p) && owner.serverLevel().getWorldBorder().isWithinBounds(p);
++    }
++    private static boolean clear(ServerPlayer owner, CompoundTag task, BlockPos p) {
++        if (!allowed(owner,task,p)) return false;
++        var state=owner.serverLevel().getBlockState(p);
++        // Air only: hazards such as fire and berry bushes are not safe body space.
++        return state.isAir() && state.getFluidState().isEmpty();
++    }
++    private static boolean support(ServerPlayer owner, CompoundTag task, BlockPos p) {
++        if (!allowed(owner,task,p)) return false;
++        var state=owner.serverLevel().getBlockState(p);
++        String id=BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
++        return state.getFluidState().isEmpty() && state.isFaceSturdy(owner.serverLevel(),p,Direction.UP)
++            && !id.equals("minecraft:magma_block") && !id.equals("minecraft:cactus")
++            && !id.endsWith("campfire") && !id.equals("minecraft:powder_snow");
++    }
++    private static boolean body(ServerPlayer owner, CompoundTag task, BlockPos p) {
++        return clear(owner,task,p) && clear(owner,task,p.above());
++    }
++    public static int materials(CompanionEntity npc, CompoundTag task) {
++        int n=0;
++        for(int i=0;i<npc.bag().getContainerSize();i++) {
++            var s=npc.bag().getItem(i);
++            String id=BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
++            // Never spend the resource whose inventory delta verifies this goal.
++            if (!s.isEmpty() && s.getItem() instanceof BlockItem && ScaffoldPolicy.validMaterial(id)
++                    && !id.equals(task.getString("item"))) n+=s.getCount();
++        }
++        return Math.min(n,Navigation3D.MAX_EDITS-size(task));
++    }
++    public static Navigation3D.Plan plan(ServerPlayer owner, CompanionEntity npc, CompoundTag task, BlockPos target) {
++        if (!BrainSkills.authorized(owner,npc) || target==null || !allowed(owner,task,target)
++                || !npc.onGround() || task.getList(HISTORY,Tag.TAG_COMPOUND).size()>=MAX_HISTORY-48) return null;
++        Cell start=cell(npc.blockPosition());
++        return Navigation3D.plan(new Navigation3D.World() {
++            public boolean allowed(Cell c) { return Navigation3DAccess.allowed(owner,task,pos(c))
++                && Math.abs(c.x()-start.x())<=9 && Math.abs(c.z()-start.z())<=9
++                && Math.abs(c.y()-start.y())<=12; }
++            public boolean clear(Cell c) { return Navigation3DAccess.clear(owner,task,pos(c)); }
++            public boolean support(Cell c) { return Navigation3DAccess.support(owner,task,pos(c)); }
++            public boolean goal(Cell c) {
++                Vec3 eye=new Vec3(c.x()+0.5,c.y()+npc.getEyeHeight(),c.z()+0.5);
++                return eye.distanceToSqr(Vec3.atCenterOf(target))<=InteractionReach.squared(owner.isCreative())
++                    && WorldBlockActions.visibleFrom(npc,eye,target);
++            }
++            public double estimate(Cell c) {
++                return Math.max(0,Math.sqrt(pos(c).distSqr(target))-3.0);
++            }
++        },start,materials(npc,task));
++    }
++    private static CompoundTag encode(Navigation3D.Step step) {
++        CompoundTag row=new CompoundTag();
++        row.putString("move",step.move().name());
++        row.putLong("from",pos(step.from()).asLong()); row.putLong("to",pos(step.to()).asLong());
++        if(step.placed()!=null) row.putLong("blockPos",pos(step.placed()).asLong());
++        return row;
++    }
++    public static String start(ServerPlayer owner, CompanionEntity npc, CompoundTag task, BlockPos target) {
++        var route=plan(owner,npc,task,target);
++        if(route==null) return "[Action failed: bounded 3D search found no safe supported route with current materials.]";
++        if(route.steps().isEmpty()) return "[Action unchanged: target already accessible.]";
++        ListTag steps=new ListTag();
++        for(var step:route.steps()) steps.add(encode(step));
++        task.put(ROUTE,steps); task.putInt("accessIndex",0);
++        task.putLong("accessTarget",target.asLong()); task.putLong("accessStepAt",npc.level().getGameTime());
++        task.remove("accessJump"); task.remove("accessPlaced");
++        return "[Action started: executing verified walk/pillar/bridge access route.]";
++    }
++    private static boolean at(CompanionEntity npc, BlockPos p) {
++        double dx=npc.getX()-p.getX()-0.5, dz=npc.getZ()-p.getZ()-0.5;
++        return npc.onGround() && npc.blockPosition().getY()==p.getY() && dx*dx+dz*dz<=0.09;
++    }
++    private static void move(CompanionEntity npc, BlockPos p) {
++        if(npc.getNavigation().isDone()) npc.getNavigation().moveTo(p.getX()+0.5,p.getY(),p.getZ()+0.5,0.8);
++        if(npc.distanceToSqr(Vec3.atBottomCenterOf(p))<1.5)
++            npc.getMoveControl().setWantedPosition(p.getX()+0.5,p.getY(),p.getZ()+0.5,0.6);
++    }
++    private static String place(ServerPlayer owner, CompanionEntity npc, CompoundTag task,
++            CompoundTag row, BlockPos p) {
++        if(!clear(owner,task,p) || owner.serverLevel().getBlockEntity(p)!=null
++                || !owner.serverLevel().getEntities(npc,new net.minecraft.world.phys.AABB(p)).isEmpty()
++                || npc.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(p)))
++            return "BLOCKED: placement occupied or changed";
++        for(int i=0;i<npc.bag().getContainerSize();i++) {
++            ItemStack s=npc.bag().getItem(i);
++            String id=BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
++            if(s.isEmpty() || !(s.getItem() instanceof BlockItem block)
++                    || !ScaffoldPolicy.validMaterial(id) || id.equals(task.getString("item"))) continue;
++            var state=block.getBlock().defaultBlockState();
++            if(!state.isSolidRender(owner.serverLevel(),p) || !state.canSurvive(owner.serverLevel(),p)) continue;
++            if(!owner.serverLevel().setBlock(p,state,3)) return "BLOCKED: placement rejected";
++            s.shrink(1); row.putBoolean("placed",true); row.putString("block",id);
++            AgentRuntime.event(npc,task,"access_placed",row.getString("move") + " " + p + " " + id);
++            // Journal the mutation immediately, BEFORE waiting for landing/movement.
++            ListTag history=task.getList(HISTORY,Tag.TAG_COMPOUND);
++            history.add(row.copy()); task.put(HISTORY,history); task.putBoolean("accessPlaced",true);
++            return "WAIT";
++        }
++        return "BLOCKED: safe non-goal building material unavailable";
++    }
++    public static void abortRoute(CompanionEntity npc, CompoundTag task) {
++        npc.getNavigation().stop(); task.remove(ROUTE); task.remove("accessJump");
++        task.remove("accessPlaced"); task.remove("accessIndex");
++    }
++    public static String tick(ServerPlayer owner, CompanionEntity npc, CompoundTag task) {
++        if(!BrainSkills.authorized(owner,npc)) return "BLOCKED: permission changed";
++        ListTag route=task.getList(ROUTE,Tag.TAG_COMPOUND);
++        int index=task.getInt("accessIndex");
++        if(index>=route.size()) {
++            BlockPos target=BlockPos.of(task.getLong("accessTarget"));
++            boolean reached=npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(target))<=InteractionReach.squared(owner.isCreative())
++                && WorldBlockActions.visible(npc,target);
++            abortRoute(npc,task);
++            return reached ? "DONE" : "BLOCKED: target not reachable after route";
++        }
++        if(npc.level().getGameTime()-task.getLong("accessStepAt")>TIMEOUT) return "BLOCKED: 3D primitive timed out";
++        CompoundTag row=route.getCompound(index);
++        BlockPos from=BlockPos.of(row.getLong("from")), to=BlockPos.of(row.getLong("to"));
++        String kind=row.getString("move");
++        if(!body(owner,task,to)) return "BLOCKED: route body space changed";
++        boolean building=!kind.equals("WALK");
++        if(!building || task.getBoolean("accessPlaced")) {
++            if(!support(owner,task,to.below())) return "BLOCKED: destination support changed";
++            if(at(npc,to)) {
++                if(!building && needsCleanup(task)) {
++                    ListTag history=task.getList(HISTORY,Tag.TAG_COMPOUND); history.add(row.copy()); task.put(HISTORY,history);
++                }
++                npc.getNavigation().stop(); task.putInt("accessIndex",index+1);
++                task.putLong("accessStepAt",npc.level().getGameTime());
++                task.remove("accessJump"); task.remove("accessPlaced");
++                return "WAIT";
++            }
++            if(!kind.equals("PILLAR")) move(npc,to);
++            return "WAIT";
++        }
++        if(kind.equals("PILLAR") && task.getBoolean("accessJump")) {
++            if(!support(owner,task,from.below())) return "BLOCKED: pillar support changed during jump";
++            double dx=npc.getX()-from.getX()-0.5,dz=npc.getZ()-from.getZ()-0.5;
++            if(dx*dx+dz*dz>0.16) return "BLOCKED: drift during pillar jump";
++            if(npc.getBoundingBox().minY>=from.getY()+1.02) return place(owner,npc,task,row,from);
++            return "WAIT";
++        }
++        if(!body(owner,task,from) || !support(owner,task,from.below())) return "BLOCKED: departure changed";
++        if(!at(npc,from)) { move(npc,from); return "WAIT"; }
++        npc.getNavigation().stop();
++        if(kind.equals("PILLAR")) {
++            if(!clear(owner,task,from.above(2))) return "BLOCKED: jump headroom changed";
++            task.putBoolean("accessJump",true); npc.getJumpControl().jump(); return "WAIT";
++        }
++        // A bridge extends the support face immediately beside the current floor.
++        BlockPos p=to.below();
++        if(from.getY()!=to.getY() || Math.abs(from.getX()-to.getX())+Math.abs(from.getZ()-to.getZ())!=1
++                || !support(owner,task,from.below())) return "BLOCKED: bridge lacks an adjacent support";
++        return place(owner,npc,task,row,p);
++    }
++    public static String cleanup(ServerPlayer owner, CompanionEntity npc, CompoundTag task) {
++        if(!BrainSkills.authorized(owner,npc)) return "BLOCKED: cleanup permission changed";
++        ListTag history=task.getList(HISTORY,Tag.TAG_COMPOUND);
++        if(history.isEmpty()) return npc.onGround() ? "DONE" : "WAIT";
++        CompoundTag row=history.getCompound(history.size()-1);
++        BlockPos from=BlockPos.of(row.getLong("from")), to=BlockPos.of(row.getLong("to"));
++        if(!npc.onGround()) return "WAIT";
++        boolean pillar=row.getString("move").equals("PILLAR");
++        BlockPos stand=pillar ? to : from;
++        if(!body(owner,task,stand) || !support(owner,task,stand.below())) return "BLOCKED: return route changed";
++        if(!at(npc,stand)) { move(npc,stand); return "WAIT"; }
++        npc.getNavigation().stop();
++        if(row.getBoolean("placed")) {
++            BlockPos p=BlockPos.of(row.getLong("blockPos"));
++            if(!allowed(owner,task,p) || !row.getString("block").equals(BuiltInRegistries.BLOCK.getKey(
++                    owner.serverLevel().getBlockState(p).getBlock()).toString()))
++                return "BLOCKED: recorded temporary block changed externally";
++            if(pillar && !support(owner,task,p.below())) return "BLOCKED: descent support missing";
++            if(npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(p))>InteractionReach.squared(owner.isCreative())
++                    || !WorldBlockActions.visible(npc,p)) return "BLOCKED: cleanup block not reachable";
++            if(!owner.serverLevel().getEntities(npc,new net.minecraft.world.phys.AABB(p).move(0,1,0)).isEmpty())
++                return "BLOCKED: another entity is on the temporary block";
++            if(!owner.serverLevel().setBlock(p,Blocks.AIR.defaultBlockState(),3)) return "BLOCKED: cleanup rejected";
++            var item=BuiltInRegistries.ITEM.get(new net.minecraft.resources.ResourceLocation(row.getString("block")));
++            var leftover=npc.bag().addItem(new ItemStack(item));
++            if(!leftover.isEmpty()) Block.popResource(owner.serverLevel(),p,leftover);
++        }
++        AgentRuntime.event(npc,task,"access_reversed",row.getString("move") + " " + from);
++        history.remove(history.size()-1); task.put(HISTORY,history);
++        return "WAIT"; // allow real one-block descent before reporting cleanup complete
++    }
++}
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeScaffold.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeScaffold.java
+@@ -43,12 +43,12 @@
+         return false;
+     }
+ 
+-    private static String material(CompanionEntity npc) {
++    private static String material(CompanionEntity npc, CompoundTag task) {
+         for (int slot = 0; slot < npc.bag().getContainerSize(); slot++) {
+             ItemStack s = npc.bag().getItem(slot);
+             if (s.isEmpty() || !(s.getItem() instanceof BlockItem)) continue;
+             String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
+-            if (ScaffoldPolicy.validMaterial(id)) return id;
++            if (ScaffoldPolicy.validMaterial(id) && !id.equals(task.getString("item"))) return id;
+         }
+         return "";
+     }
+@@ -64,7 +64,7 @@
+         if (!task.getBoolean("treeLocked")) return BLOCKED + "no locked tree";
+         if (size(task) >= ScaffoldPolicy.MAX_HEIGHT)
+             return BLOCKED + "maximum safe pillar height reached";
+-        if (material(npc).isBlank())
++        if (material(npc, task).isBlank())
+             return BLOCKED + "NPC needs a solid block (dirt/stone/cobble/planks/log) in bag for a temporary pillar";
+         if (!task.contains("pillarX")) {
+             BlockPos best = null;
+@@ -175,7 +175,7 @@
+         if (!ScaffoldPolicy.jumpClearance(npc.getBoundingBox().minY, y, offset(npc, x, z)))
+             return WAIT;
+         BlockPos pos = new BlockPos(x, y, z);
+-        String blockId = material(npc);
++        String blockId = material(npc, task);
+         if (blockId.isBlank()) return BLOCKED + "scaffold material ran out";
+         if (!level.isLoaded(pos) || !level.getBlockState(pos).isAir()
+                 || !level.getBlockState(pos.below()).isSolidRender(level, pos.below()))
+--- a/forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldActions.java
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldActions.java
+@@ -30,7 +30,10 @@
+             return "[Action blocked: NPC has an active agentic task.]";
+         if (GatherTaskController.isBusy(npc) && !"follow".equals(action) && !"stay".equals(action))
+             return "[Action blocked: NPC is gathering resources. Cancel its task first.]";
+-        if (GatherTaskController.isBusy(npc)) GatherTaskController.cancel(npc);
++        if (GatherTaskController.isBusy(npc)) {
++            GatherTaskController.cancel(npc);
++            if (GatherTaskController.isBusy(npc)) return "[Action blocked: task cleanup must finish first.]";
++        }
+         // An explicit owner command always supersedes a temporary autonomous retreat.
+         npc.clearRetreat();
+         return switch (action) {
+@@ -87,7 +90,7 @@
+                 || !owner.isAlive() || !npc.isAlive()
+                 || !owner.getUUID().equals(npc.getOwnerUUID()))
+             return "[Action blocked: only the nearby owner can control this NPC.]";
+-        if (GatherTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
++        if (AgentRuntime.isBusy(npc))
+             return "[Action blocked: NPC is busy with a task/plan; cancel that first.]";
+         int remaining = request.count();
+         int moved = 0;
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/EventBus.java
+@@ -0,0 +1,30 @@
++package io.github.sirp00m.npcortex.agent;
++
++import java.util.ArrayDeque;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.UUID;
++import java.util.function.Consumer;
++
++/** Server-thread, bounded diagnostic bus. Subscriber failures cannot abort a world edit. */
++public final class EventBus {
++    public record Event(UUID npc, String goal, String type, String detail, long tick) {}
++    private final ArrayDeque<Event> history = new ArrayDeque<>();
++    private final List<Consumer<Event>> listeners = new ArrayList<>();
++    private int listenerErrors;
++    public AutoCloseable subscribe(Consumer<Event> listener) {
++        listeners.add(listener);
++        return () -> listeners.remove(listener);
++    }
++    public void publish(Event event) {
++        if (history.size() >= 128) history.removeFirst();
++        history.addLast(event);
++        for (var listener : List.copyOf(listeners)) {
++            try { listener.accept(event); }
++            catch (RuntimeException ignored) { listenerErrors++; }
++        }
++    }
++    public List<Event> history() { return List.copyOf(history); }
++    public int listenerErrors() { return listenerErrors; }
++    public void clear() { history.clear(); listenerErrors = 0; }
++}
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/FailureHistory.java
+@@ -0,0 +1,34 @@
++package io.github.sirp00m.npcortex.agent;
++
++import java.util.ArrayList;
++import java.util.List;
++
++/** Task-local failure evidence keyed by stable target identity and observed conditions. */
++public final class FailureHistory {
++    public record Entry(String key,long fingerprint,int count,String reason) {}
++    private final List<Entry> rows=new ArrayList<>();
++    public FailureHistory(List<Entry> saved) {
++        for(var row:saved) {
++            if(row.key()==null || row.reason()==null || row.key().length()>160 || row.reason().length()>180
++                    || row.count()<1 || row.count()>2) continue;
++            if(rows.size()==32) rows.remove(0);
++            rows.add(row);
++        }
++    }
++    public boolean blocked(String key,long fingerprint) {
++        return rows.stream().anyMatch(r->r.key().equals(key)&&r.fingerprint()==fingerprint&&r.count()>=2);
++    }
++    public void record(String key,long fingerprint,String reason) {
++        if(key==null || key.isEmpty() || key.length()>160) return;
++        String bounded=reason.substring(0,Math.min(180,reason.length()));
++        for(int i=0;i<rows.size();i++) {
++            Entry old=rows.get(i);
++            if(old.key().equals(key)&&old.fingerprint()==fingerprint) {
++                rows.set(i,new Entry(key,fingerprint,Math.min(2,old.count()+1),bounded)); return;
++            }
++        }
++        if(rows.size()==32) rows.remove(0);
++        rows.add(new Entry(key,fingerprint,1,bounded));
++    }
++    public List<Entry> entries() { return List.copyOf(rows); }
++}
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/GoalState.java
+@@ -0,0 +1,30 @@
++package io.github.sirp00m.npcortex.agent;
++
++/** Goal lifecycle is separate from executor phases (jumping, walking, etc.). */
++public enum GoalState {
++    READY, THINKING, EXECUTING, VERIFYING, CLEANING, PAUSED, SUCCEEDED, CANCELLED;
++    public boolean terminal() { return this == SUCCEEDED || this == CANCELLED; }
++    public boolean permits(GoalState next) {
++        if (this == next) return true;
++        if (terminal()) return false;
++        if (next == PAUSED || next == CLEANING || next == CANCELLED) return true;
++        return switch (this) {
++            case READY -> next == THINKING || next == EXECUTING;
++            case THINKING -> next == EXECUTING || next == READY;
++            case EXECUTING -> next == VERIFYING;
++            case VERIFYING -> next == READY || next == SUCCEEDED;
++            case CLEANING -> next == VERIFYING || next == READY;
++            case PAUSED -> next == READY;
++            default -> false;
++        };
++    }
++    public static GoalState phase(String phase) {
++        return switch (phase) {
++            case "ready", "search" -> READY;
++            case "thinking" -> THINKING;
++            case "paused" -> PAUSED;
++            case "cleanup", "pillar_cleanup" -> CLEANING;
++            default -> EXECUTING;
++        };
++    }
++}
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/Navigation3D.java
+@@ -0,0 +1,88 @@
++package io.github.sirp00m.npcortex.agent;
++
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.List;
++import java.util.PriorityQueue;
++import java.util.Set;
++
++/** Bounded voxel search independent of trees, Forge and Qwen. Never mutates a world.
++ * WALK covers horizontal moves and one-block steps. PILLAR is a real jump/place;
++ * BRIDGE places one supported adjacent floor block before walking onto it.
++ * Weighted A* prioritizes usable routes over optimal material cost.
++ * Virtual supports are part of search identity, not merely the current position.
++ */
++public final class Navigation3D {
++    public record Cell(int x, int y, int z) {
++        public Cell add(int dx, int dy, int dz) { return new Cell(x+dx, y+dy, z+dz); }
++    }
++    public enum Move { WALK, PILLAR, BRIDGE }
++    public record Step(Move move, Cell from, Cell to, Cell placed) {}
++    public record Plan(List<Step> steps, int materials, int expanded) {
++        public Plan { steps = List.copyOf(steps); }
++    }
++    public interface World {
++        boolean allowed(Cell cell); // includes loaded chunks, bounds and hazards
++        boolean clear(Cell cell);
++        boolean support(Cell cell);
++        boolean goal(Cell feet);
++        double estimate(Cell feet);
++    }
++    private record Key(Cell at, Set<Cell> placed) {}
++    private record Node(Cell at, Set<Cell> placed, List<Step> steps, double cost) {}
++    public static final int MAX_EDITS = 12, MAX_STEPS = 48, MAX_NODES = 1600;
++    private static boolean empty(World w, Cell p, Set<Cell> placed) {
++        return w.allowed(p) && !placed.contains(p) && w.clear(p);
++    }
++    private static boolean solid(World w, Cell p, Set<Cell> placed) {
++        return w.allowed(p) && (placed.contains(p) || w.support(p));
++    }
++    private static boolean body(World w, Cell p, Set<Cell> placed) {
++        return empty(w,p,placed) && empty(w,p.add(0,1,0),placed);
++    }
++    public static Plan plan(World world, Cell start, int materials) {
++        int budget = Math.max(0, Math.min(MAX_EDITS, materials));
++        if (!body(world,start,Set.of()) || !solid(world,start.add(0,-1,0),Set.of())) return null;
++        var open = new PriorityQueue<Node>(java.util.Comparator.comparingDouble(
++                n -> n.cost + 4.0 * world.estimate(n.at)));
++        var seen = new HashSet<Key>();
++        open.add(new Node(start,Set.of(),List.of(),0));
++        int expanded=0;
++        while (!open.isEmpty() && expanded < MAX_NODES) {
++            Node n = open.remove();
++            if (!seen.add(new Key(n.at,n.placed))) continue;
++            expanded++;
++            if (world.goal(n.at)) return new Plan(n.steps,n.placed.size(),expanded);
++            if (n.steps.size() >= MAX_STEPS) continue;
++            for (int[] d : new int[][] {{1,0},{-1,0},{0,1},{0,-1}}) {
++                for (int dy : new int[] {0,1,-1}) {
++                    Cell to=n.at.add(d[0],dy,d[1]);
++                    if (!body(world,to,n.placed) || !solid(world,to.add(0,-1,0),n.placed)) continue;
++                    // Up/down transitions need clearance through the swept upper corner.
++                    if (dy==1 && !empty(world,n.at.add(0,2,0),n.placed)) continue;
++                    if (dy==-1 && !empty(world,to.add(0,2,0),n.placed)) continue;
++                    offer(open,n,Move.WALK,to,null,1.0+Math.abs(dy)*0.5);
++                }
++                Cell to=n.at.add(d[0],0,d[1]), floor=to.add(0,-1,0);
++                if (n.placed.size()<budget && body(world,to,n.placed)
++                        && empty(world,floor,n.placed) && solid(world,n.at.add(0,-1,0),n.placed))
++                    offer(open,n,Move.BRIDGE,to,floor,4.0);
++            }
++            Cell up=n.at.add(0,1,0);
++            if (n.placed.size()<budget && body(world,up,n.placed)
++                    && empty(world,n.at,n.placed) && solid(world,n.at.add(0,-1,0),n.placed))
++                offer(open,n,Move.PILLAR,up,n.at,4.5);
++        }
++        return null; // bounded-search exhaustion is NOT proof no route exists
++    }
++    private static void offer(PriorityQueue<Node> open, Node n, Move move, Cell to, Cell placed, double cost) {
++        // Bound queued allocations too, including duplicate states not yet expanded.
++        if (open.size() >= MAX_NODES * 4) return;
++        var edits=new HashSet<>(n.placed);
++        if (placed!=null) edits.add(placed);
++        var path=new ArrayList<>(n.steps);
++        path.add(new Step(move,n.at,to,placed));
++        open.add(new Node(to,Set.copyOf(edits),List.copyOf(path),n.cost+cost));
++    }
++    private Navigation3D() {}
++}
+--- /dev/null
++++ b/forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/SkillRegistry.java
+@@ -0,0 +1,44 @@
++package io.github.sirp00m.npcortex.agent;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++import java.util.Set;
++import java.util.function.BiConsumer;
++import java.util.function.BiPredicate;
++
++/** Generic lifecycle contract. Registration is immutable once the runtime starts. */
++public final class SkillRegistry<C> {
++    public enum Target { NONE, BLOCK, DROP, ITEM }
++    public record Skill<C>(String id, Target target, String description,
++            BiPredicate<C, String> precondition, BiConsumer<C, String> execute,
++            BiPredicate<C, String> verify, BiConsumer<C, String> recovery) {}
++    private final Map<String, Skill<C>> skills = new LinkedHashMap<>();
++    private boolean frozen;
++    public void register(Skill<C> skill) {
++        if (frozen) throw new IllegalStateException("Registry already frozen");
++        if (skill == null || !skill.id().matches("[a-z][a-z0-9_]{0,31}")
++                || skill.target() == null || skill.description() == null
++                || skill.precondition() == null || skill.execute() == null
++                || skill.verify() == null || skill.recovery() == null)
++            throw new IllegalArgumentException("Incomplete skill contract");
++        if (skills.putIfAbsent(skill.id(), skill) != null)
++            throw new IllegalArgumentException("Duplicate skill: " + skill.id());
++    }
++    public void freeze() { frozen = true; }
++    public Set<String> ids() { return Set.copyOf(skills.keySet()); }
++    public Skill<C> get(String id) { return skills.get(id); }
++    public boolean execute(String id, C context, String target) {
++        Skill<C> skill = skills.get(id);
++        if (skill == null || !skill.precondition().test(context, target)) return false;
++        skill.execute().accept(context, target);
++        return true;
++    }
++    public boolean verify(String id, C context, String target) {
++        Skill<C> skill = skills.get(id);
++        return skill != null && skill.verify().test(context, target);
++    }
++    public void recover(String id, C context, String target) {
++        Skill<C> skill = skills.get(id);
++        if (skill != null) skill.recovery().accept(context, target);
++    }
++}
+--- /dev/null
++++ b/scripts/test-runtime.py
+@@ -0,0 +1,21 @@
++"""Run backend tests, executable Java core tests, and Forge syntax parsing.
++Uses the Java 17 compiler module; no Gradle, Minecraft or Ollama required.
++This does not replace a Forge build or the in-game acceptance suite.
++"""
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++
++ROOT = Path(__file__).resolve().parents[1]
++def run(*args):
++    subprocess.run(args, cwd=ROOT, check=True)
++
++run(sys.executable, '-m', 'unittest', 'discover', '-s', 'backend/tests')
++with tempfile.TemporaryDirectory(prefix='npcortex-runtime-') as temp:
++    package = ROOT/'forge-mod/src/main/java/io/github/sirp00m/npcortex'
++    sources = list((package/'agent').glob('*.java')) + [ROOT/'tests/runtime/RuntimeCoreTest.java',ROOT/'tests/java/JavaSyntaxSmokeCheck.java']
++    run('java','-m','jdk.compiler/com.sun.tools.javac.Main','--release','17','-d',temp,*map(str,sources))
++    run('java','-cp',temp,'io.github.sirp00m.npcortex.agent.RuntimeCoreTest')
++    run('java','-cp',temp,'JavaSyntaxSmokeCheck',str(ROOT/'forge-mod/src/main/java'))
++print('Backend/core/syntax checks passed. Forge build and real Minecraft acceptance NOT run by this script.')
+--- /dev/null
++++ b/tests/runtime/RuntimeCoreTest.java
+@@ -0,0 +1,143 @@
++package io.github.sirp00m.npcortex.agent;
++
++import java.util.HashSet;
++import java.util.Set;
++import java.util.UUID;
++import java.util.concurrent.atomic.AtomicInteger;
++import io.github.sirp00m.npcortex.agent.Navigation3D.Cell;
++
++/** Executable Java 17 tests; mock voxel geometry, not a Minecraft benchmark. */
++public final class RuntimeCoreTest {
++    private static int assertions;
++    private static void check(boolean value,String message) {
++        assertions++; if(!value) throw new AssertionError(message);
++    }
++    private static final class World implements Navigation3D.World {
++        final Set<Cell> blocks=new HashSet<>();
++        final Set<Cell> forbidden=new HashSet<>();
++        Cell goal;
++        World(Cell goal) { this.goal=goal; }
++        public boolean allowed(Cell p) { return Math.abs(p.x())<=8 && Math.abs(p.z())<=2 && p.y()>=0 && p.y()<=14 && !forbidden.contains(p); }
++        public boolean clear(Cell p) { return !blocks.contains(p); }
++        public boolean support(Cell p) { return blocks.contains(p); }
++        public boolean goal(Cell p) { return goal.equals(p); }
++        public double estimate(Cell p) { return Math.abs(goal.x()-p.x())+Math.abs(goal.y()-p.y())+Math.abs(goal.z()-p.z()); }
++        void floor() { for(int x=-8;x<=8;x++) for(int z=-2;z<=2;z++) blocks.add(new Cell(x,0,z)); }
++    }
++    private static void replay(World w,Cell start,Navigation3D.Plan plan) {
++        check(plan!=null,"expected route");
++        Set<Cell> blocks=new HashSet<>(w.blocks), initial=Set.copyOf(w.blocks);
++        Cell at=start;
++        for(var step:plan.steps()) {
++            check(step.from().equals(at),"route continuity");
++            if(step.placed()!=null) {
++                check(!blocks.contains(step.placed()),"no overwrite");
++                if(step.move()==Navigation3D.Move.BRIDGE) check(blocks.contains(at.add(0,-1,0)),"bridge support");
++                if(step.move()==Navigation3D.Move.PILLAR) check(step.placed().equals(at),"pillar under jump");
++                blocks.add(step.placed());
++            }
++            at=step.to();
++            check(!blocks.contains(at)&&!blocks.contains(at.add(0,1,0)),"clear body");
++            check(blocks.contains(at.add(0,-1,0)),"floor support");
++        }
++        check(w.goal(at),"reached goal");
++        for(int i=plan.steps().size()-1;i>=0;i--) {
++            var step=plan.steps().get(i);
++            if(step.placed()!=null) blocks.remove(step.placed());
++            at=step.from();
++            check(blocks.contains(at.add(0,-1,0)),"reverse support");
++        }
++        check(at.equals(start)&&blocks.equals(initial),"inverse route restores initial geometry");
++    }
++    private static void navigation() {
++        Cell start=new Cell(0,1,0);
++        World flat=new World(new Cell(5,1,0)); flat.floor();
++        var p=Navigation3D.plan(flat,start,0); replay(flat,start,p); check(p.materials()==0,"walk consumes no blocks");
++        World pillar=new World(new Cell(0,8,0)); pillar.floor();
++        p=Navigation3D.plan(pillar,start,7); replay(pillar,start,p); check(p.materials()==7,"tall pillar beyond legacy 6");
++        check(Navigation3D.plan(pillar,start,6)==null,"insufficient building supplies");
++        World bridge=new World(new Cell(4,1,0)); bridge.blocks.add(start.add(0,-1,0));
++        p=Navigation3D.plan(bridge,start,4); replay(bridge,start,p); check(p.materials()==4,"bridge across gap");
++        check(Navigation3D.plan(bridge,start,0)==null,"no unsupported walking");
++        World mixed=new World(new Cell(3,4,0)); mixed.blocks.add(start.add(0,-1,0));
++        p=Navigation3D.plan(mixed,start,6); replay(mixed,start,p);
++        check(p.steps().stream().anyMatch(s->s.move()==Navigation3D.Move.PILLAR),"mixed route climbs");
++        check(p.steps().stream().anyMatch(s->s.move()==Navigation3D.Move.BRIDGE),"mixed route extends sideways");
++        World unloaded=new World(new Cell(1,1,0)); unloaded.floor(); unloaded.forbidden.add(unloaded.goal);
++        check(Navigation3D.plan(unloaded,start,12)==null,"unloaded/forbidden target");
++        World roof=new World(new Cell(0,4,0)); roof.floor();
++        for(int x=-8;x<=8;x++)for(int z=-2;z<=2;z++)roof.blocks.add(new Cell(x,3,z));
++        check(Navigation3D.plan(roof,start,12)==null,"cannot pillar through ceiling");
++        World inside=new World(new Cell(2,1,0)); inside.floor(); inside.blocks.add(start);
++        check(Navigation3D.plan(inside,start,12)==null,"collision at initial feet");
++        World step=new World(new Cell(2,2,0)); step.floor(); step.blocks.add(new Cell(2,1,0));
++        p=Navigation3D.plan(step,start,0); replay(step,start,p);
++        check(p.materials()==0,"walk up existing one-block step");
++        World empty=new World(start);
++        check(Navigation3D.plan(empty,start,12)==null,"airborne start rejected");
++        World max=new World(new Cell(0,14,0)); max.floor();
++        check(Navigation3D.plan(max,start,999)==null,"hard material cap");
++        World same=new World(start); same.floor();
++        check(Navigation3D.plan(same,start,0).steps().isEmpty(),"already reached no-op");
++    }
++    private static void lifecycle() {
++        GoalState state=GoalState.READY;
++        for(var next:new GoalState[]{GoalState.THINKING,GoalState.EXECUTING,GoalState.VERIFYING,GoalState.READY,
++                GoalState.THINKING,GoalState.PAUSED,GoalState.CLEANING,GoalState.VERIFYING,GoalState.CANCELLED}) {
++            check(state.permits(next),"valid lifecycle "+state+" -> "+next); state=next;
++        }
++        check(!GoalState.CANCELLED.permits(GoalState.EXECUTING),"cancel is terminal");
++        check(!GoalState.SUCCEEDED.permits(GoalState.READY),"success is terminal");
++        check(!GoalState.THINKING.permits(GoalState.SUCCEEDED),"model cannot report success");
++        check(!GoalState.READY.permits(GoalState.SUCCEEDED),"verification required");
++    }
++    private static void registry() {
++        SkillRegistry<AtomicInteger> r=new SkillRegistry<>();
++        var skill=new SkillRegistry.Skill<AtomicInteger>("increment",SkillRegistry.Target.NONE,"Test verified effect",
++                (c,t)->t.isEmpty(),(c,t)->c.incrementAndGet(),(c,t)->c.get()>0,(c,t)->c.set(0));
++        r.register(skill);
++        try {r.register(skill);throw new AssertionError("duplicate accepted");}catch(IllegalArgumentException expected){assertions++;}
++        r.freeze();
++        try {r.register(skill);throw new AssertionError("mutable registry");}catch(IllegalStateException expected){assertions++;}
++        var c=new AtomicInteger();
++        check(!r.execute("invented",c,""),"unknown skill rejected");
++        check(!r.execute("increment",c,"unobserved"),"failed precondition prevents effect");
++        check(c.get()==0,"no accidental execution");
++        check(r.execute("increment",c,""),"registered effect executed");
++        check(r.verify("increment",c,""),"verify effect");
++        r.recover("increment",c,""); check(c.get()==0,"recovery callback");
++        check(!r.verify("increment",c,""),"verification can fail");
++    }
++    private static void events() throws Exception {
++        EventBus bus=new EventBus(); AtomicInteger delivered=new AtomicInteger();
++        AutoCloseable sub=bus.subscribe(e->delivered.incrementAndGet());
++        bus.subscribe(e->{throw new IllegalStateException("observer must not break executor");});
++        UUID npc=UUID.randomUUID();
++        for(int i=0;i<200;i++)bus.publish(new EventBus.Event(npc,"goal","result","ok",i));
++        check(bus.history().size()==128,"bounded event history");
++        check(delivered.get()==200 && bus.listenerErrors()==200,"isolated event consumers");
++        sub.close(); bus.publish(new EventBus.Event(npc,"goal","cancel","ok",201));
++        check(delivered.get()==200,"unsubscribe");
++        bus.clear(); check(bus.history().isEmpty(),"server restart clears transient history");
++    }
++    private static void failures() {
++        FailureHistory memory=new FailureHistory(java.util.List.of());
++        memory.record("mine/block/123",7,"blocked line of sight");
++        check(!memory.blocked("mine/block/123",7),"one transient failure permits retry");
++        memory.record("approach/block/123",7,"no path");
++        memory.record("mine/block/123",7,"blocked again");
++        check(memory.blocked("mine/block/123",7),"interleaved failures remembered");
++        check(!memory.blocked("mine/block/124",7),"different target is independent");
++        check(!memory.blocked("mine/block/123",8),"changed physical evidence permits retry");
++        check(!memory.blocked("climb/block/123",7),"alternate skill remains available");
++        memory=new FailureHistory(memory.entries());
++        check(memory.blocked("mine/block/123",7),"save/reload preserves evidence");
++        for(int i=0;i<100;i++)memory.record("target/"+i,i,"x".repeat(300));
++        check(memory.entries().size()==32,"failure memory bounded");
++        check(memory.entries().get(0).reason().length()==180,"failure reason bounded");
++    }
++    public static void main(String[] args)throws Exception {
++        navigation(); lifecycle(); registry(); failures(); events();
++        System.out.println("Runtime core: "+assertions+" assertions passed (simulated voxels; NOT in-game).");
++    }
++}

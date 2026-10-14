@@ -19,11 +19,22 @@ try {
         $pkg = 'io.github.sirp00m.npcortex'
         $main = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskPolicy.java'
         $test = Join-Path $root 'forge-mod/src/test/java/io/github/sirp00m/npcortex/AgenticTaskPolicySelfTest.java'
-        & $javac.Source --release 17 -d $tempDir $main $test
+        $treeMain = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/WholeTreePolicy.java'
+        $treeTest = Join-Path $root 'forge-mod/src/test/java/io/github/sirp00m/npcortex/WholeTreePolicySelfTest.java'
+        $speciesMain = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeSpecies.java'
+        $speciesTest = Join-Path $root 'forge-mod/src/test/java/io/github/sirp00m/npcortex/TreeSpeciesSelfTest.java'
+        $gatherPolicy = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskPolicy.java'
+        $worldPolicy = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldInteractionPolicy.java'
+        $intent = Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskIntent.java'
+        & $javac.Source --release 17 -d $tempDir $main $test $treeMain $treeTest $speciesMain $speciesTest $gatherPolicy $worldPolicy $intent
         if ($LASTEXITCODE -ne 0) { throw 'Java 17 standalone policy compile FAILED.' }
         & $java.Source -cp $tempDir "$pkg.AgenticTaskPolicySelfTest"
         if ($LASTEXITCODE -ne 0) { throw 'Java policy tests FAILED.' }
-        Write-Host 'Java 17 language-level AgenticTaskPolicy tests PASSED.' -ForegroundColor Green
+        & $java.Source -cp $tempDir "$pkg.WholeTreePolicySelfTest"
+        if ($LASTEXITCODE -ne 0) { throw 'Whole-tree Java policy tests FAILED.' }
+        & $java.Source -cp $tempDir "$pkg.TreeSpeciesSelfTest"
+        if ($LASTEXITCODE -ne 0) { throw 'Tree species policy tests FAILED.' }
+        Write-Host 'Java 17 language-level policy tests PASSED.'  -ForegroundColor Green
     } finally {
         Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }

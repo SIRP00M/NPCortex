@@ -17,19 +17,19 @@ class OllamaProvider:
 
     def chat_brain(self, messages: list[dict[str, str]], schema: dict) -> str:
         """One bounded reasoning decision (not a multi-step monologue)."""
-        return self._request(messages, schema, predict=280, timeout=45)
+        return self._request(messages, schema, predict=320, timeout=45, context_tokens=8192)
 
     def chat(self, messages: list[dict[str, str]]) -> str:
         return self._request(messages)
 
     def _request(self, messages: list[dict[str, str]], schema: dict | None = None,
-                 predict: int | None = None, timeout: int = 90) -> str:
+                 predict: int | None = None, timeout: int = 90, context_tokens: int = 4096) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
             "think": False,
-            "options": {"num_ctx": 4096, "num_predict": 160},
+            "options": {"num_ctx": context_tokens, "num_predict": 160},
         }
         if schema is not None:
             payload["format"] = schema

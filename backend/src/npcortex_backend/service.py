@@ -166,25 +166,34 @@ class ChatService:
     def brain_step(self, character_id: str, player_id: str, message: str,
                    session_id: str, world: dict) -> dict:
         """One bounded Qwen decision; never records a fictional success in memory."""
-        from .brain import (BRAIN_POLICY, validate_state, validate_decision,
-                            schema_for_observation)
+        from .brain import (BRAIN_POLICY, BRAIN_POLICY_V3, validate_state, validate_decision,
+                            choice_schema_for_observation, validate_brain_choice,
+                            eligible_tool_refs, allowed_brain_choices)
         state = validate_state(world)
         character = load_character(self.packs_dir, character_id)
         scope = f"{character_id}:{session_id}"
         # Character pack and persistent memories inform personality/preferences.
         # World observations are untrusted and cannot modify the character identity.
+        runtime_v3 = state.get("skills", {}).get("version") == 3
+        policy = BRAIN_POLICY_V3 if runtime_v3 else BRAIN_POLICY
         system, _history = self._context(player_id, scope,
-                                         character.system_prompt + "\n\n" + BRAIN_POLICY,
+                                         character.system_prompt + "\n\n" + policy,
                                          character.display_name)
+        # Runtime v3 already carries an authoritative catalog plus choices.
+        # Avoid duplicating the entire enumeration and eligibility table in the
+        # user prompt; this reduces token pressure on an 8B local model.
         prompt = {"owner_request": message, "server_observation": state}
+        if not runtime_v3:
+            prompt.update({"candidate_refs_by_skill": eligible_tool_refs(state),
+                           "allowed_choices": allowed_brain_choices(state)})
         messages = [*system, {"role": "user", "content":
                     "READ-ONLY DATA: " + json.dumps(prompt, ensure_ascii=True)}]
         inference = getattr(self.provider, "chat_brain", self.provider.chat_structured)
         # An observation-scoped enum reduces ungrounded references before validation.
         # One Java request -> exactly one Qwen request: no hidden retries or budget bypass.
-        response = inference(messages, schema_for_observation(state))
+        response = inference(messages, choice_schema_for_observation(state))
         try:
-            return validate_decision(response, state)
+            return validate_brain_choice(response, state)
         except ValueError as exc:
             # Do not log full observations/character memories or untrusted model prose.
             # Tool/target names alone make the underlying failure diagnosable.
@@ -195,8 +204,8 @@ class ChatService:
                 except (ValueError, TypeError):
                     raw = None
             if isinstance(raw, dict):
-                tool = str(raw.get("tool", "<missing>"))[:48]
-                target = str(raw.get("target", "<missing>"))[:48]
+                tool = str(raw.get("tool", raw.get("choice", "<missing>")))[:48]
+                target = str(raw.get("target", ""))[:48]
                 logging.getLogger(__name__).warning(
                     "Brain decision rejected: %s; tool=%r target=%r", exc, tool, target)
             else:

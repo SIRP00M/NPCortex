@@ -33,6 +33,8 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(AutonomyController::tick);
         MinecraftForge.EVENT_BUS.addListener(GatherTaskController::tick);
         MinecraftForge.EVENT_BUS.addListener(AgenticTaskController::tick);
+        MinecraftForge.EVENT_BUS.addListener(CompanionMinedDrops::onEntityJoin);
+        MinecraftForge.EVENT_BUS.addListener(AgentRuntime::clearTransient);
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -154,6 +156,11 @@ public final class NPCortex {
                                         .executes(context -> debugItemAction(context.getSource().getPlayerOrException(),
                                                 "craft_item", StringArgumentType.getString(context, "item_id"))))))
                 .then(Commands.literal("task")
+                        .then(Commands.literal("trace")
+                                .executes(context -> taskCommand(context.getSource().getPlayerOrException(), "trace", null))
+                                .then(Commands.argument("npc", StringArgumentType.word())
+                                        .executes(context -> taskCommand(context.getSource().getPlayerOrException(),
+                                                "trace", StringArgumentType.getString(context, "npc")))))
                         .then(Commands.literal("gather")
                                 .then(Commands.argument("request", StringArgumentType.greedyString())
                                         .executes(context -> gatherCommand(context.getSource().getPlayerOrException(),
@@ -356,7 +363,7 @@ public final class NPCortex {
     private static int gatherCommand(ServerPlayer player, String request) {
         String[] parts = request.trim().split("\\s+");
         if (parts.length < 2 || parts.length > 3 || !parts[1].matches("[0-9]{1,3}")) {
-            player.sendSystemMessage(Component.literal("Usage: /npcortex task gather minecraft:oak_log 10 [npc]"));
+            player.sendSystemMessage(Component.literal("Usage: /npcortex task gather minecraft:spruce_log 10 [npc]"));
             return 0;
         }
         int amount = Integer.parseInt(parts[1]);
@@ -366,11 +373,11 @@ public final class NPCortex {
             player.sendSystemMessage(Component.literal("NPCortex: No matching loaded owned NPC."));
             return 0;
         }
-        String status = "minecraft:oak_log".equals(item)
+        String status = TreeSpecies.supportedLog(item)
                 ? AgenticTaskController.start(player, npc, "Gather " + amount + " " + item, item, amount)
                 : GatherTaskController.start(player, npc, item, amount);
         player.sendSystemMessage(Component.literal("NPCortex " + npc.getName().getString() + ": " + status));
-        return status.startsWith("[Task started:") || status.startsWith("[Agentic task started:") ? 1 : 0;
+        return status.startsWith("[Task started:") || status.startsWith("[Agentic whole-tree task started:") ? 1 : 0;
     }
 
     private static int taskCommand(ServerPlayer player, String operation, String selector) {
@@ -378,6 +385,10 @@ public final class NPCortex {
         if (npc == null) {
             player.sendSystemMessage(Component.literal("NPCortex: No matching loaded owned NPC."));
             return 0;
+        }
+        if ("trace".equals(operation)) {
+            player.sendSystemMessage(Component.literal(AgenticTaskController.trace(npc)));
+            return 1;
         }
         String result = AgenticTaskController.isBusy(npc) ? switch (operation) {
             case "cancel" -> AgenticTaskController.cancel(npc);
@@ -406,6 +417,10 @@ public final class NPCortex {
         }
         ActionPlanRunner.cancel(npc);
         GatherTaskController.cancel(npc);
+        if (GatherTaskController.isBusy(npc)) {
+            player.sendSystemMessage(Component.literal("Wait for safe task cleanup before follow/stay."));
+            return 0;
+        }
         npc.getPersistentData().putInt("NPCortexRequestRevision",
                 npc.getPersistentData().getInt("NPCortexRequestRevision") + 1);
         npc.setFollowing(following);

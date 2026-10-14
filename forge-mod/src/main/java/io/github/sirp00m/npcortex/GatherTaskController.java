@@ -43,6 +43,16 @@ public final class GatherTaskController {
         npc.getPersistentData().remove(TAG);
         npc.getNavigation().stop();
     }
+    private static int countInBag(CompanionEntity npc, String item) {
+        int count = 0;
+        for (int i = 0; i < npc.bag().getContainerSize(); i++) {
+            var stack = npc.bag().getItem(i);
+            if (!stack.isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM
+                    .getKey(stack.getItem()).toString().equals(item)) count += stack.getCount();
+        }
+        return count;
+    }
+
     public static String status(CompanionEntity npc) {
         if (!isBusy(npc)) return "[Task: idle.]";
         CompoundTag t = data(npc);
@@ -62,12 +72,13 @@ public final class GatherTaskController {
         if (!NPCortexConfig.WORLD_EDITS_ENABLED.get() || !owner.getServer().isSingleplayer()
                 || !owner.hasPermissions(2)) return "[Task blocked: world edits require singleplayer, cheats and opt-in.]";
         if (!GatherTaskPolicy.valid(item, count)) return "[Task blocked: unsupported resource or count (1–16).]";
-        if (isBusy(npc) || AgenticTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
+        if (AgentRuntime.isBusy(npc))
             return "[Task busy: cancel the current task/plan first.]";
         CompoundTag t = new CompoundTag();
         t.putString("item", item);
         t.putInt("goal", count);
         t.putInt("collected", 0);
+        t.putInt("initialBagCount", countInBag(npc, item));
         t.putInt("pendingLogs", 0); // blocks broken but drops not yet collected
         t.putInt("leavesCleared", 0);
         t.putString("state", SEARCH);
@@ -153,6 +164,23 @@ public final class GatherTaskController {
         int goal = t.getInt("goal");
         int count = t.getInt("collected");
         int pending = t.getInt("pendingLogs");
+        if (!t.contains("initialBagCount")) {
+            // Existing saved tasks created before this hotfix have no baseline.
+            t.putInt("initialBagCount", Math.max(0, countInBag(npc, item) - count));
+            save(npc, t);
+        }
+        // Passive auto-pickup writes directly to the NPC bag; reconcile the old
+        // task ledger before its state machine makes any decisions.
+        int observed = Math.max(0, countInBag(npc, t.getString("item"))
+                - t.getInt("initialBagCount"));
+        if (observed > count) {
+            int gained = observed - count;
+            count = observed;
+            pending = Math.max(0, pending - gained);
+            t.putInt("collected", count);
+            t.putInt("pendingLogs", pending);
+            save(npc, t);
+        }
         if (!GatherTaskPolicy.valid(item, goal) || count < 0 || count > goal
                 || pending < 0 || pending > goal) {
             clear(npc); return;
@@ -360,7 +388,7 @@ public final class GatherTaskController {
         if (!"minecraft:oak_log".equals(t.getString("item"))) return false;
         int cleared = t.getInt("leavesCleared");
         if (cleared >= TreeHarvestPolicy.MAX_LEAF_CLEAR) return false;
-        BlockPos leaf = WorldBlockActions.blockingNaturalOakLeaf(npc, log);
+        BlockPos leaf = WorldBlockActions.blockingNaturalOakLeaf(npc, log, owner.isCreative());
         if (leaf == null) return false;
         String status = WorldBlockActions.clearNaturalOakLeaf(owner, npc, leaf, log);
         if (!status.startsWith("[Action confirmed:")) return false;
@@ -420,7 +448,7 @@ public final class GatherTaskController {
             boolean nowVisible = nowReach && WorldBlockActions.visible(npc, pos);
             Stand stand = nowVisible ? null : findVisibleStand(level, npc, pos, reachSq);
             BlockPos leaf = oakTree && !nowVisible && stand == null && nowReach
-                    ? WorldBlockActions.blockingNaturalOakLeaf(npc, pos) : null;
+                    ? WorldBlockActions.blockingNaturalOakLeaf(npc, pos, owner.isCreative()) : null;
             if (!nowVisible && stand == null && leaf == null) continue;
             // Position-independent tier prevents leaf destruction when walking
             // around the trunk gives a clean line of sight.

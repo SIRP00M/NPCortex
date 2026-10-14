@@ -2,6 +2,8 @@ package io.github.sirp00m.npcortex;
 
 import com.google.gson.JsonObject;
 import io.github.sirp00m.npcortex.entity.CompanionEntity;
+import io.github.sirp00m.npcortex.agent.SafeRetreatPolicy;
+import io.github.sirp00m.npcortex.agent.GoalCompletionLedger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -16,7 +18,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 
-/** v0.8.5 pilot: persistent task ledger and bounded Observe->Qwen->Skill->Verify->Replan.
+/** v0.8.2 generalized overworld pilot: persistent task ledger and bounded Observe->Qwen->Skill->Verify->Replan.
  * No Java branch chooses which skill the agent SHOULD perform next.
  * Physical safety, authority, termination and result verification remain deterministic.
  * The server thread exclusively reads/writes world state; HTTP is always asynchronous.
@@ -28,13 +30,43 @@ public final class AgenticTaskController {
     private static final int MAX_FAILURES = AgenticTaskPolicy.MAX_FAILURES;
     private static final int MAX_STALLED = AgenticTaskPolicy.MAX_STALLED;
     private static final int MAX_SAME_FAILURES = AgenticTaskPolicy.MAX_SAME_FAILURES;
-    private static final int MAX_TICKS = 12000, NAV_TIMEOUT = 160;
+    private static final int MAX_TICKS = 24000, NAV_TIMEOUT = 160;
     private static final int POLL_TICKS = 10;
     private AgenticTaskController() {}
 
     public static boolean isBusy(CompanionEntity npc) { return npc.getPersistentData().contains(KEY); }
     private static CompoundTag task(CompanionEntity npc) { return npc.getPersistentData().getCompound(KEY); }
-    private static void save(CompanionEntity npc, CompoundTag t) { npc.getPersistentData().put(KEY, t); }
+    static UUID currentTaskId(CompanionEntity npc) {
+        return isBusy(npc) && task(npc).hasUUID("taskId") ? task(npc).getUUID("taskId") : null;
+    }
+    static void save(CompanionEntity npc, CompoundTag t) {
+        AgentRuntime.savePhase(npc, t);
+        npc.getPersistentData().put(KEY, t);
+    }
+    public static void clearTransient() { IN_FLIGHT.clear(); }
+    /** Surface a bounded, non-sensitive cause instead of hiding all planner failures. */
+    static String brainFailure(Throwable error) {
+        if (error == null) return "empty brain decision; inspect backend output";
+        Throwable root=error;
+        while ((root instanceof java.util.concurrent.CompletionException
+                || root instanceof java.util.concurrent.ExecutionException)
+                && root.getCause()!=null) root=root.getCause();
+        String message=root.getMessage()==null ? "" : root.getMessage();
+        if (message.contains("HTTP 400"))
+            return "backend rejected world observation (HTTP 400); inspect Backend console";
+        if (message.contains("HTTP 502"))
+            return "Ollama inference/decision validation failed (HTTP 502); inspect Backend console";
+        if (message.contains("HTTP 500"))
+            return "backend error (HTTP 500); inspect Backend console";
+        if (root instanceof java.net.http.HttpTimeoutException
+                || root instanceof java.net.SocketTimeoutException)
+            return "Ollama/Backend request timed out; inspect Backend console";
+        if (root instanceof java.net.ConnectException)
+            return "cannot connect to NPCortex Backend; verify dev-backend.ps1";
+        if (message.contains("Invalid registry tool/target response"))
+            return "invalid tool/target JSON received from Backend; inspect Backend console";
+        return "brain request failed ("+root.getClass().getSimpleName()+"); inspect Backend console";
+    }
     private static int itemCount(CompanionEntity npc, String id) {
         int n = 0;
         for (int i = 0; i < npc.bag().getContainerSize(); i++) {
@@ -44,10 +76,18 @@ public final class AgenticTaskController {
         }
         return n;
     }
-    private static int collected(CompanionEntity npc, CompoundTag t) {
+    private static boolean hasScaffoldMaterial(CompanionEntity npc) {
+        for (int i = 0; i < npc.bag().getContainerSize(); i++) {
+            ItemStack stack = npc.bag().getItem(i);
+            if (!stack.isEmpty() && ScaffoldPolicy.validMaterial(
+                    BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())) return true;
+        }
+        return false;
+    }
+    static int collected(CompanionEntity npc, CompoundTag t) {
         return Math.max(0, itemCount(npc, t.getString("item")) - t.getInt("initial"));
     }
-    private static void tell(ServerPlayer owner, CompanionEntity npc, String msg) {
+    static void tell(ServerPlayer owner, CompanionEntity npc, String msg) {
         owner.sendSystemMessage(Component.literal("NPCortex " + npc.getName().getString() + ": " + msg));
     }
     public static String status(CompanionEntity npc) {
@@ -56,26 +96,67 @@ public final class AgenticTaskController {
         return "[Agentic task " + t.getString("state") + ": " + t.getString("item")
                 + " " + collected(npc, t) + "/" + t.getInt("goal")
                 + " stored; mined=" + t.getInt("mined") + "; AI requests=" + t.getInt("calls")
-                + "/" + MAX_CALLS + "; failures=" + t.getInt("failures") + "/" + MAX_FAILURES
+                + " total; failures=" + t.getInt("failures") + "/" + MAX_FAILURES
                 + "; stalls=" + t.getInt("stalls") + "/" + MAX_STALLED
+                + "; lifecycle=" + t.getString("goalState")
+                + "; search=" + t.getString("accessSearch") + "; expanded=" + t.getInt("accessExpanded")
+                + "; explored=" + t.getInt("exploredSegments")
+                + "; decisionsWithoutGoalProgress=" + t.getInt("decisionsWithoutGoalProgress")
+                + "; missingLogs=" + GoalCompletionLedger.missing(t.getInt("mined"),collected(npc,t),Navigation3DAccess.borrowed(t,t.getString("item")))
+                + "; goalPhase=" + GoalCompletionLedger.phase(WholeTreeTracker.isCommitted(t),
+                        npc.level() instanceof ServerLevel phaseLevel ? WholeTreeTracker.pending(phaseLevel,t) : 0,
+                        t.getInt("completedTrees"),t.getInt("mined"),collected(npc,t),
+                        Navigation3DAccess.borrowed(t,t.getString("item")),t.getInt("goal"),
+                        Navigation3DAccess.size(t)+TreeScaffold.size(t)+WorldTerrainEdits.size(t))
+                + "; harvestNavBlocked=" + t.getBoolean("harvestNavBlocked")
+                + "; retreatsWithoutMine=" + t.getInt("retreatWithoutMine")
+                + "; accessBlocks=" + Navigation3DAccess.size(t)
                 + "; scaffold=" + TreeScaffold.size(t)
+                + "; scaffoldMaterial=" + (BuildMaterials.available(npc,t)>0)
+                + "; usableBlocks=" + BuildMaterials.available(npc,t)
+                + "; materialMined=" + t.getInt("materialMined")
                 + "; observedDrops=" + t.getInt("observedDrops")
                 + "; pickupReady=" + t.getInt("observedPickupReady")
+                + "; ownDropsNearby=" + TaskDropNavigator.nearbyTracked(npc,t)
+                + "; leafClearable=" + t.getInt("leafClearable")
+                + "; groundStands=" + t.getInt("groundStandCandidates")
+                + "; treeRemaining=" + (npc.level() instanceof ServerLevel sl
+                    ? WholeTreeTracker.pending(sl, t) : -1)
+                + "; treesDone=" + t.getInt("completedTrees")
+                + "; terrainEdits=" + WorldTerrainEdits.size(t)
                 + "; chosen=" + t.getString("lastChoice")
+                + "; reason=" + t.getString("lastBrainReason")
+                + "; options=" + t.getString("lastOffered")
                 + "; last=" + t.getString("lastResult") + "]";
+    }
+    public static String trace(CompanionEntity npc) {
+        CompoundTag t = isBusy(npc) ? task(npc) : npc.getPersistentData().getCompound("NPCortexLastGoal");
+        var journal = t.getList("runtimeEvents", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        StringBuilder out = new StringBuilder("[Runtime Sprint2 Fix5: " + t.getString("goalState") + "]");
+        for (int n=Math.max(0,journal.size()-10); n<journal.size(); n++) {
+            var row=journal.getCompound(n);
+            out.append("\n").append(row.getLong("tick")).append(" ").append(row.getString("type"))
+                .append(": ").append(row.getString("detail"));
+        }
+        return out.toString();
     }
     public static String start(ServerPlayer owner, CompanionEntity npc, String message, String item, int goal) {
         if (!BrainSkills.authorized(owner, npc) || owner.distanceToSqr(npc) > 64.0D)
             return "[Agentic task blocked: nearby owner, cheats and world-edits opt-in required.]";
-        if (!GatherTaskPolicy.valid(item, goal) || !"minecraft:oak_log".equals(item))
-            return "[Agentic task blocked: v0.8.5 pilot supports 1–16 oak logs only.]";
-        if (isBusy(npc) || GatherTaskController.isBusy(npc) || ActionPlanRunner.isBusy(npc))
+        if (!GatherTaskPolicy.valid(item, goal) || !TreeSpecies.supportedLog(item))
+            return "[Agentic task blocked: supported vanilla overworld wood log and quantity 1–16 required.]";
+        if (AgentRuntime.isBusy(npc))
             return "[Agentic task busy: cancel current NPC work first.]";
         CompoundTag t = new CompoundTag();
+        t.putString("goalType", "harvest_logs");
+        t.putLong("workAnchor",npc.blockPosition().asLong());
+        t.putString("originDimension", npc.level().dimension().location().toString());
+        t.putString("goalState", "READY");
         t.putUUID("taskId", UUID.randomUUID()); // forbid stale answers crossing task restarts
         t.putString("item", item); t.putInt("goal", goal); t.putInt("initial", itemCount(npc, item));
         t.putInt("calls", 0); t.putInt("failures", 0); t.putInt("sameFailures", 0);
         t.putInt("mined", 0); t.putInt("stalls", 0); t.putString("state", "ready");
+        t.putInt("completedTrees", 0);
         t.putString("request", message.substring(0, Math.min(message.length(), 400)));
         t.putString("lastResult", "[Task accepted by server; no tool executed yet.]");
         t.putInt("homeX", npc.blockPosition().getX());
@@ -85,21 +166,27 @@ public final class AgenticTaskController {
         t.putLong("nextAt", owner.level().getGameTime() + 1);
         t.putBoolean("previousFollow", npc.isFollowing());
         npc.setFollowing(false);
+        npc.clearRetreat();
         save(npc, t);
-        return "[Agentic task started: Qwen will select skills to collect " + goal + " " + item
-                + " into NPC bag; no delivery without separate command.]";
+        return "[Agentic whole-tree task started: collect at least " + goal + " " + item
+                + ", finish each committed verified tree, restore task terrain and keep ALL logs in NPC bag.]";
     }
     public static String cancel(CompanionEntity npc) {
         if (!isBusy(npc)) return "[Agentic task: none active.]";
         CompoundTag t = task(npc);
         IN_FLIGHT.remove(npc.getUUID());
         npc.getNavigation().stop();
-        if (AgenticTaskPolicy.mustCleanBeforeCancel(TreeScaffold.size(t))) {
+        if (AgenticTaskPolicy.mustCleanBeforeCancel(TreeScaffold.size(t))
+                || WorldTerrainEdits.size(t) > 0 || Navigation3DAccess.needsCleanup(t)
+                || "access_3d".equals(t.getString("state")) || "scaffold_jump".equals(t.getString("state"))) {
             t.putBoolean("cancelRequested", true);
+            Navigation3DAccess.abortRoute(npc, t);
+            t.putLong("cleanupStarted", npc.level().getGameTime());
             t.putString("state", "cleanup");
             save(npc, t);
             return "[Agentic task cancelled: guarded scaffold cleanup pending; bag retained.]";
         }
+        t.putBoolean("cancelRequested", true);
         finish(npc, t);
         return "[Agentic task cancelled: collected items retained in NPC bag.]";
     }
@@ -108,6 +195,10 @@ public final class AgenticTaskController {
         CompoundTag t = task(npc);
         IN_FLIGHT.remove(npc.getUUID());
         npc.getNavigation().stop();
+        if (!"paused".equals(t.getString("state"))) {
+            t.putString("pausedFrom", t.getString("state"));
+            t.putLong("pausedAt", npc.level().getGameTime());
+        }
         t.putString("state", "paused"); t.putString("lastResult", reason);
         save(npc, t);
         return "[Agentic task paused: " + reason + "; progress preserved.]";
@@ -116,23 +207,47 @@ public final class AgenticTaskController {
         if (!isBusy(npc)) return "[Agentic task: no saved work.]";
         CompoundTag t = task(npc);
         if (!"paused".equals(t.getString("state"))) return status(npc);
-        if (!AgenticTaskPolicy.canPlan(t.getInt("calls"), t.getInt("failures"),
-                t.getInt("sameFailures"), t.getInt("stalls")))
-            return "[Agentic task blocked: budget exhausted; cancel and issue a new task.]";
-        t.putString("state", t.getBoolean("cancelRequested") && TreeScaffold.size(t) > 0
-                ? "cleanup" : "ready");
+        boolean cleanup = t.getBoolean("cancelRequested") || "cleanup".equals(t.getString("pausedFrom"));
+        // A paused Fix8 world has no harvestNavBlocked field yet. Recover
+        // only an actual failed committed-log search from preserved evidence,
+        // so the new strategy is available WITHOUT restarting the whole tree.
+        if (!t.contains("harvestNavBlocked") && t.getString("lastChoice").startsWith("navigate_3d(")
+                && t.getString("lastResult").contains("bounded 3D search found no safe supported route"))
+            t.putBoolean("harvestNavBlocked",true);
+        // Explicit resume grants a fresh liveness window, not a new goal or
+        // permission to forget mutations. Stable failure evidence is retained.
+        t.putInt("failures",0); t.putInt("sameFailures",0); t.putInt("stalls",0);
+        if (t.contains("pausedAt")) {
+            t.putLong("started", t.getLong("started") + Math.max(0,npc.level().getGameTime()-t.getLong("pausedAt")));
+            if(t.contains("lastProgressAt")) t.putLong("lastProgressAt",t.getLong("lastProgressAt")
+                    +Math.max(0,npc.level().getGameTime()-t.getLong("pausedAt")));
+            t.remove("pausedAt");
+        }
+        t.putLong("lastProgressAt",npc.level().getGameTime());
+        if (!cleanup) Navigation3DAccess.abortRoute(npc,t);
+        t.putString("state", cleanup ? "cleanup" : "ready");
+        if (cleanup) {
+            Navigation3DAccess.abortRoute(npc, t);
+            t.putLong("cleanupStarted", npc.level().getGameTime());
+        }
         t.putLong("nextAt", npc.level().getGameTime() + 1);
         t.putString("lastResult", "[Task resumed after explicit owner approval.]");
         save(npc, t);
         return "[Agentic task resumed.]";
     }
-    private static void finish(CompanionEntity npc, CompoundTag t) {
+    static void finish(CompanionEntity npc, CompoundTag t) {
         IN_FLIGHT.remove(npc.getUUID());
         npc.getNavigation().stop();
+        if (!t.getBoolean("cancelRequested"))
+            AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.VERIFYING);
+        AgentRuntime.transition(npc, t, t.getBoolean("cancelRequested")
+                ? io.github.sirp00m.npcortex.agent.GoalState.CANCELLED
+                : io.github.sirp00m.npcortex.agent.GoalState.SUCCEEDED);
+        npc.getPersistentData().put("NPCortexLastGoal", t.copy());
         npc.getPersistentData().remove(KEY);
         npc.setFollowing(t.getBoolean("previousFollow"));
     }
-    private static void result(CompanionEntity npc, CompoundTag t, String tool, String ref,
+    static void result(CompanionEntity npc, CompoundTag t, String tool, String ref,
             String feedback, boolean actualProgress) {
         // A tool may have its precondition already satisfied without changing the
         // world or NPC position. This MUST NOT reset the no-progress watchdog.
@@ -140,7 +255,31 @@ public final class AgenticTaskController {
         boolean okay = feedback.startsWith("[Action confirmed:")
                 || feedback.startsWith("[Action started:")
                 || feedback.startsWith("[Action unchanged:");
-        String signature = tool + "/" + ref;
+        String signature = t.getString("activeSkillKey");
+        if (signature.isEmpty()) signature = tool + "/" + ref;
+        // A newly verified log is physical evidence that the last route worked.
+        // Permit one more bounded retreat/replan cycle after making such progress.
+        if (actualProgress && "mine".equals(tool)) {
+            t.putInt("retreatWithoutMine", 0);
+            t.putBoolean("harvestNavBlocked", false);
+        }
+        t.putBoolean("verifiedEffect", actualProgress);
+        ServerPlayer owner = npc.getOwnerUUID() == null ? null : npc.getServer().getPlayerList().getPlayer(npc.getOwnerUUID());
+        var context = new BrainSkillRegistry.Context(owner, npc, t, new JsonObject(), npc.blockPosition());
+        if (actualProgress && !BrainSkillRegistry.REGISTRY.verify(tool, context, ref)) {
+            actualProgress = false; okay = false;
+            feedback = "[Action failed: registry could not verify executor effect.]";
+        }
+        t.putString("lastResult", feedback.substring(0, Math.min(350, feedback.length())));
+        TaskContext.record(npc,t,tool,feedback);
+        // A verified work position is a better return anchor than the original
+        // task-start position, particularly after moving to another work site.
+        if(actualProgress && "mine".equals(tool) && owner!=null
+                && Navigation3DAccess.safeStand(owner,t,npc.blockPosition()))
+            t.putLong("workAnchor",npc.blockPosition().asLong());
+        AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.VERIFYING);
+        AgentRuntime.event(npc, t, actualProgress ? "skill_verified" : "skill_no_progress", tool + ": " + feedback);
+        if (!okay || !actualProgress) BrainSkillRegistry.REGISTRY.recover(tool, context, ref);
         if (!okay) {
             t.putInt("failures", t.getInt("failures") + 1);
             int same = AgenticTaskPolicy.nextSameFailures(t.getString("lastFailedTool"),
@@ -151,118 +290,44 @@ public final class AgenticTaskController {
             t.putInt("sameFailures", 0);
             t.putString("lastFailedTool", "");
         }
-        t.putInt("stalls", AgenticTaskPolicy.nextStalledSteps(t.getInt("stalls"), actualProgress));
+        if (actualProgress) {
+            t.putInt("failures",0);
+            t.putLong("lastProgressAt",npc.level().getGameTime());
+        }
+        // A refused physical route counts toward the failure watchdog, not the
+        // no-op watchdog as well. Qwen now gets a chance to select an alternative.
+        t.putInt("stalls", AgenticTaskPolicy.nextStalledSteps(
+                t.getInt("stalls"), actualProgress, !okay));
         t.putString("lastResult", feedback.substring(0, Math.min(350, feedback.length())));
         t.putLong("nextAt", npc.level().getGameTime() + POLL_TICKS);
         t.putString("state", "ready");
-        if (!AgenticTaskPolicy.canPlan(t.getInt("calls"), t.getInt("failures"),
+        if (!AgenticTaskPolicy.canContinue(t.getInt("calls"), t.getInt("failures"),
                 t.getInt("sameFailures"), t.getInt("stalls")))
             t.putString("state", "paused");
         save(npc, t);
     }
     private static void action(ServerPlayer owner, CompanionEntity npc, CompoundTag t,
             String tool, String ref, JsonObject snapshot, BlockPos origin) {
-        String item = t.getString("item");
-        t.putString("lastChoice", tool + (ref.isEmpty() ? "" : "(" + ref + ")"));
-        BlockPos pos = BrainObservation.resolveBlock(snapshot, ref, origin, item);
-        String outcome;
-        if (tool.equals("finish")) {
-            if (AgenticTaskPolicy.verifiedComplete(itemCount(npc, item), t.getInt("initial"),
-                    t.getInt("goal"), TreeScaffold.size(t))) {
-                int count = collected(npc, t);
-                finish(npc, t);
-                tell(owner, npc, "[Agentic task complete: " + count + "/" + t.getInt("goal")
-                        + " " + item + " verified in NPC bag; items NOT transferred.]");
-                return;
-            }
-            outcome = "[Action failed: finish denied; insufficient NPC inventory or scaffold remains.]";
-        } else if (tool.equals("pause")) {
-            tell(owner, npc, pause(npc, "Qwen requested owner intervention"));
-            return;
-        } else if (tool.equals("wait")) {
-            outcome = "[Action confirmed: waited for new server observation.]";
-        } else if (tool.equals("pickup")) {
-            int remaining = t.getInt("goal") - collected(npc, t);
-            int taken = WorldActions.pickupForGather(owner, npc, item, remaining);
-            outcome = taken > 0 ? "[Action confirmed: picked up " + taken + " " + item + " into NPC bag.]"
-                    : "[Action failed: no reachable drops or NPC inventory full.]";
-        } else if (tool.equals("approach_drop")) {
-            ItemEntity drop = BrainObservation.resolveDrop(owner, snapshot, ref, item);
-            if (drop == null || npc.distanceToSqr(drop) > 144.0D)
-                outcome = "[Action failed: dropped item no longer available.]";
-            else {
-                outcome = BrainSkills.approachDrop(owner, npc, drop, t);
-                if (outcome.startsWith("[Action started:")) {
-                    t.putString("state", "navigating_drop");
-                    t.putUUID("drop", drop.getUUID());
-                    t.putLong("navStart", npc.level().getGameTime());
-                    recordNavOrigin(npc, t);
-                    t.putString("lastResult", outcome);
-                    save(npc, t);
-                    return;
-                }
-            }
-        } else if (tool.equals("descend")) {
-            if (TreeScaffold.size(t) == 0)
-                outcome = "[Action confirmed: no scaffold remains.]";
-            else {
-                t.putString("state", "cleanup");
-                t.putString("lastResult", "[Action started: dismantle only recorded scaffold blocks.]");
-                save(npc, t);
-                return;
-            }
-        } else if (!BrainSkills.validBlock(owner, npc, pos, item, t)) {
-            outcome = "[Action blocked: target changed, unloaded, out of home range or not authorized.]";
-        } else if (tool.equals("mine")) {
-            if (t.getInt("mined") >= t.getInt("goal"))
-                outcome = "[Action blocked: enough blocks mined; collect drops before mining more.]";
-            else {
-                outcome = BrainSkills.mine(owner, npc, pos, item);
-                if (outcome.startsWith("[Action confirmed:")) t.putInt("mined", t.getInt("mined") + 1);
-            }
-        } else if (tool.equals("clear_leaf")) {
-            outcome = BrainSkills.clearLeaf(owner, npc, pos);
-        } else if (tool.equals("approach")) {
-            outcome = BrainSkills.approach(owner, npc, pos, t);
-            if (outcome.startsWith("[Action started:")) {
-                t.putString("state", "navigating_block");
-                t.putInt("targetX", pos.getX()); t.putInt("targetY", pos.getY()); t.putInt("targetZ", pos.getZ());
-                t.putLong("navStart", npc.level().getGameTime());
-                recordNavOrigin(npc, t);
-                t.putString("lastResult", outcome);
-                save(npc, t);
-                return;
-            }
-        } else if (tool.equals("climb")) {
-            if (!"minecraft:oak_log".equals(item) || (t.getBoolean("treeLocked")
-                    && (t.getInt("treeX") != pos.getX() || t.getInt("treeZ") != pos.getZ())))
-                outcome = "[Action blocked: another tree has an active task-owned scaffold.]";
-            else {
-                int base = pos.getY();
-                for (int y = pos.getY() - 1; y >= Math.max(owner.serverLevel().getMinBuildHeight(), pos.getY() - 8); y--) {
-                    BlockPos below = new BlockPos(pos.getX(), y, pos.getZ());
-                    if (!owner.serverLevel().isLoaded(below) || !owner.serverLevel().getBlockState(below)
-                            .is(net.minecraft.world.level.block.Blocks.OAK_LOG)) break;
-                    base = y;
-                }
-                t.putBoolean("treeLocked", true);
-                t.putInt("treeX", pos.getX()); t.putInt("treeZ", pos.getZ()); t.putInt("treeBaseY", base);
-                t.putString("state", "scaffold_prepare");
-                t.putLong("navStart", npc.level().getGameTime());
-                save(npc, t);
-                return;
-            }
-        } else {
-            outcome = "[Action blocked: unknown tool.]";
+        AgentRuntime.transition(npc, t, io.github.sirp00m.npcortex.agent.GoalState.EXECUTING);
+        BlockPos target = tool.equals("explore") ? ExplorationSkills.resolve(snapshot,ref,origin) : tool.endsWith("_material")
+                ? BrainObservation.resolveMaterial(snapshot,ref,origin)
+                : BrainObservation.resolveBlock(snapshot, ref, origin, t.getString("item"));
+        t.putString("activeSkill", tool); t.putString("activeRef", ref);
+        t.putString("activeSkillKey", FailureMemory.identity(tool, ref, snapshot, origin, t.getString("item")));
+        t.putLong("activeFingerprint", FailureMemory.fingerprint(npc, t, target));
+        t.remove("activeBlock");
+        if (target != null) t.putLong("activeBlock", target.asLong());
+        AgentRuntime.event(npc, t, "skill_started", tool + ":" + ref + "; reason=" + t.getString("lastBrainReason"));
+        try {
+            if (!BrainSkillRegistry.REGISTRY.execute(tool,
+                    new BrainSkillRegistry.Context(owner,npc,t,snapshot,origin),ref))
+                result(npc,t,tool,ref,"[Action blocked: skill/target not offered by server registry.]",false);
+        } catch (RuntimeException error) {
+            AgentRuntime.event(npc,t,"executor_exception",tool + ": " + error.getClass().getSimpleName());
+            tell(owner,npc,pause(npc,"executor exception; inspect task trace before resuming"));
         }
-        // State-changing effects are verified by the Minecraft executor, not the
-        // LLM reason string. Navigation progress is measured independently below.
-        boolean changed = outcome.startsWith("[Action confirmed:")
-                && (tool.equals("mine") || tool.equals("pickup") || tool.equals("clear_leaf"));
-        result(npc, t, tool, ref, outcome, changed);
-        if ("paused".equals(t.getString("state"))) tell(owner, npc, status(npc));
     }
-    private static void recordNavOrigin(CompanionEntity npc, CompoundTag t) {
+    static void recordNavOrigin(CompanionEntity npc, CompoundTag t) {
         t.putDouble("navOriginX", npc.getX());
         t.putDouble("navOriginY", npc.getY());
         t.putDouble("navOriginZ", npc.getZ());
@@ -277,12 +342,20 @@ public final class AgenticTaskController {
         UUID taskNonce = t.getUUID("taskId");
         t.putUUID("pendingRequest", requestNonce);
         // The snapshot + target origin are immutable for this particular Qwen response.
-        JsonObject world = BrainObservation.capture(owner, npc, t.getString("item"));
+        JsonObject world = BrainObservation.capture(owner, npc, t.getString("item"), t);
         int readyDrops = 0;
+        int clearableLeaves = 0;
+        int groundStandCandidates = 0;
         var observed = world.getAsJsonArray("drops");
         for (var entry : observed) {
             if (entry.getAsJsonObject().get("pickup_reachable").getAsBoolean()) readyDrops++;
         }
+        for (var entry : world.getAsJsonArray("targets")) {
+            if (entry.getAsJsonObject().get("leaf_clearable").getAsBoolean()) clearableLeaves++;
+            if (entry.getAsJsonObject().get("ground_stand_possible").getAsBoolean()) groundStandCandidates++;
+        }
+        t.putInt("leafClearable", clearableLeaves);
+        t.putInt("groundStandCandidates", groundStandCandidates);
         t.putInt("observedDrops", observed.size());
         t.putInt("observedPickupReady", readyDrops);
         BlockPos origin = npc.blockPosition().immutable();
@@ -297,6 +370,29 @@ public final class AgenticTaskController {
         world.addProperty("last_result", t.getString("lastResult"));
         world.addProperty("scaffold", TreeScaffold.size(t));
         world.addProperty("paused", false);
+        BrainSkillRegistry.attach(new BrainSkillRegistry.Context(owner,npc,t,world,origin));
+        var recovery=world.getAsJsonObject("task_context").getAsJsonObject("goal_completion");
+        if (GoalCompletionLedger.recoveryExhausted(
+                GoalCompletionLedger.Phase.valueOf(recovery.get("phase").getAsString()
+                        .toUpperCase(java.util.Locale.ROOT)),
+                t.getInt("decisionsWithoutGoalProgress"))) {
+            AgentRuntime.event(npc,t,"recovery_exhausted","Missing "
+                    + recovery.get("missing_logs").getAsInt() + " log(s) after bounded attempts; no item created.");
+            tell(owner,npc,pause(npc,"recovery budget exhausted; "
+                    + recovery.get("missing_logs").getAsInt()
+                    + " mined log(s) unaccounted for; inspect dropped items and task trace"));
+            IN_FLIGHT.remove(npc.getUUID(),requestNonce);
+            return;
+        }
+        // Keep the actual options shown to Qwen; a pause without options is a
+        // planner dead end, whereas pause with alternatives is a model choice.
+        StringBuilder offered = new StringBuilder();
+        for (var entry : world.getAsJsonObject("skills").getAsJsonArray("choices")) {
+            if (!offered.isEmpty()) offered.append(",");
+            if (offered.length() >= 180) { offered.append("..."); break; }
+            offered.append(entry.getAsString());
+        }
+        t.putString("lastOffered", offered.toString());
         int generation = t.getInt("calls") + 1;
         t.putInt("calls", generation);
         t.putString("state", "thinking");
@@ -313,12 +409,23 @@ public final class AgenticTaskController {
             CompoundTag now = task(npc);
             if (!now.hasUUID("taskId") || !taskNonce.equals(now.getUUID("taskId"))
                     || !now.hasUUID("pendingRequest") || !requestNonce.equals(now.getUUID("pendingRequest"))
-                    || now.getInt("calls") != generation || !"thinking".equals(now.getString("state"))) return;
+                    || now.getInt("calls") != generation || !"thinking".equals(now.getString("state"))
+                    || !now.getString("originDimension").equals(npc.level().dimension().location().toString())) return;
             if (!BrainSkills.authorized(online, npc)) {
                 tell(online, npc, pause(npc, "owner permissions or world-edit safeguard changed")); return;
             }
             if (error != null || decision == null) {
-                tell(online, npc, pause(npc, "Qwen unavailable or invalid structured decision")); return;
+                String reason = brainFailure(error);
+                AgentRuntime.event(npc, now, "brain_error", reason);
+                tell(online, npc, pause(npc, reason)); return;
+            }
+            now.putString("lastBrainReason",decision.reason());
+            if ("pause".equals(decision.tool())) {
+                // Preserve structures on pause; do not override Qwen with an
+                // unsolicited demolition/rebuild loop during unfinished work.
+                AgentRuntime.event(npc, now, "brain_pause", "reason=" + decision.reason()
+                        + "; offered=" + now.getString("lastOffered"));
+
             }
             action(online, npc, now, decision.tool(), decision.target(), world, origin);
         }));
@@ -330,10 +437,16 @@ public final class AgenticTaskController {
             if (!(entity instanceof CompanionEntity npc) || !isBusy(npc) || ++visited > 16) continue;
             CompoundTag t = task(npc);
             String phase = t.getString("state");
+            String dimension = level.dimension().location().toString();
+            if (!t.contains("originDimension")) t.putString("originDimension", dimension); // old saves
+            if (!dimension.equals(t.getString("originDimension"))) {
+                if (!"paused".equals(phase)) pause(npc,"NPC changed dimension; return to task world before resuming");
+                continue;
+            }
             ServerPlayer owner = npc.getOwnerUUID() == null ? null
                     : level.getServer().getPlayerList().getPlayer(npc.getOwnerUUID());
             if (owner == null || owner.level() != level || !owner.isAlive()) {
-                npc.getNavigation().stop(); continue;
+                if (!"paused".equals(phase)) pause(npc, "owner unavailable; resume when owner returns"); continue;
             }
             if ("paused".equals(phase)) continue;
             if ("cleanup".equals(phase) && !BrainSkills.authorized(owner, npc)) {
@@ -341,15 +454,43 @@ public final class AgenticTaskController {
                 continue;
             }
             if ("cleanup".equals(phase)) {
-                String feedback = TreeScaffold.dismantle(level, npc, t);
+                if (!t.contains("cleanupStarted")) t.putLong("cleanupStarted", level.getGameTime());
+                if (level.getGameTime() - t.getLong("cleanupStarted") > 2400) {
+                    tell(owner,npc,pause(npc,"cleanup timed out; temporary structures retained")); continue;
+                }
+                String feedback = Navigation3DAccess.needsCleanup(t)
+                        ? Navigation3DAccess.cleanup(owner,npc,t)
+                        : (TreeScaffold.size(t) > 0 ? TreeScaffold.dismantle(level,npc,t)
+                            : (npc.onGround() ? TreeScaffold.DONE : TreeScaffold.WAIT));
+                // General route must be undone before the legacy root pillar.
+                if (TreeScaffold.DONE.equals(feedback) && TreeScaffold.size(t) > 0) {
+                    save(npc,t); continue;
+                }
                 if (TreeScaffold.DONE.equals(feedback)) {
+                    if (WorldTerrainEdits.size(t) > 0) {
+                        String restored = WorldTerrainEdits.restore(level, npc, owner, t);
+                        if (!restored.startsWith("[Action confirmed:")) {
+                            tell(owner, npc, pause(npc, restored));
+                            continue;
+                        }
+                    }
                     if (t.getBoolean("cancelRequested")) {
                         finish(npc, t);
                         tell(owner, npc, "[Agentic task cancelled; scaffold safely dismantled; bag retained.]");
                     } else {
                         t.remove("treeLocked");
                         t.remove("pillarX"); t.remove("pillarY"); t.remove("pillarZ");
-                        result(npc, t, "descend", "", "[Action confirmed: recorded scaffold dismantled safely.]", true);
+                        AgentRuntime.event(npc, t, "safe_retreat_completed",
+                                "All recorded task scaffolds removed; inventory retained.");
+                        if (t.getBoolean("pauseAfterSafeRetreat")) {
+                            t.remove("pauseAfterSafeRetreat");
+                            tell(owner, npc, pause(npc,
+                                    "no further verified tree progress after repeated safe retreats; "
+                                    + "scaffold removed; owner intervention required"));
+                        } else {
+                            result(npc, t, "descend", "",
+                                    "[Action confirmed: recorded scaffold dismantled safely.]", true);
+                        }
                     }
                 } else if (feedback.startsWith(TreeScaffold.BLOCKED))
                     tell(owner, npc, pause(npc, "scaffold cleanup unsafe: " + feedback));
@@ -359,14 +500,53 @@ public final class AgenticTaskController {
             if (!BrainSkills.authorized(owner, npc)) {
                 tell(owner, npc, pause(npc, "owner moved away or safety rules changed")); continue;
             }
-            if (level.getGameTime() - t.getLong("started") > MAX_TICKS
-                    || ("ready".equals(phase) && !AgenticTaskPolicy.canPlan(
+            // Body-level mechanic: standing close to a task drop collects it like
+            // player pickup, without spending Qwen requests. No movement policy.
+            if (level.getGameTime() % 5 == 0) {
+                int before = collected(npc, t);
+                int need = Math.max(0, t.getInt("mined") - before);
+                if (need > 0) {
+                    int taken = WorldActions.pickupForGather(owner, npc, t.getString("item"), need);
+                    if (taken > 0) {
+                        t.putInt("stalls", 0);
+                        if (!"thinking".equals(phase))
+                            t.putString("lastResult", "[Server auto-pickup: " + taken
+                                    + " task logs added to NPC bag; total=" + collected(npc,t) + ".]");
+                        save(npc, t);
+                    }
+                }
+            }
+            if (WholeTreeTracker.isCommitted(t) && WholeTreeTracker.pending(level, t) == 0
+                    && collected(npc,t)+Navigation3DAccess.borrowed(t,t.getString("item"))>=t.getInt("mined")) {
+                WholeTreeTracker.releaseCompleted(t);
+                if(TreeScaffold.size(t)==0) t.remove("treeLocked"); // retain legacy pillar anchor while structure exists
+                t.putInt("stalls", 0);
+                t.putString("lastResult", "[Server verified entire committed tree harvested; decide whether to collect drops or another tree.]");
+                save(npc, t);
+            }
+            if (level.getGameTime() - (t.contains("lastProgressAt") ? t.getLong("lastProgressAt") : t.getLong("started")) > MAX_TICKS
+                    || ("ready".equals(phase) && !AgenticTaskPolicy.canContinue(
                             t.getInt("calls"), t.getInt("failures"), t.getInt("sameFailures"), t.getInt("stalls")))) {
-                tell(owner, npc, pause(npc, "task time/LLM/replanning budget exhausted")); continue;
+                tell(owner, npc, pause(npc, "no-progress watchdog or repeated failures exhausted; inspect task trace")); continue;
+            }
+            if ("access_3d".equals(phase)) {
+                String outcome = Navigation3DAccess.tick(owner,npc,t);
+                if (TreeScaffold.DONE.equals(outcome) || "SEGMENT".equals(outcome)) {
+                    if ("explore".equals(t.getString("activeSkill"))) ExplorationSkills.visited(npc,t);
+                    result(npc,t,t.getString("activeSkill"),t.getString("activeRef"),
+                            "SEGMENT".equals(outcome)
+                                ? "[Action confirmed: route segment traversed; target NOT reached yet; replan from new position.]"
+                                : TaskContext.reachedFeedback(t.getString("activeSkill")),true);
+                }
+                else if (outcome.startsWith(TreeScaffold.BLOCKED)) {
+                    Navigation3DAccess.abortRoute(npc,t);
+                    result(npc,t,t.getString("activeSkill"),t.getString("activeRef"),"[Action failed: " + outcome + "]",false);
+                } else save(npc,t);
+                continue;
             }
             if ("scaffold_prepare".equals(phase) || "scaffold_jump".equals(phase)) {
                 if (level.getGameTime() - t.getLong("navStart") > NAV_TIMEOUT) {
-                    result(npc, t, "climb", "", "[Action failed: guarded scaffold skill timed out.]", false);
+                    result(npc, t, "climb", t.getString("activeRef"), "[Action failed: guarded scaffold skill timed out.]", false);
                     continue;
                 }
                 String outcome = "scaffold_jump".equals(phase)
@@ -374,37 +554,58 @@ public final class AgenticTaskController {
                         : TreeScaffold.ascend(level, owner, npc, t, level.getGameTime());
                 if (TreeScaffold.DONE.equals(outcome)) {
                     if ("scaffold_jump".equals(phase))
-                        result(npc, t, "climb", "", "[Action confirmed: climbed one verified scaffold level.]", true);
+                        result(npc, t, "climb", t.getString("activeRef"), "[Action confirmed: climbed one verified scaffold level.]", true);
                     else { t.putString("state", "scaffold_jump"); save(npc, t); }
                 } else if (outcome.startsWith(TreeScaffold.BLOCKED)) {
-                    result(npc, t, "climb", "", "[Action failed: " + outcome + "]", false);
+                    result(npc, t, "climb", t.getString("activeRef"), "[Action failed: " + outcome + "]", false);
                 } else save(npc, t);
                 continue;
             }
-            if ("navigating_block".equals(phase) || "navigating_drop".equals(phase)) {
+            if ("navigating_block".equals(phase) || "navigating_drop".equals(phase)
+                    || "navigating_material".equals(phase)) {
+                // A passive pickup can consume the target ItemEntity while the NPC walks.
+                // An inventory delta is success, NOT "target vanished" / a failed route.
+                if ("navigating_drop".equals(phase)
+                        && collected(npc, t) > t.getInt("navCollectedBefore")) {
+                    npc.getNavigation().stop();
+                    result(npc, t, t.getString("activeSkill"), t.getString("activeRef"),
+                            "[Action confirmed: walking brought drops into physical auto-pickup range.]", true);
+                    continue;
+                }
                 boolean reached = false;
-                if ("navigating_block".equals(phase)) {
+                if ("navigating_block".equals(phase) || "navigating_material".equals(phase)) {
                     BlockPos target = new BlockPos(t.getInt("targetX"), t.getInt("targetY"), t.getInt("targetZ"));
-                    reached = BrainSkills.validBlock(owner, npc, target, t.getString("item"), t)
-                            && npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(target))
-                                  <= InteractionReach.squared(owner.isCreative())
-                            && WorldBlockActions.visible(npc, target);
+                    reached = "navigating_material".equals(phase)
+                            ? MaterialSource.eligible(owner,npc,t,target)
+                                  && MaterialSource.reachable(owner,npc,target)
+                            : BrainSkills.validBlock(owner,npc,target,t.getString("item"),t)
+                                  && npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(target))
+                                      <= InteractionReach.squared(owner.isCreative())
+                                  && WorldBlockActions.visible(npc,target);
                 } else {
                     var drop = level.getEntity(t.getUUID("drop"));
                     reached = drop instanceof ItemEntity item
                             && WorldActions.reachableGatherDrop(npc, item, owner.isCreative());
                 }
                 if (reached) {
+                    npc.getNavigation().stop();
                     boolean moved = navigationMoved(npc, t);
-                    result(npc, t, "approach", "",
+                    result(npc, t, t.getString("activeSkill"), t.getString("activeRef"),
                             moved ? "[Action confirmed: navigated to a newly reachable position.]"
                                   : "[Action unchanged: destination reachable, but NPC position did not change.]",
                             moved);
                 }
                 else if (npc.getNavigation().isDone() || level.getGameTime() - t.getLong("navStart") > NAV_TIMEOUT) {
                     npc.getNavigation().stop();
-                    result(npc, t, "approach", "", "[Action failed: navigation ended before target became reachable.]", false);
+                    result(npc, t, t.getString("activeSkill"), t.getString("activeRef"), "[Action failed: navigation ended before target became reachable.]", false);
                 }
+                continue;
+            }
+            if ("loot_navigate".equals(phase)) {
+                // Deterministic player-like retrieval of this task's real drops.
+                // No Qwen call is spent; the NPC must physically reach each item.
+                TaskDropNavigator.tick(owner,npc,t);
+                save(npc,t);
                 continue;
             }
             if ("thinking".equals(phase)) {
@@ -414,6 +615,12 @@ public final class AgenticTaskController {
                     t.putString("lastResult", "[Previous AI request interrupted; requesting new observation.]");
                     save(npc, t);
                 }
+                continue;
+            }
+            if ("ready".equals(phase) && level.getGameTime() % POLL_TICKS == 0
+                    && !IN_FLIGHT.containsKey(npc.getUUID())
+                    && TaskDropNavigator.startIfAny(owner,npc,t)) {
+                save(npc,t);
                 continue;
             }
             if (!"ready".equals(phase) || level.getGameTime() < t.getLong("nextAt")

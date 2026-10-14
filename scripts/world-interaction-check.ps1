@@ -12,6 +12,7 @@ try {
     try {
         Write-Host 'Compiling pure Java world policy tests...' -ForegroundColor Cyan
         & javac --release 17 -d $temp `
+            (Join-Path $root 'forge-mod\src\main\java\io\github\sirp00m\npcortex\TreeSpecies.java') `
             (Join-Path $root 'forge-mod\src\main\java\io\github\sirp00m\npcortex\WorldInteractionPolicy.java') `
             (Join-Path $root 'tests\java\WorldInteractionPolicyTest.java') `
             (Join-Path $root 'forge-mod\src\main\java\io\github\sirp00m\npcortex\InteractionReach.java') `

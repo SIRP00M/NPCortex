@@ -1,0 +1,215 @@
+{
+  "baseline_sha256": "9e6061ccb4d219f1ec24e6cd37884b9c148abc54016ece020457a7540b3eda9c",
+  "changes": [
+    {
+      "path": ".github/workflows/backend-tests.yml",
+      "change": "modified",
+      "before_sha256": "6a705204484ed9299dfc9826b9344aef18abc9adc14d2712747f4da3069b2d4b",
+      "after_sha256": "8187450087e24f31ed407166a833fd6f6fbd52f288a19c44923ceac17e0f835d"
+    },
+    {
+      "path": "ReadMe.md",
+      "change": "modified",
+      "before_sha256": "e805b53aadbf2431a6865f7497f2bc0c2fb8301414e309e7bcacb596fbfe6211",
+      "after_sha256": "5cc0b0cc448e286902868050dc8b863f0aaf36185f3fe5ccce3c7d18a8c31f81"
+    },
+    {
+      "path": "UPDATE_NOTES.md",
+      "change": "modified",
+      "before_sha256": "405133158b2d6d2684530fd663d479056287d0934051d9f8c68aea3a2b1aa4a5",
+      "after_sha256": "058588ef5ffdd7084d48ad56cdfaffe02ec98541d7d91e9ee440d32808b74177"
+    },
+    {
+      "path": "backend/src/npcortex_backend/brain.py",
+      "change": "modified",
+      "before_sha256": "8b624792373dffecaa19f8db084a117763bb85a896da494e513afdb9d6c81aed",
+      "after_sha256": "171a5f9361a98fccffc0c516c1dd491f3c0db9fa41ad0e10b766394619d20e22"
+    },
+    {
+      "path": "backend/tests/test_runtime_registry_v2.py",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "1ba3db4116c4e859df48559ae86fdd54e716422586b7a2dbc4c1dbb726b9c824"
+    },
+    {
+      "path": "backend/tests/test_tree_recovery_v082.py",
+      "change": "modified",
+      "before_sha256": "3db6926ea1485906e153fbd97832517e99640584b7ded2fd1c5bcfb03ca9add0",
+      "after_sha256": "43e7d985c01408175e8cc23005039b08e4478c9378a7c906566725cb8f46d93e"
+    },
+    {
+      "path": "backend/tests/test_tree_species_v082.py",
+      "change": "modified",
+      "before_sha256": "e72f7feefdb25fdcdb5f0282ec965ed71e02d5d79eabfa9eeb76ff398b13a440",
+      "after_sha256": "1bd6acb161131456eabd3d483eb0ceb33cbe3ef8c1548b84042c573799bf57ef"
+    },
+    {
+      "path": "backend/tests/test_whole_tree_v082.py",
+      "change": "modified",
+      "before_sha256": "6686b29746ecbf4674de409f568ddca85b18569051a88ac5109aa53df71efa7e",
+      "after_sha256": "58454cba7e409d10b09f606afb206a098597b08eb365ebe9483039952a135f0f"
+    },
+    {
+      "path": "docs/runtime-sprint1/FANCY_OAK_ACCEPTANCE.md",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "9c1627d034f082d89956aa7e9d662da9bb3856697564612e6406a010a9048d69"
+    },
+    {
+      "path": "docs/runtime-sprint1/README_TH.md",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "d20c36426a5fc36ea88df1f3641d0d81a574fa44744cd46784282a5a52652fc7"
+    },
+    {
+      "path": "docs/runtime-sprint1/VALIDATION.txt",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "5702ef8153f42d6468eae58afaa1c978e3b9983108734ff119b83a765ea44c33"
+    },
+    {
+      "path": "forge-mod/gradle/wrapper/gradle-wrapper.jar",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "ed2c26eba7cfb93cc2b7785d05e534f07b5b48b5e7fc941921cd098628abca58"
+    },
+    {
+      "path": "forge-mod/gradle/wrapper/gradle-wrapper.properties",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "0c0c22ccb8e653a13a7df19493b11fe5ce0f5fae7ee4835223d2d2ad028799da"
+    },
+    {
+      "path": "forge-mod/gradlew",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "fb3cbfe6d066ee52bc07f62ed61ff77bde195384f52496c94280a83008d9f531"
+    },
+    {
+      "path": "forge-mod/gradlew.bat",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "8e327fcb99d29ce0fe3ee2fec6e6a25de815a2df83a6a44a553dea89ffc92955"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/ActionPlanRunner.java",
+      "change": "modified",
+      "before_sha256": "65b16ad3f48dc82f703ec2109e35f217877cb253e6d09fc6b8d48e1ca0a47fc8",
+      "after_sha256": "ada497f37d04c91241e1a09c23cb1a46334f8e9997cdbf522b41d8c1afaa77cb"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/AgentRuntime.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "dc43ab787accfed2d0211efe499c7b1a9334394794958334d4770db150d63a9c"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java",
+      "change": "modified",
+      "before_sha256": "48b136bd08480dfd9498e7d69a4f97232e30cea6a0d59b3c09b05c33c640d539",
+      "after_sha256": "b4a7bd35564f6a890e02a392f141afe7292513809a00b89e6c03b46bb527e306"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainObservation.java",
+      "change": "modified",
+      "before_sha256": "15669dc255aba0ed233f3e97e0df30722f597eb833213c6cccf03dbf5ce6af3d",
+      "after_sha256": "0e781c20eb67fc5dd6dcfc66e4c8ea1badbc64e61b9057d5071ae4b6d6cfdf04"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkillRegistry.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "87ef21d76c0fa8aadb32f15508a437b4462f95040c812ceb05302f63942d96a5"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/ChatBridge.java",
+      "change": "modified",
+      "before_sha256": "57e5eb7b6672b56c9425fdcbd8d713ba1cb78ff78f6d70f1a2282aa918915e3a",
+      "after_sha256": "75f00b07eae501287614b37b243fb30caa3e4357d4a34a8e005cfe252fcad996"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/FailureMemory.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "384f95bbfb4f0ec14e278a0ef0a91889229c90ae734eff8e473fe38134565353"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/GatherTaskController.java",
+      "change": "modified",
+      "before_sha256": "ee63e31ecf648d4c76868e78c4eb900963104e7c5fbff5a87224726e967152e5",
+      "after_sha256": "9c7c3bd3b0170f3164107ba88696dad607601e6dc0267c970d10ae0092672a06"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/HarvestGoalSkills.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "1564e6f52cb680a2d0e0936e5f39470e19111372b2ec540bb8155e0eda168b07"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/NPCortex.java",
+      "change": "modified",
+      "before_sha256": "f867dd0a445d0c33c516e323bc82da56f8b3d8ffe1dd687620fcc3593124e462",
+      "after_sha256": "d92951788569a71fb124c02eb92401d345574ec0b44e036e709309a70bccb410"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/Navigation3DAccess.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "d12282693bb03c81cf0eba95447e768a576cbd94d0ada2d1479286bf4f9ebfe0"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/TreeScaffold.java",
+      "change": "modified",
+      "before_sha256": "bfdbf316009dc21b83c7ce8a2b97aafea793d019ddbe80095a9b952ba4e7052d",
+      "after_sha256": "f5143aeace1d29bb38404552ada09523d19d4b2f54ad0826fbb7a241dade3e6a"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WorldActions.java",
+      "change": "modified",
+      "before_sha256": "3d5f10aac89743fbd31fd436374d5f5b507be3e9465bc0e7a6e821b6512fbc5c",
+      "after_sha256": "337f049cbcf72fe55abd6669754fe110b3bcc39980cc4a69e665a4ba50890290"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/EventBus.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "82df727d5fe0f461e4efdaf06de1334d11000563c141aeee0acf4b03ef1e5bc8"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/FailureHistory.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "5e3a51f3dce6a4acae7424f414e573ecfe2210806e97ca2d9c1dc76ecdd66d59"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/GoalState.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "93be2718582a17ffcb36bac474baf0d0a23a1dc953af3cf2da80c71c1e3deb01"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/Navigation3D.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "9648c1857a12fbfdaf2ca6327e30da2cbb503e2a3725eb6218861623a861de6d"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/agent/SkillRegistry.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "dff26588494fe1aaa7374951c598cb9856bbc8fef1b6875bdbcbfc2ed8602b8d"
+    },
+    {
+      "path": "scripts/test-runtime.py",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "4126ed2a1e604118e643288767622cf0f1fd4b89fe86ad72b131e3c79d873b49"
+    },
+    {
+      "path": "tests/runtime/RuntimeCoreTest.java",
+      "change": "added",
+      "before_sha256": null,
+      "after_sha256": "a7f546951fc14227ec30f63a0bd7de9245fc229fe833fc68673d5b0e9fa2e811"
+    }
+  ]
+}

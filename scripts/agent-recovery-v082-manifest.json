@@ -1,0 +1,32 @@
+[
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java",
+    "old_sha256": "e225319be34604a8941f1c34178efa62c075888f206e46b71b18313a213030d7",
+    "new_sha256": "fd41714f3c4aea973cb056ea2d85af5510599b177fd3a74ab57de74b6dddfcb1"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkills.java",
+    "old_sha256": "814a5a34ef6aa04b4d3244696f45a31dff484a51c82e51a258975e57c25ceb9e",
+    "new_sha256": "990da01155a5e6ac639ab1590cf9d9398159c6e08092a807a8dc9784fb73bc8a"
+  },
+  {
+    "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WholeTreeTracker.java",
+    "old_sha256": "674255a230f58fffde462dc3361bf2b2fd26a0691602485cf32e55a8114c1b5b",
+    "new_sha256": "36775f41c80a580be63c66d4192f9a5bc9e53fbe199a9aefe8bb0ad1c98971ec"
+  },
+  {
+    "path": "backend/src/npcortex_backend/brain.py",
+    "old_sha256": "04abce5ca2121e38865a83c04dad87e4429c795350d8e4743b0a8f6198cd9fd7",
+    "new_sha256": "ba8dcb2a64ad8b8250b49c47bb757f499c65bfe1e8264526098d05641a75652f"
+  },
+  {
+    "path": "backend/tests/test_tree_recovery_v082.py",
+    "old_sha256": null,
+    "new_sha256": "a986978dea31c10a8bbbe209a5d932da138f7228cc974c0cfab94e2b466a7f68"
+  },
+  {
+    "path": "docs/releases/v0.8.2-alpha-agent-recovery-fix1.md",
+    "old_sha256": null,
+    "new_sha256": "124441b704ffecbe9b02c3e557e6d0cdd262f537cda76b9a3b00a7d0bce14621"
+  }
+]

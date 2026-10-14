@@ -1,3 +1,7 @@
+> **Development snapshot: Architecture Stabilization Sprint 1** — Registry v2, lifecycle, failure memory and experimental 3D access. See [Thai notes and validation limits](docs/runtime-sprint1/README_TH.md). Forge build and in-game Fancy Oak acceptance are still pending.
+
+> **Vanilla Trees Foundation 1 (development patch):** Added Vanilla 1.20.1 overworld wood registry, bounded branched/2x2 tree recognition, and species-matched leaf observations. **Not all trees are harvestable yet:** high branches, huge trees, Nether fungi, and complex navigation still need testing and new access skills. See [release experiment](docs/releases/v0.8.2-alpha-general-trees-foundation1.md).
+
 <div align="center">
 
 # NPCortex
@@ -8,7 +12,7 @@
 
 **Minecraft 1.20.1** · **Forge 47.4.10** · **Java 17** · **Python 3.10+** · **Ollama / Qwen 3 8B**
 
-**v0.8.1-alpha — Agentic AI Brain (Experimental)**
+**v0.8.2-alpha — Autonomous World Interaction & Whole-Tree Harvesting (Experimental)**
 
 [Features](#features) · [Quick Start](#quick-start) · [Custom NPCs](#create-your-own-npc) · [Actions](#supported-actions) · [Architecture](#architecture) · [Documentation](#documentation)
 
@@ -43,7 +47,7 @@ Character packs define *who an NPC is*. The **Qwen AI Brain** can decide *which 
 | **Autonomous awareness** | Opt-in threat detection, bounded retreat while following, and a single Qwen in-character warning (system fallback only if AI unavailable) |
 | **Per-NPC autonomy management** | Enable/disable by Character ID or UUID, or choose owned NPCs through ESC → NPCortex Manager; server checks ownership |
 | **Bounded world interactions (experimental)** | Singleplayer-with-cheats mining/placement of safe blocks and bag-only crafting of four supported recipes; steps work with the existing 8-step plan runner |
-| **Agentic AI Brain (v0.8.1-alpha pilot)** | Qwen chooses grounded skills for bounded `minecraft:oak_log` tasks using server observations, tool feedback, and replanning budgets |
+| **Agentic AI Brain (v0.8.2-alpha pilot)** | Qwen chooses grounded skills for bounded `minecraft:oak_log` tasks using server observations, tool feedback, and replanning budgets |
 | **Legacy gathering & task control** | Existing heuristic task flows remain compatible; task status, cancel/resume, and item storage use server-owned state |
 
 A companion can respond to a request such as:
@@ -54,7 +58,47 @@ A companion can respond to a request such as:
 
 This does **not** mean the NPC can automatically fight with that sword. Combat and more advanced activities need separate behavior implementations.
 
-## v0.8.1-alpha — Agentic AI Brain (Oak Log Pilot)
+**Agent Recovery Fix 2 (experimental):** Current-ray leaf obstruction and per-skill grounded target lists reduce wasteful `clear_leaf` requests when remaining logs are already visible or require a different approach. No Forge/In-Game verification has been completed for this patch; see [Leaf Recovery Fix 2](docs/releases/v0.8.2-alpha-leaf-recovery-fix2.md).
+
+## v0.8.2-alpha — Whole-Tree Harvesting Pilot (Experimental)
+
+> **Not yet Minecraft-verified.** This release changes the pilot from "stop when
+> enough logs are mined" to "finish each natural oak tree already started,
+> collect all mined log drops, and leave the harvested logs in the NPC bag."
+> Real in-game pathfinding, foliage recovery and full-tree harvesting must be
+> tested before calling this feature reliable.
+
+- **Requested count is a minimum.** If asked for 6 logs, the agent can harvest
+  all 8 logs of a committed oak tree. If the first full tree yielded 4, it can
+  select another natural tree and harvest all of that one too. Never transfer
+  items to the player without a separate order.
+- The server records all logs of a single conservative **natural-oak candidate**
+  *before* breaking its first log, and rejects ambiguous, very large, joined,
+  partly unloaded, or player-build-looking clusters. Minecraft offers no
+  infallible natural-vs-placed block provenance.
+- Qwen still chooses which tree/log/skill to attempt, rather than a scripted
+  cut/approach sequence. It can select **approach**, **mine**, **clear_leaf**,
+  limited **clear_soft** (one dirt/grass obstruction on a ray), **climb**,
+  **approach_drop**, **restore**, **descend**, **wait**, or **pause**.
+- Minecraft-side close-range pickup automatically inserts matching mined
+  oak log drops into the NPC bag (no per-item model call). Other items are not
+  auto-picked. This version does not add a visual suction animation.
+- A task cannot finish until a verified tree is complete, the required minimum
+  is reached, *all mined logs are accounted for in the NPC bag*, and temporary
+  scaffolds / recorded soil edits have been cleaned up. Paused/incomplete tasks
+  must never be described as successful.
+- Maximum 32 logs per committed tree, 64 mined logs across up to 4 trees,
+  2 recorded reversible dirt edits, and 80 total Qwen decisions per task.
+  These are bounded safety caps, **not** guarantees of completion.
+- **Test with an actual natural Oak tree.** A single manually placed Oak Log,
+  decorated log beam, or wood in a building is not accepted as a verified tree.
+  Use the legacy world-action features if you wish to manipulate such blocks.
+
+Run `./scripts/test-v082.ps1` for Python and standalone Java tests; then
+`./scripts/build-agentic-v085.ps1 -SkipTests` for Forge (old script names retained
+for compatibility). See [v0.8.2 release notes](docs/releases/v0.8.2-alpha.md).
+
+## Historical v0.8.1-alpha — Agentic AI Brain (Oak Log Pilot)
 
 This release integrates the development snapshots previously labeled **v0.8.4–v0.8.5.5** into the public **v0.8.1-alpha** milestone, building on the repository's v0.8.0 codebase. Historical prototype documentation retains its original filenames; those are **not** separate published releases.
 
@@ -80,7 +124,7 @@ Use a **backed-up singleplayer test world**, enable cheats and permitted world e
 /npcortex inventory
 ```
 
-For a paused task, use `/npcortex task resume`; cancel with `/npcortex task cancel`. Test with one easily accessible block before attempting a whole tree. The `task status` output includes `mined`, `stored`, `chosen`, `last`, `stalls`, `observedDrops`, and `pickupReady` for diagnosing a failed run. The current pilot accepts **1–16 oak logs**. The `pickup` skill is still an explicit model-selected action; *player-like automatic item magnet pickup is not implemented in this release*.
+For a paused task, use `/npcortex task resume`; cancel with `/npcortex task cancel`. **Historical v0.8.1 testing used one standalone Oak Log; the v0.8.2 whole-tree pilot now requires an actual recognizable natural Oak tree.** The `task status` output includes `mined`, `stored`, `chosen`, `last`, `stalls`, `observedDrops`, and `pickupReady` for diagnosing a failed run. The historical pilot accepted **1–16 oak logs**. At v0.8.1, `pickup` was explicit and automatic item pickup was not implemented; **v0.8.2 introduces close-range automatic inventory collection** without a visual magnet animation.
 
 **Observed during manual in-game testing:** a reachable oak log was mined and **1/1** was verified in Yui's NPC bag. **Known failure:** nearby oak leaves / terrain can prevent a safe visible standing position; multi-log tasks may pause after mining a block without collecting or navigating to subsequent targets. Removing obstructing foliage allowed the same area to complete. We have **not** proved whether the obstruction arises from line-of-sight, collision, or both. Do not describe navigation, multi-tree harvesting, automatic leaf clearance, automatic pickup, or generalized autonomy as complete.
 
@@ -94,7 +138,7 @@ For a paused task, use `/npcortex task resume`; cancel with `/npcortex task canc
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 
-The `v085` names are retained for compatibility with the development tooling; the **published release metadata is 0.8.1-alpha**. Unit tests, Forge builds, live Qwen inference, and in-game validation are **different checks**. A successful HTTP 200 is not proof of good tool choice or successful execution.
+The `v085` names are retained for compatibility with the development tooling; **published v0.8.2-alpha metadata uses 0.8.2-alpha**. Unit tests, Forge builds, live Qwen inference, and in-game validation are **different checks**. A successful HTTP 200 is not proof of good tool choice or successful execution.
 
 For source-level technical notes see [Agentic Brain pilot](docs/agentic-brain-v0.8.5.md) and [Navigation / Pickup affordances](docs/agentic-brain-v0.8.5.5.md). For the public milestone summary see [v0.8.1 release notes](docs/releases/v0.8.1-alpha.md).
 
@@ -485,3 +529,7 @@ Contributions, fixes, character pack examples, and documentation improvements ar
 Original NPCortex code is provided under the [MIT License](LICENSE). Third-party libraries, models, Minecraft assets, and independently contributed character skins may have separate licenses; review them before redistributing.
 
 NPCortex is a community-created project and is not affiliated with Mojang, Microsoft, Ollama, or the Qwen developers.
+
+### Experimental general access/material sprint
+
+This development snapshot includes AI-chosen material acquisition, reversible temporary construction using freshly mined goal logs, and 3D retrieval of stranded drops. These are reusable Skill primitives; ore-mining and structure-building goals still require separate task adapters. The matching Backend and Forge source must be used together. Forge gameplay acceptance remains unverified.

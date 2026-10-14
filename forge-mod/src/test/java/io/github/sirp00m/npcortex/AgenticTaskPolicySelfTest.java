@@ -5,7 +5,7 @@ public final class AgenticTaskPolicySelfTest {
     private static void check(boolean ok, String name) { if (!ok) throw new AssertionError(name); }
     public static void main(String[] args) {
         check(AgenticTaskPolicy.canPlan(0, 0, 0), "initial budget");
-        check(!AgenticTaskPolicy.canPlan(40, 0, 0), "LLM cap");
+        check(!AgenticTaskPolicy.canPlan(AgenticTaskPolicy.MAX_CALLS, 0, 0), "LLM cap");
         check(!AgenticTaskPolicy.canPlan(0, 8, 0), "replan cap");
         check(!AgenticTaskPolicy.canPlan(0, 2, 3), "repeat cap");
         check(AgenticTaskPolicy.nextSameFailures("mine/b0", "approach/b1", true, 2) == 1,
@@ -28,6 +28,12 @@ public final class AgenticTaskPolicySelfTest {
                 "stalled count saturates");
         check(AgenticTaskPolicy.nextStalledSteps(4, true) == 0,
                 "only actual progress resets stalled counter");
+        check(AgenticTaskPolicy.nextStalledSteps(4, false, true) == 4,
+                "failed route is covered by the independent failure budget");
+        check(AgenticTaskPolicy.nextStalledSteps(4, false, false) == 5,
+                "successful no-op is still charged to stall watchdog");
+        check(AgenticTaskPolicy.nextStalledSteps(4, true, true) == 0,
+                "verified progress always resets stall count");
         check(AgenticTaskPolicy.canPlan(4, 0, 0, 4),
                 "planner may recover before stalled cap");
         check(!AgenticTaskPolicy.canPlan(4, 0, 0, 5),
@@ -38,6 +44,6 @@ public final class AgenticTaskPolicySelfTest {
         check(!AgenticTaskPolicy.pickupNear(Double.NaN), "NaN rejection");
         check(!AgenticTaskPolicy.pickupNear(-1.0D), "negative distance rejection");
         check(!AgenticTaskPolicy.pickupNear(Double.POSITIVE_INFINITY), "infinite distance rejection");
-        System.out.println("AgenticTaskPolicy: 24 assertions passed");
+        System.out.println("AgenticTaskPolicy: 27 assertions passed");
     }
 }

@@ -8,7 +8,7 @@ public final class WorldInteractionPolicy {
     private static final Set<String> BREAKABLE = Set.of(
             "minecraft:dirt", "minecraft:grass_block", "minecraft:sand",
             "minecraft:gravel", "minecraft:stone", "minecraft:cobblestone",
-            "minecraft:oak_log", "minecraft:oak_planks");
+            "minecraft:oak_planks");
     private static final Set<String> PLACEABLE = Set.of(
             "minecraft:dirt", "minecraft:cobblestone", "minecraft:oak_planks",
             "minecraft:crafting_table", "minecraft:stone", "minecraft:sand");
@@ -21,10 +21,10 @@ public final class WorldInteractionPolicy {
             "minecraft:torch", new Recipe(Map.of("minecraft:coal", 1, "minecraft:stick", 1), 4));
 
     private WorldInteractionPolicy() {}
-    public static boolean breakable(String id) { return BREAKABLE.contains(id); }
+    public static boolean breakable(String id) { return BREAKABLE.contains(id) || TreeSpecies.supportedLog(id); }
     public static boolean placeable(String id) { return PLACEABLE.contains(id); }
     public static Recipe recipe(String id) { return RECIPES.get(id); }
     public static Set<String> recipeOutputs() { return RECIPES.keySet(); }
-    public static Set<String> breakableIds() { return BREAKABLE; }
+    public static Set<String> breakableIds() { java.util.Set<String> all = new java.util.HashSet<>(BREAKABLE); all.addAll(TreeSpecies.supportedLogs()); return java.util.Set.copyOf(all); }
     public static Set<String> placeableIds() { return PLACEABLE; }
 }

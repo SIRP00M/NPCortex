@@ -10,22 +10,24 @@ import java.util.regex.Pattern;
  */
 public final class GatherTaskIntent {
     public record Request(String itemId, int count) {}
-    private static final Map<String, String> ALIASES = Map.ofEntries(
-            Map.entry("oak log", "minecraft:oak_log"),
-            Map.entry("oak logs", "minecraft:oak_log"),
-            Map.entry("dirt", "minecraft:dirt"),
-            Map.entry("stone", "minecraft:stone"),
-            Map.entry("cobblestone", "minecraft:cobblestone"),
-            Map.entry("sand", "minecraft:sand"),
-            Map.entry("gravel", "minecraft:gravel"),
-            Map.entry("oak plank", "minecraft:oak_planks"),
-            Map.entry("oak planks", "minecraft:oak_planks"));
+    private static final Map<String, String> ALIASES = new java.util.HashMap<>();
+    static {
+        for (String logId : TreeSpecies.supportedLogs()) {
+            String species = logId.substring("minecraft:".length(), logId.length() - "_log".length());
+            ALIASES.put(species.replace('_', ' ') + " log", logId);
+            ALIASES.put(species.replace('_', ' ') + " logs", logId);
+        }
+        ALIASES.putAll(Map.of("dirt", "minecraft:dirt", "stone", "minecraft:stone",
+                "cobblestone", "minecraft:cobblestone", "sand", "minecraft:sand",
+                "gravel", "minecraft:gravel", "oak plank", "minecraft:oak_planks",
+                "oak planks", "minecraft:oak_planks"));
+    }
     private static final Pattern GATHER = Pattern.compile(
             "^(?:(?:please|just)\\s+)?(?:(?:(?:can|could|would|will) you(?: please)?|"
             + "i (?:want|need) you to|i'd like you to)\\s+)?(?:please\\s+)?"
             + "(?:collect|gather|mine|dig|harvest|fetch|chop(?: down)?|cut(?: down)?|get me|bring me)\\s+"
             + "(\\d{1,3})\\s+(?:blocks? of\\s+)?"
-            + "(minecraft:[a-z0-9_]+|oak logs?|oak planks?|cobblestone|gravel|stone|dirt|sand)"
+            + "(minecraft:[a-z0-9_]+|(?:oak|spruce|birch|jungle|acacia|dark oak|mangrove|cherry) logs?|oak planks?|cobblestone|gravel|stone|dirt|sand)"
             + "(?:\\s+(?:blocks?|pieces?|items?))?"
             + "(?:\\s+(?:for me|and (?:bring|give|hand) (?:them|it) (?:back )?to me|"
             + "and (?:bring|give|hand) (?:them|it) back|and (?:bring|give|hand) me (?:them|it)))?"

@@ -1,0 +1,51 @@
+{
+  "patch": "0.8.2-alpha-3d-ground-access-fix1",
+  "base": "0.8.2-alpha-vanilla-trees-foundation1-buildfix1",
+  "files": [
+    {
+      "path": "backend/src/npcortex_backend/brain.py",
+      "old_sha256": "183847da729e01a215c2f894bcb638f2081397b1f4c82a5a951c27e5d9a64524",
+      "new_sha256": "7999cb2fee4eeef39d08374b1a48feed80319a8147e488877de4654b8d1e6d06"
+    },
+    {
+      "path": "backend/tests/test_agentic_brain_v085.py",
+      "old_sha256": "56e739f46f8e2560bf534d06959138b05c81e92a04ef2466c8bbf9231c061cc4",
+      "new_sha256": "a90fb24a2332272fe1e23fb0cf67f1fcb8b9cf576292ce05fc41c5776db08998"
+    },
+    {
+      "path": "backend/tests/test_grounded_leaf_recovery_v082.py",
+      "old_sha256": "f65eb198ca3ea0bad99c3425d181d061736b86ff5118e16ffb7082ac43f33bc6",
+      "new_sha256": "e5d540bf1a1b4a74f0357c9fde9512bcdc77ce2ef4e48f41d75cf50faf5f8e78"
+    },
+    {
+      "path": "backend/tests/test_tree_species_v082.py",
+      "old_sha256": "95d3609d0b78858ce98fd125b21e18337287361080c82d3c5d2703152b859c61",
+      "new_sha256": "e72f7feefdb25fdcdb5f0282ec965ed71e02d5d79eabfa9eeb76ff398b13a440"
+    },
+    {
+      "path": "backend/tests/test_whole_tree_v082.py",
+      "old_sha256": "0a599bd2e8eb52b6e6d65e00df42680ff4fc8d3f61213a658a304e9f48198b50",
+      "new_sha256": "6686b29746ecbf4674de409f568ddca85b18569051a88ac5109aa53df71efa7e"
+    },
+    {
+      "path": "docs/releases/v0.8.2-alpha-ground-access-fix1.md",
+      "old_sha256": null,
+      "new_sha256": "72157a56b4a69e3e0e2bd441a7ddad9f78f1ca4acfb227a5ec6a2cd5c878c38b"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/AgenticTaskController.java",
+      "old_sha256": "591b34cbe2dc2b4f67ba96c459137aa008aa5e19c43732a63329291886a654ec",
+      "new_sha256": "48b136bd08480dfd9498e7d69a4f97232e30cea6a0d59b3c09b05c33c640d539"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainObservation.java",
+      "old_sha256": "2c7bf26b6c61c04e8c9c996b70ee967967323cdbb272f89275a6e3395530ea31",
+      "new_sha256": "15669dc255aba0ed233f3e97e0df30722f597eb833213c6cccf03dbf5ce6af3d"
+    },
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/BrainSkills.java",
+      "old_sha256": "4285f4ff85e4396f1a439d719099cd2caf1a308297b23922e890e5c44c825c21",
+      "new_sha256": "29e8bfc7740fb0e78452a786c90371d65e281207ac94ed06e91385a4dcb274a7"
+    }
+  ]
+}

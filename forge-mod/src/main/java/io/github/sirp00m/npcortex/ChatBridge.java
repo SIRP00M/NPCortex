@@ -257,17 +257,10 @@ public final class ChatBridge {
                     String tool = obj.get("tool").getAsString();
                     String target = obj.get("target").getAsString();
                     String reason = obj.get("reason").getAsString();
-                    if (!java.util.Set.of("mine", "approach", "pickup", "approach_drop",
-                            "clear_leaf", "climb", "descend", "wait", "finish", "pause").contains(tool)
-                            || !target.matches("(?:b|d)(?:[0-9]|1[0-5])|"
-                            ) || reason.length() > 180)
-                        throw new IllegalArgumentException("Invalid brain decision");
-                    boolean block = java.util.Set.of("mine", "approach", "clear_leaf", "climb").contains(tool);
-                    boolean drop = "approach_drop".equals(tool);
-                    if ((block && !target.matches("b(?:[0-9]|1[0-5])"))
-                            || (drop && !target.matches("d(?:[0-9]|1[0-5])"))
-                            || (!block && !drop && !target.isEmpty()))
-                        throw new IllegalArgumentException("Invalid target for skill");
+                    var skill=BrainSkillRegistry.REGISTRY.get(tool);
+                    if(skill==null || reason.length()>180
+                            || !io.github.sirp00m.npcortex.agent.TargetReferences.valid(skill.target(),target))
+                        throw new IllegalArgumentException("Invalid registry tool/target response");
                     return new BrainDecision(tool, target, reason);
                 });
     }

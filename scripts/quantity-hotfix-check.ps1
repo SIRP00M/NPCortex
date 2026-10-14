@@ -11,6 +11,7 @@ try {
     try {
         $javaDir = Join-Path $root 'forge-mod\src\main\java\io\github\sirp00m\npcortex'
         & javac --release 17 -d $tmp `
+            (Join-Path $javaDir 'TreeSpecies.java') `
             (Join-Path $javaDir 'GatherTaskPolicy.java') `
             (Join-Path $javaDir 'GatherTaskIntent.java') `
             (Join-Path $javaDir 'BulkTransferIntent.java') `

@@ -27,6 +27,7 @@ public final class ActionPlanRunner {
     private static final Map<UUID, RunningPlan> ACTIVE = new HashMap<>();
 
     private ActionPlanRunner() {}
+    public static void clearTransient() { ACTIVE.clear(); }
 
     private static final class RunningPlan {
         final UUID npcId;
@@ -76,7 +77,10 @@ public final class ActionPlanRunner {
         if (GatherTaskController.isBusy(npc)) {
             String first = steps.get(0).action();
             if (steps.size() == 1 && ("follow".equals(first) || "stay".equals(first)))
+                {
                 GatherTaskController.cancel(npc);
+                if (GatherTaskController.isBusy(npc)) return "[Plan busy: safe task cleanup must finish first.]";
+            }
             else return "[Plan busy: NPC is gathering. Cancel that task first.]";
         }
         if (ACTIVE.containsKey(npc.getUUID())) {

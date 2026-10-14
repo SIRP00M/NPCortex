@@ -2,6 +2,7 @@ package io.github.sirp00m.npcortex;
 
 import io.github.sirp00m.npcortex.entity.CompanionEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,6 +16,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.Blocks;
 
 /** Bounded world edits. Server-side owner/permission checks; no arbitrary LLM coordinates. */
 public final class WorldBlockActions {
@@ -55,11 +57,11 @@ public final class WorldBlockActions {
         ItemStack tool = npc.getMainHandItem();
         if (state.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(state))
             return "[Action failed: equip the correct mining tool first.]";
-        if (state.getDestroySpeed(level, choice) < 0 || !level.destroyBlock(choice, true, npc))
+        if (state.getDestroySpeed(level, choice) < 0 || !CompanionMinedDrops.destroy(level, choice, npc))
             return "[Action failed: block could not be broken.]";
         if (!tool.isEmpty() && tool.isDamageableItem())
             tool.hurtAndBreak(1, npc, entity -> entity.broadcastBreakEvent(EquipmentSlot.MAINHAND));
-        // Drops stay on the ground. Use pickup_nearby as a separate verified step.
+        // Drops spawn physically; passive NPC pickup transfers them once close enough.
         return "[Action confirmed: mined " + targetBlock + "; drops remain on the ground.]";
     }
 
@@ -82,44 +84,100 @@ public final class WorldBlockActions {
         ItemStack tool = npc.getMainHandItem();
         if (state.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(state))
             return "[Action failed: correct tool required.]";
-        if (state.getDestroySpeed(level, pos) < 0 || !level.destroyBlock(pos, true, npc))
+        if (state.getDestroySpeed(level, pos) < 0 || !CompanionMinedDrops.destroy(level, pos, npc))
             return "[Action failed: unable to break requested block.]";
         if (!tool.isEmpty() && tool.isDamageableItem())
             tool.hurtAndBreak(1, npc, entity -> entity.broadcastBreakEvent(EquipmentSlot.MAINHAND));
         return "[Action confirmed: mined 1 " + targetBlock + "; drops are on the ground.]";
     }
 
-    /** Detect ONLY a naturally generated oak leaf currently blocking a log ray. */
-    public static BlockPos blockingNaturalOakLeaf(CompanionEntity npc, BlockPos log) {
-        Vec3 eye = npc.getEyePosition();
+    /** A read-only, bounded world affordance, not permission to edit the world.
+     *  kind describes ray obstruction; clearable means a verified natural tree
+     *  leaf is physically reachable from THIS NPC pose. The agent sees no
+     *  coordinates, and the executor rechecks the actual block before edits.
+     */
+    public record OakObstruction(String kind, boolean leafClearable) {}
+
+    private static boolean naturalOakLeafNearLog(CompanionEntity npc, BlockPos log, BlockPos leaf) {
+        if (leaf == null || leaf.equals(log) || !npc.level().isLoaded(leaf)
+                || Math.abs(leaf.getX() - log.getX()) > 2
+                || Math.abs(leaf.getY() - log.getY()) > 2
+                || Math.abs(leaf.getZ() - log.getZ()) > 2) return false;
+        BlockState state = npc.level().getBlockState(leaf);
+        String logId = BuiltInRegistries.BLOCK.getKey(npc.level().getBlockState(log).getBlock()).toString();
+        String leafId = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        return TreeSpecies.matchingFoliage(logId, leafId)
+                && state.hasProperty(LeavesBlock.PERSISTENT) && !state.getValue(LeavesBlock.PERSISTENT);
+    }
+
+    private static BlockPos rayBlockingLeaf(CompanionEntity npc, Vec3 eye, BlockPos log) {
         BlockHitResult hit = npc.level().clip(new ClipContext(eye, Vec3.atCenterOf(log),
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, npc));
         if (hit.getType() != HitResult.Type.BLOCK || hit.getBlockPos().equals(log)) return null;
         BlockPos leaf = hit.getBlockPos();
-        if (!npc.level().isLoaded(leaf) || Math.abs(leaf.getX() - log.getX()) > 2
-                || Math.abs(leaf.getY() - log.getY()) > 2 || Math.abs(leaf.getZ() - log.getZ()) > 2)
-            return null;
-        BlockState state = npc.level().getBlockState(leaf);
-        return state.is(net.minecraft.world.level.block.Blocks.OAK_LEAVES)
-                && state.hasProperty(LeavesBlock.PERSISTENT)
-                && !state.getValue(LeavesBlock.PERSISTENT) ? leaf.immutable() : null;
+        return naturalOakLeafNearLog(npc, log, leaf) ? leaf.immutable() : null;
     }
 
-    /** Only used inside an owner-authorized, bounded oak-log gather task. */
+    private static boolean physicallyClearable(CompanionEntity npc, BlockPos leaf, boolean creative) {
+        return leaf != null && npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(leaf))
+                <= InteractionReach.squared(creative)
+                && visible(npc, leaf);
+    }
+
+    /** Report only the leaf physically blocking the CURRENT NPC sightline.
+     * Sampling a hypothetical nearby eye position used to identify unrelated
+     * foliage as immediately clearable, even when the log was already visible.
+     * Qwen can choose a navigation skill before attempting clearing elsewhere.
+     * No raycast result grants block-edit authority; the executor rechecks it.
+     */
+    private static BlockPos blockingNaturalOakLeaf(CompanionEntity npc, BlockPos log,
+            boolean creative, boolean requireClearable) {
+        if (npc == null || log == null || !npc.level().isLoaded(log)) return null;
+        if (npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(log))
+                <= InteractionReach.squared(creative) && visible(npc, log)) return null;
+        BlockPos direct = rayBlockingLeaf(npc, npc.getEyePosition(), log);
+        return direct != null && (!requireClearable || physicallyClearable(npc, direct, creative))
+                ? direct : null;
+    }
+
+    public static OakObstruction oakObstruction(CompanionEntity npc, BlockPos log,
+            boolean creative) {
+        if (npc == null || log == null || !npc.level().isLoaded(log))
+            return new OakObstruction("unknown", false);
+        if (npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(log))
+                <= InteractionReach.squared(creative) && visible(npc, log))
+            return new OakObstruction("none", false);
+        BlockHitResult hit = npc.level().clip(new ClipContext(npc.getEyePosition(),
+                Vec3.atCenterOf(log), ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, npc));
+        boolean blocked = hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(log);
+        if (!blocked) return new OakObstruction("none", false);
+        BlockPos direct = rayBlockingLeaf(npc, npc.getEyePosition(), log);
+        if (direct != null)
+            return new OakObstruction("natural_tree_leaf", physicallyClearable(npc, direct, creative));
+        return new OakObstruction("other_block", false);
+    }
+
+    /** Kept for existing callers; no permission is inferred from an observation. */
+    public static BlockPos blockingNaturalOakLeaf(CompanionEntity npc, BlockPos log,
+            boolean creative) {
+        return blockingNaturalOakLeaf(npc, log, creative, true);
+    }
+
+    /** Only used inside an owner-authorized, bounded, verified-tree gather task. */
     public static String clearNaturalOakLeaf(ServerPlayer owner, CompanionEntity npc,
             BlockPos leaf, BlockPos log) {
         if (!permitted(owner) || npc == null || leaf == null || log == null
                 || owner.level() != npc.level() || !owner.getUUID().equals(npc.getOwnerUUID())
                 || !owner.serverLevel().isLoaded(leaf) || !owner.serverLevel().isLoaded(log)
-                || !owner.serverLevel().getBlockState(log).is(
-                    net.minecraft.world.level.block.Blocks.OAK_LOG)
+                || !TreeSpecies.supportedLog(BuiltInRegistries.BLOCK.getKey(
+                        owner.serverLevel().getBlockState(log).getBlock()).toString())
                 || npc.getEyePosition().distanceToSqr(Vec3.atCenterOf(leaf))
                     > InteractionReach.squared(owner.isCreative())
-                || !leaf.equals(blockingNaturalOakLeaf(npc, log)))
+                || !leaf.equals(blockingNaturalOakLeaf(npc, log, owner.isCreative(), true)))
             return "[Action blocked: leaf not a verified obstruction.]";
-        if (!owner.serverLevel().destroyBlock(leaf, true, npc))
+        if (!CompanionMinedDrops.destroy(owner.serverLevel(), leaf, npc))
             return "[Action failed: cannot clear natural leaf.]";
-        return "[Action confirmed: cleared 1 naturally generated oak leaf obstructing target log.]";
+        return "[Action confirmed: cleared 1 nonpersistent tree leaf obstructing target log.]";
     }
 
     public static boolean visible(CompanionEntity npc, BlockPos pos) {

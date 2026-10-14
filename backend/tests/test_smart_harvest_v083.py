@@ -28,10 +28,10 @@ class SmartHarvestContract(unittest.TestCase):
 
     def test_only_natural_leaves_and_bounded(self):
         source = self.text('WorldBlockActions.java')
-        self.assertIn('Blocks.OAK_LEAVES', source)
+        self.assertIn('TreeSpecies.matchingFoliage(', source)
         self.assertIn('LeavesBlock.PERSISTENT', source)
         self.assertIn('!state.getValue(LeavesBlock.PERSISTENT)', source)
-        self.assertIn('!leaf.equals(blockingNaturalOakLeaf(npc, log))', source)
+        self.assertIn('!leaf.equals(blockingNaturalOakLeaf(npc, log, owner.isCreative(), true))', source)
         controller = self.text('GatherTaskController.java')
         self.assertIn('MAX_LEAF_CLEAR', controller)
         self.assertIn('level.isLoaded(', controller)

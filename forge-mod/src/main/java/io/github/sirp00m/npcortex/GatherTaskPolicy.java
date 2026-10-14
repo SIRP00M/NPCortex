@@ -13,9 +13,9 @@ public final class GatherTaskPolicy {
     public static boolean valid(String itemId, int count) {
         // v0.8.1 supports direct block-to-item drops only. Stone, grass,
         // gravel, etc. can produce another item and cannot be counted safely.
-        return count >= 1 && count <= MAX_ITEMS && java.util.Set.of(
+        return count >= 1 && count <= MAX_ITEMS && (TreeSpecies.supportedLog(itemId) || java.util.Set.of(
                 "minecraft:oak_log", "minecraft:dirt", "minecraft:sand",
-                "minecraft:cobblestone", "minecraft:oak_planks").contains(itemId);
+                "minecraft:cobblestone", "minecraft:oak_planks").contains(itemId));
     }
 
     public static int remaining(int goal, int collected) { return Math.max(0, goal - collected); }

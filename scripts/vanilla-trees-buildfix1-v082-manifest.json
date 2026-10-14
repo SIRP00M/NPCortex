@@ -1,0 +1,11 @@
+{
+  "version": "0.8.2-alpha",
+  "base": "VanillaTreesFoundation1",
+  "files": [
+    {
+      "path": "forge-mod/src/main/java/io/github/sirp00m/npcortex/WholeTreeTracker.java",
+      "old_sha256": "c861d029f7a71b6cf802dcbe55bd22470262e05f89144368158e0eea26d521a4",
+      "new_sha256": "7ad3c876ea7a6bffaea633681b085b55b8025fe7782f76303fa627c0848258fa"
+    }
+  ]
+}

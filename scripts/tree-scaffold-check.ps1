@@ -9,7 +9,8 @@ try {
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $src = Join-Path $root 'forge-mod\src\main\java\io\github\sirp00m\npcortex'
-        & javac --release 17 -d $tmp (Join-Path $src 'ScaffoldPolicy.java') `
+        & javac --release 17 -d $tmp (Join-Path $src 'TreeSpecies.java') `
+            (Join-Path $src 'ScaffoldPolicy.java') `
             (Join-Path $root 'tests\java\ScaffoldPolicyTest.java')
         if ($LASTEXITCODE -ne 0) { throw 'ScaffoldPolicy compilation failed.' }
         & java -cp $tmp ScaffoldPolicyTest

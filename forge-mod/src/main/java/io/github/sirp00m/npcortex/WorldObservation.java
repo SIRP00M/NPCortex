@@ -65,8 +65,8 @@ public final class WorldObservation {
 
         double reach = InteractionReach.blocks(player.isCreative());
         double reachSq = InteractionReach.squared(player.isCreative());
-        // Visible item entities are independent of the NPC bag: thrown items are NOT
-        // automatically owned and must first be collected using pickup_nearby.
+        // Visible ground items are not owned until physically picked up.
+        // NPCs now also perform passive player-like pickup when they are near enough.
         JsonArray groundItems = new JsonArray();
         world.getEntitiesOfClass(ItemEntity.class, npc.getBoundingBox().inflate(reach),
                 item -> item.isAlive() && !item.getItem().isEmpty() && npc.distanceToSqr(item) <= reachSq
