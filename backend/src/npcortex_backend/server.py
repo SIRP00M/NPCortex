@@ -8,6 +8,7 @@ import time
 from .characters import CharacterError
 from .identity import IdentityError, PLAYER_PATTERN
 from .ollama import ModelError
+from .agent_runtime import PlannerDecisionError
 from .service import ModelCapacityError
 from .session import SessionBusyError, SessionCapacityError
 from .world_store import RegistryNotFoundError, RegistryConflictError
@@ -27,6 +28,10 @@ DIALOGUE_CLOSE = re.compile(r"^/v1/dialogues/([^/]+)/close$")
 SOCIAL_GET = re.compile(r"^/v1/social-runs/([^/]+)$")
 SOCIAL_STEP = re.compile(r"^/v1/social-runs/([^/]+)/step$")
 SOCIAL_STOP = re.compile(r"^/v1/social-runs/([^/]+)/stop$")
+AGENT_GOAL_GET = re.compile(r"^/v1/agent/goals/([^/]+)$")
+AGENT_OBSERVE = re.compile(r"^/v1/agent/goals/([^/]+)/observe$")
+AGENT_DECIDE = re.compile(r"^/v1/agent/goals/([^/]+)/decide$")
+AGENT_RESULT = re.compile(r"^/v1/agent/actions/([^/]+)/result$")
 
 
 def make_handler(service):
@@ -98,6 +103,10 @@ def make_handler(service):
                 return self._error(503, "session_capacity", "Conversation capacity reached; retry shortly")
             if isinstance(exc, ModelCapacityError):
                 return self._error(503, "model_busy", "Local AI model is busy; retry shortly")
+            if isinstance(exc, PlannerDecisionError):
+                # A semantically invalid model response is NOT an Ollama transport outage.
+                LOG.warning("C0 planner validation exhausted: %s", exc)
+                return self._error(502, "planner_invalid_decision", "AI returned no valid skill decision; check backend logs")
             if isinstance(exc, ModelError):
                 LOG.exception("Ollama request failed")
                 return self._error(502, "provider_unavailable", "Local AI provider unavailable; check Ollama logs")
@@ -111,6 +120,9 @@ def make_handler(service):
             if self.path == "/health":
                 return self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
             try:
+                agent_goal = AGENT_GOAL_GET.fullmatch(self.path)
+                if agent_goal:
+                    return self._json(200, service.get_agent_goal(agent_goal.group(1)))
                 actor = ACTOR_GET.fullmatch(self.path)
                 if actor:
                     return self._json(200, service._require_world_store().get_actor(actor.group(1)))
@@ -130,11 +142,14 @@ def make_handler(service):
         def do_POST(self):
             known_route = (self.path in (
                 "/v1/chat", "/v1/worlds", "/v1/actors", "/v1/actor-chat",
-                "/v1/dialogues", "/v1/social-runs")
+                "/v1/dialogues", "/v1/social-runs", "/v1/agent/goals")
                 or DIALOGUE_TURNS.fullmatch(self.path)
                 or DIALOGUE_CLOSE.fullmatch(self.path)
                 or SOCIAL_STEP.fullmatch(self.path)
-                or SOCIAL_STOP.fullmatch(self.path))
+                or SOCIAL_STOP.fullmatch(self.path)
+                or AGENT_OBSERVE.fullmatch(self.path)
+                or AGENT_DECIDE.fullmatch(self.path)
+                or AGENT_RESULT.fullmatch(self.path))
 
             # The server does not support request transfer codings. Never try
             # to drain bytes whose framing is unknown; close this connection.
@@ -176,6 +191,31 @@ def make_handler(service):
             if not isinstance(data, dict):
                 return self._error(400, "invalid_request", "Expected JSON object")
             try:
+                if self.path == "/v1/agent/goals":
+                    required = {"world_id", "dimension_id", "actor_id", "objective", "success_criteria"}
+                    if not required.issubset(data) or not set(data).issubset(required | {"max_decisions", "goal_id"}):
+                        return self._error(400, "invalid_request", "Invalid agent goal fields")
+                    return self._json(201, service.create_agent_goal(
+                        world_id=data["world_id"], dimension=data["dimension_id"],
+                        actor_id=data["actor_id"], objective=data["objective"],
+                        success_criteria=data["success_criteria"],
+                        max_decisions=data.get("max_decisions", 8),goal_id=data.get("goal_id")))
+                agent_observe = AGENT_OBSERVE.fullmatch(self.path)
+                if agent_observe:
+                    if set(data) != {"observation_id", "snapshot"}:
+                        return self._error(400,"invalid_request","Observe requires observation_id and snapshot")
+                    return self._json(200, service.agent_observe(agent_observe.group(1),data["observation_id"],data["snapshot"]))
+                agent_decide = AGENT_DECIDE.fullmatch(self.path)
+                if agent_decide:
+                    if set(data) != {"request_id"}:
+                        return self._error(400,"invalid_request","Decide requires request_id")
+                    return self._json(200, service.agent_decide(agent_decide.group(1),data["request_id"]))
+                agent_result = AGENT_RESULT.fullmatch(self.path)
+                if agent_result:
+                    if set(data) != {"result_id","observation_id","status","snapshot"}:
+                        return self._error(400,"invalid_request","Result requires result_id, observation_id, status, snapshot")
+                    return self._json(200, service.agent_result(agent_result.group(1),
+                        data["result_id"],data["status"],data["observation_id"],data["snapshot"]))
                 if self.path == "/v1/social-runs":
                     if "dialogue_id" not in data:
                         return self._error(400, "invalid_request", "Missing dialogue_id")

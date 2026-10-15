@@ -257,17 +257,21 @@ class B3Tests(unittest.TestCase):
             self.step(run)
 
     def test_schema_v3_additive_migration_from_v2_with_data(self):
-        self.assertEqual(SCHEMA_VERSION, 3)
+        self.assertEqual(SCHEMA_VERSION, 4)
         d = self.create_dialogue()
         self.service.dialogue_turn(d['dialogue_id'], 'actor', self.yui1['actor_id'])
         with sqlite_test_connection(self.path) as db:
+            db.execute('DROP TABLE agent_actions')
+            db.execute('DROP TABLE agent_decisions')
+            db.execute('DROP TABLE agent_observations')
+            db.execute('DROP TABLE agent_goals')
             db.execute('DROP TABLE social_steps')
             db.execute('DROP TABLE social_runs')
             db.execute('PRAGMA user_version=2')
         upgraded = self.make_service(FakeSocialAI())
         self.assertEqual(len(upgraded.get_dialogue(d['dialogue_id'])['turns']), 1)
         with sqlite_test_connection(self.path) as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 3)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 4)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM actors').fetchone()[0], 3)
 
 

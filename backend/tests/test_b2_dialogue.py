@@ -352,7 +352,7 @@ class B2MigrationTest(unittest.TestCase):
                              [{"role": "user", "content": "B1 original secret"},
                               {"role": "assistant", "content": "B1 original answer"}])
         with sqlite_test_connection(self.path) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(db.execute("SELECT COUNT(*) FROM transcript").fetchone()[0], 2)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM dialogue_turns").fetchone()[0], 0)

@@ -11,7 +11,7 @@ from .identity import canonical_uuid, dimension_id, player_id, world_name
 
 # Namespace is a fixed stable value; changing it would break derived conversation IDs.
 CONVERSATION_NAMESPACE = UUID("4bc93e61-ac2d-4c7a-94cf-4cfc4a3a59e1")
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class RegistryNotFoundError(LookupError):
@@ -39,7 +39,7 @@ class WorldStore:
             # SQLite WAL supports concurrent readers and one serialized writer.
             db.execute("PRAGMA journal_mode=WAL")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"Unsupported SQLite schema version {version}; expected {SCHEMA_VERSION}. "
                     "Do not downgrade or delete a database containing player data."
@@ -173,6 +173,74 @@ class WorldStore:
                 actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
                 if not columns.issubset(actual):
                     raise sqlite3.DatabaseError(f"Invalid B3 schema: {table} missing columns")
+            if version in (0, 1, 2, 3):
+                # C0 is additive. Every legacy B1/B2/B3 table and row remains intact.
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE agent_goals (
+                        goal_id TEXT PRIMARY KEY,
+                        world_id TEXT NOT NULL REFERENCES worlds(world_id),
+                        dimension_id TEXT NOT NULL,
+                        actor_id TEXT NOT NULL REFERENCES actors(actor_id),
+                        objective TEXT NOT NULL,
+                        criteria_json TEXT NOT NULL,
+                        max_decisions INTEGER NOT NULL CHECK(max_decisions BETWEEN 1 AND 24),
+                        decisions_made INTEGER NOT NULL DEFAULT 0,
+                        planner_failures INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'pending'
+                            CHECK(status IN ('pending','active','blocked','completed','failed')),
+                        pending_action_id TEXT,
+                        snapshot_seq INTEGER NOT NULL DEFAULT 0,
+                        snapshot_json TEXT,
+                        last_error TEXT NOT NULL DEFAULT ''
+                    );
+                    CREATE INDEX idx_agent_goals_actor ON agent_goals(actor_id,status);
+                    CREATE TABLE agent_observations (
+                        goal_id TEXT NOT NULL REFERENCES agent_goals(goal_id),
+                        observation_id TEXT NOT NULL,
+                        seq INTEGER NOT NULL,
+                        snapshot_json TEXT NOT NULL,
+                        PRIMARY KEY(goal_id,observation_id),
+                        UNIQUE(goal_id,seq)
+                    );
+                    CREATE TABLE agent_decisions (
+                        goal_id TEXT NOT NULL REFERENCES agent_goals(goal_id),
+                        request_id TEXT NOT NULL,
+                        decision_json TEXT NOT NULL,
+                        action_id TEXT,
+                        PRIMARY KEY(goal_id,request_id)
+                    );
+                    CREATE TABLE agent_actions (
+                        action_id TEXT PRIMARY KEY,
+                        goal_id TEXT NOT NULL REFERENCES agent_goals(goal_id),
+                        request_id TEXT NOT NULL,
+                        skill_id TEXT NOT NULL,
+                        args_json TEXT NOT NULL,
+                        expected_json TEXT NOT NULL,
+                        before_json TEXT NOT NULL,
+                        source_seq INTEGER NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'pending'
+                            CHECK(status IN ('pending','succeeded','failed','unverified')),
+                        result_id TEXT,
+                        receipt_json TEXT,
+                        verdict TEXT NOT NULL DEFAULT '',
+                        UNIQUE(goal_id,request_id)
+                    );
+                    CREATE INDEX idx_agent_actions_goal ON agent_actions(goal_id);
+                    PRAGMA user_version=4;
+                    COMMIT;
+                """)
+            required_c0 = {
+                "agent_goals": {"goal_id", "world_id", "dimension_id", "actor_id", "criteria_json", "pending_action_id", "snapshot_seq", "planner_failures"},
+                "agent_observations": {"goal_id", "observation_id", "seq", "snapshot_json"},
+                "agent_decisions": {"goal_id", "request_id", "decision_json", "action_id"},
+                "agent_actions": {"action_id", "goal_id", "request_id", "skill_id", "source_seq", "receipt_json"},
+            }
+            for table, columns in required_c0.items():
+                db.execute(f"SELECT * FROM {table} LIMIT 0")
+                actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if not columns.issubset(actual):
+                    raise sqlite3.DatabaseError(f"Invalid C0 schema: {table} missing columns")
 
     def register_world(self, name: str, world_id: str | None = None) -> dict:
         name = world_name(name)

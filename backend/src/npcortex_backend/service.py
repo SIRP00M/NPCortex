@@ -109,11 +109,17 @@ class ChatService:
                 "character_name": character.display_name, "reply": reply, "model": self.model}
 
 
-    def _model_chat(self, messages: list[dict], *, json_mode: bool = False) -> str:
+    def _model_chat(self, messages: list[dict], *, json_mode: bool = False,
+                    json_schema: dict | None = None) -> str:
         if not self._model_slots.acquire(timeout=self.model_wait_seconds):
             raise ModelCapacityError("Local model request limit reached")
         try:
+            # Optional C0 capability. Mock/custom providers with chat_json only
+            # preserve their previous contract and remain server-validated.
+            structured = getattr(self.provider, "chat_structured", None) if json_schema is not None else None
             json_chat = getattr(self.provider, "chat_json", None) if json_mode else None
+            if callable(structured):
+                return structured(messages, json_schema)
             return json_chat(messages) if callable(json_chat) else self.provider.chat(messages)
         finally:
             self._model_slots.release()
@@ -133,6 +139,28 @@ class ChatService:
     def stop_social_run(self, run_id: str) -> dict:
         from .social_runtime import SocialRuntime
         return SocialRuntime(self).stop(run_id)
+
+    # C0: headless goal/action protocol. The Forge Player-based adapter is NOT implemented here.
+    def create_agent_goal(self, **data):
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).create_goal(**data)
+
+    def get_agent_goal(self, goal_id: str) -> dict:
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).get_goal(goal_id)
+
+    def agent_observe(self, goal_id: str, observation_id: str, snapshot: dict) -> dict:
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).observe(goal_id, observation_id, snapshot)
+
+    def agent_decide(self, goal_id: str, request_id: str) -> dict:
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).decide(goal_id, request_id)
+
+    def agent_result(self, action_id: str, result_id: str, status: str,
+                     observation_id: str, snapshot: dict) -> dict:
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).result(action_id, result_id, status, observation_id, snapshot)
 
     # B2: explicit, durable multi-party dialogue. No automatic turn generation.
     def create_dialogue(self, world_id: str, dimension_id: str, actor_ids: list,

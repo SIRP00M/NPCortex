@@ -280,3 +280,14 @@ owns the step cap, ordering, and durable journal. Repeat the **same** request
 UUID to replay without another model call, including after restart. Planner
 output cannot execute world actions. Schema v2 is atomically upgraded to v3;
 B1/B2 tables are preserved. See [B3 contract](b3-headless-social.md).
+
+
+## C0 — Agent Runtime (headless, schema v4)
+
+`POST /v1/agent/goals`, `GET /v1/agent/goals/{id}`,
+`POST /v1/agent/goals/{id}/observe`, `POST /v1/agent/goals/{id}/decide`,
+`POST /v1/agent/actions/{id}/result`.
+
+See [C0 Agent Protocol](c0-headless-agent-runtime.md) for full examples,
+validation, session coordination, idempotency and C1 Player-based Forge Handoff.
+There are no real Minecraft world actions in this backend-only sprint.

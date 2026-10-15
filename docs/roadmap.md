@@ -1,24 +1,32 @@
-# NPCortex Roadmap — Baseline Reset
+# NPCortex Development Roadmap
 
-- [x] A2 — Backend concurrency, resource limits and Forge chat bridge stability.
-- [x] B1 — World/Actor Identity and durable conversation history. User reports
-  B1 HTTP/Qwen acceptance passed; Forge B1 integration/build is not separately evidenced.
-- [x] B2 — **Implementation candidate, pending Windows/Qwen/Minecraft quality gate.**
-  Explicit NPC↔NPC and Player↔NPC multi-actor shared transcripts, SQLite v2
-  migration, speaker UUID, per-conversation serial turns, idempotent retry,
-  turn limits and manual close. No autonomous initiation.
-- [ ] B3 — Headless social simulation, recovery/performance/scale tests.
-- [ ] After B quality gates — Forge NPC entity integration/skin/UI and game events.
-- [ ] C — Full autonomous world simulation. **FUTURE ONLY**, not implemented or
-  approved. See [C Roadmap](future-autonomy-roadmap.md).
+This roadmap describes the **code present in the local C0-B snapshot**, not an assertion that every change has already been pushed to [GitHub Development](https://github.com/SIRP00M/NPCortex/tree/Development). Sprint labels do not mean separately published releases. See [single Changelog](../CHANGELOG.md) and [main README](../ReadMe.md).
 
-No Test, No Push. User performs GitHub operations only.
+## Implemented backend foundations (headless unless stated)
 
-## B3 candidate (Oct 2026): AI-Driven Headless Social Runtime
+| Stage | Implementation in this snapshot | Verification boundary |
+|---|---|---|
+| A2 | Forge `/npcortex ask` chat bridge and bounded backend session handling | Chat command, not an NPC entity |
+| B1 | Durable world/actor identity and private player–actor transcripts (SQLite v1 origin) | Headless API, separate from legacy Forge bridge |
+| B2 | Explicit multi-actor dialogue turns (SQLite v2 origin) | Caller-directed; no scheduler |
+| B2-C | SQLite units of work and persistence stability | Preserves B2 schema at that stage |
+| B3 | Caller-stepped, Qwen-selected headless NPC-to-NPC social runs (SQLite v3 origin) | No automated social world or Forge NPC |
+| B3-B | Bounded request-body drain / Windows HTTP stability | No social behavior change |
+| C0 | Durable Goals, observation contracts, skill requests, Qwen decision & postcondition check (SQLite v4) | **Mock/trusted world caller only**, no Minecraft action executor |
+| C0-B | Planner schema/retry reliability and Windows acceptance-script fix | Owner-reported Windows script acceptance; Minecraft not tested by that script |
 
-- Planner asks Qwen to select one allowed NPC speaker or to stop naturally.
-- Owner advances each step explicitly via localhost API; no background world loop.
-- Durable run/step journal, retry idempotency, short failure budget, SQLite v3 migration.
-- Future C: world perception, goals, relationships, autonomy/world actions and Forge
-  entity binding remain **ROADMAP ONLY**, not implemented or authorized in B3.
-- B3 requires Windows/Qwen real-world acceptance and Forge regression results.
+Python test reports and platform-specific checklists are under `docs/`. Acceptance of a backend-only feature does not automatically satisfy the Forge gameplay quality gate.
+
+## Next: C1 True Player-based NPC — phased feasibility
+
+**P0: Feasibility proof.** Evaluate custom `ServerPlayer`/`FakePlayer`-based identity, spawn, network tracking, rendering and lifecycle with Forge 1.20.1 and real tests. The standard `FakePlayer` alone must not be assumed to be a visible, fully functioning player. `PathfinderMob` is not the proposed primary architecture.
+
+**P1/P2 and later: Separate proposals, not shipped here.** NPC movement, inventory, equipment, player-like interaction, reliable server world perception/execution and backend agent contract binding follow **only** after P0 evidence and explicit scope approval.
+
+**Long-term:** General-Purpose Agent Runtime and fully autonomous companion behavior, with carefully verified vertical slices (e.g. complete tree harvesting) before additional mining, building, survival or optional TaCZ integration. There is **no** completed autonomous gameplay feature in the C0-B source.
+
+## Development quality gate
+
+Audit actual source → propose options and scope → maintainer approval → implement → Python and applicable Java/Forge tests → owner-run Windows and Minecraft testing → Full Repository ZIP. The maintainer handles GitHub commits/pushes; **No Test, No Push**.
+
+See [C0 → C1 handoff](c0-c1-handoff.md), [architecture](architecture.md) and [long-term autonomy notes](future-autonomy-roadmap.md).
