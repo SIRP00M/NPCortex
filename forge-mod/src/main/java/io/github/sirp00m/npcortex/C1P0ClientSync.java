@@ -25,6 +25,7 @@ public final class C1P0ClientSync {
     // Retained after entity verification to authorize event-driven angle updates.
     // A new Prepare token or world change invalidates the previous session.
     private static final Map<UUID, RotationSession> ROTATION_SESSIONS = new HashMap<>();
+    private static final Map<UUID, PendingDeath> DEATH_REPORTS = new HashMap<>();
     private static ClientLevel sessionLevel;
 
     private static final class RotationSession {
@@ -36,6 +37,16 @@ public final class C1P0ClientSync {
             this.token = token;
         }
         boolean matches(int id, UUID value) { return entityId == id && token.equals(value); }
+    }
+
+    private static final class PendingDeath {
+        final int entityId;
+        final UUID token;
+        int ticks;
+        PendingDeath(int entityId, UUID token) {
+            this.entityId = entityId;
+            this.token = token;
+        }
     }
 
     private static final class Pending {
@@ -62,12 +73,14 @@ public final class C1P0ClientSync {
         if (client.level != sessionLevel) {
             PENDING.clear();
             ROTATION_SESSIONS.clear();
+            DEATH_REPORTS.clear();
             sessionLevel = client.level;
         }
         Pending old = PENDING.get(packet.npcId());
         if (old != null && old.matches(packet.npcId(),packet.entityId(),packet.token())) return;
         PENDING.put(packet.npcId(), new Pending(packet.npcId(),packet.entityId(),packet.token()));
         ROTATION_SESSIONS.put(packet.npcId(), new RotationSession(packet.entityId(), packet.token()));
+        DEATH_REPORTS.remove(packet.npcId());
         LOG.info("NPCortex C1-P0 CLIENT_PREPARE npc={} entityId={}", packet.npcId(), packet.entityId());
     }
 
@@ -106,6 +119,21 @@ public final class C1P0ClientSync {
                 rotation.yaw(), rotation.headYaw(), rotation.bodyYaw());
     }
 
+    static void onDeathPresentation(C1P0Network.DeathPresentation packet) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || client.level != sessionLevel) return;
+        RotationSession session = ROTATION_SESSIONS.get(packet.npcId());
+        if (session == null || !session.matches(packet.entityId(), packet.token())) return;
+        Entity entity = client.level.getEntity(packet.entityId());
+        if (!(entity instanceof RemotePlayer player) || !entity.getUUID().equals(packet.npcId())) return;
+        // Vanilla PlayerRenderer uses LivingEntity's deathTime, driven by client
+        // ticks when RemotePlayer health is zero. No custom renderer/pose.
+        player.setHealth(0.0F);
+        DEATH_REPORTS.put(packet.npcId(), new PendingDeath(packet.entityId(), packet.token()));
+        LOG.info("NPCortex C1-R1 CLIENT_DEATH_STATE_ENTERED npc={} entityId={}",
+                packet.npcId(), packet.entityId());
+    }
+
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -117,10 +145,30 @@ public final class C1P0ClientSync {
             if (sessionLevel != null) {
                 PENDING.clear();
                 ROTATION_SESSIONS.clear();
+                DEATH_REPORTS.clear();
             }
             sessionLevel = client.level;
         }
         if (client.level == null || client.player == null || client.getConnection() == null) return;
+        var deaths = DEATH_REPORTS.entrySet().iterator();
+        while (deaths.hasNext()) {
+            var item = deaths.next();
+            PendingDeath death = item.getValue();
+            Entity entity = client.level.getEntity(death.entityId);
+            RotationSession session = ROTATION_SESSIONS.get(item.getKey());
+            if (session == null || !session.matches(death.entityId, death.token)
+                    || !(entity instanceof RemotePlayer player) || !entity.getUUID().equals(item.getKey())) {
+                deaths.remove();
+            } else if (++death.ticks >= 2 && player.isDeadOrDying() && player.deathTime > 0) {
+                C1P0Network.deathReady(new C1P0Network.DeathReady(item.getKey(), death.entityId, death.token));
+                LOG.info("NPCortex C1-R1 CLIENT_DEATH_ANIMATION_TICK npc={} entityId={}",
+                        item.getKey(), death.entityId);
+                deaths.remove();
+            } else if (death.ticks >= 10) {
+                LOG.warn("NPCortex C1-R1 CLIENT_DEATH_STATE_TIMEOUT npc={}", item.getKey());
+                deaths.remove();
+            }
+        }
         var iterator = PENDING.entrySet().iterator();
         while (iterator.hasNext()) {
             Pending p = iterator.next().getValue();

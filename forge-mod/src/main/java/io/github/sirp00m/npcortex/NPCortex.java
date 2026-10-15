@@ -22,13 +22,12 @@ public final class NPCortex {
         C1P0Network.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStarted);
-        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(C1VanillaLifecycleCoordinator::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogin);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStartTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStopTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogout);
-        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerTick);
-        MinecraftForge.EVENT_BUS.addListener(C1P1MotionRuntime::onTick);
+        MinecraftForge.EVENT_BUS.addListener(C1VanillaLifecycleCoordinator::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerChangedDimension);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerRespawn);
     }
@@ -40,6 +39,13 @@ public final class NPCortex {
                         // Enable cheats in a local test world to use it.
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("c1")
+                                .then(C1P1CLifecycleCommands.build())
+                                .then(C1P1CLifecycleCommands.damage())
+                                .then(C1P1CLifecycleCommands.combat())
+                                .then(C1P1CLifecycleCommands.knockback())
+                                .then(C1P1CLifecycleCommands.kill())
+                                .then(C1P1CLifecycleCommands.respawn())
+                                .then(C1P1CLifecycleCommands.dimension())
                                 .then(C1P1InventoryCommands.build())
                         .then(C1P1InventoryCommands.equipment())
                         .then(C1P1InventoryCommands.ledger())

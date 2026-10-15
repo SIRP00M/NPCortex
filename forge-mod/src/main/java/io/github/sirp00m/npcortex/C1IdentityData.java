@@ -91,6 +91,20 @@ final class C1IdentityData extends SavedData {
         }
     }
 
+    void relocate(UUID profile, String dimension, double x, double y, double z,
+                  C1RotationState rotation, boolean active) {
+        if (rotation == null || !rotation.valid() || !Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z))
+            throw new IllegalArgumentException("invalid destination");
+        for (Map.Entry<String, Entry> item : entries.entrySet()) {
+            Entry old = item.getValue();
+            if (!old.profileId().equals(profile)) continue;
+            item.setValue(old.withLocation(dimension, x, y, z, rotation, active));
+            setDirty();
+            return;
+        }
+        throw new IllegalStateException("missing identity " + profile);
+    }
+
     void deactivate(String name) {
         Entry found = find(name);
         if (found != null && found.active()) {

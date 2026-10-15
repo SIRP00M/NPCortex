@@ -5,12 +5,12 @@
 
 [Development branch](https://github.com/SIRP00M/NPCortex/tree/Development) · [Changelog](CHANGELOG.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development version: `0.1.2-alpha.1` — C1-P1-B Transactional Inventory & Equipment (2026-10-15); not tagged or released**  
-> This repository ZIP continues from the public `Development` branch baseline at [`f3a9450`](https://github.com/SIRP00M/NPCortex/commit/f3a9450496d955f26ff8b7cf8db5ac6594756761) (C0 headless AI runtime). **Forge and the in-package Python display version declare `0.1.2-alpha.1`; Python distribution metadata uses the equivalent PEP 440 version `0.1.2a1`.** C1-P0/C1-P1-A/C1-P1-B are *sprint milestones*, not published releases. This ZIP does not itself update GitHub.
+> **Development version: `0.1.2-alpha.2` — C1-R2 Combat Physics / Movement Lifecycle Fix #2 + Compile Fix #1 (2026-10-15); candidate, not tagged or released**  
+> This repository ZIP continues from the public `Development` branch baseline at [`f3a9450`](https://github.com/SIRP00M/NPCortex/commit/f3a9450496d955f26ff8b7cf8db5ac6594756761) (C0 headless AI runtime). **Forge and in-package Python display versions declare `0.1.2-alpha.2`; Python distribution metadata uses equivalent PEP 440 `0.1.2a2`.** C1-P0 through C1-R2 identify implementation milestones, not published releases. This ZIP does not itself update GitHub.
 
-**Branch/version policy:** `Development` carries pre-release builds and may advance independently of `main`. A `0.1.2-alpha.1` label identifies this development snapshot only; it is **not** a stable release or a guarantee that the branch can be promoted to `main` without reconciling their existing version lines and completing the required tests. Do not create a release tag just because the source version changed.
+**Branch/version policy:** `Development` carries pre-release builds and may advance independently of `main`. A `0.1.2-alpha.2` label identifies this development snapshot only; it is **not** a stable release or a guarantee that the branch can be promoted to `main` without reconciling their existing version lines and completing the required tests. Do not create a release tag just because the source version changed.
 
-NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python backend uses **Ollama + Qwen 3 8B** and supports JSON character packs, durable actor identity, dialogue/social workflows and a headless agent contract. The experimental Forge C1 layer adds **visible player-based NPCs with operator-controlled movement, rotation and transactional Vanilla inventory/equipment**, while keeping the LLM backend and game-entity architecture separate. Development dialogue targets English first.
+NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python backend uses **Ollama + Qwen 3 8B** and supports JSON character packs, durable actor identity, dialogue/social workflows and a headless agent contract. The experimental Forge C1 layer adds **visible player-based NPCs with operator-controlled movement, rotation, transactional Vanilla inventory/equipment, selective Vanilla lifecycle/death presentation and a combat-motion integration candidate**, while keeping the LLM backend and game-entity architecture separate. Development dialogue targets English first.
 
 ## What is implemented (and what has actually been verified)
 
@@ -23,9 +23,13 @@ NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python back
 | **C1-P1-A — Controlled movement** | Separate server-side intent controller, bounded `move`/`jump`/`turn`/`settle`/`stop`; state persisted to C1 SavedData | Owner reported Windows Minecraft core movement gameplay acceptance; **not autonomous navigation or full player lifecycle** |
 | **C1-P1-A — Rotation Fix #1** | Persist independent yaw/pitch/headYaw/bodyYaw, apply per-viewer rotation snapshot after verified entity presence, acknowledge application | Owner confirmed head **and** body facing survive world exit/rejoin in Minecraft on Windows |
 | **C1-P1-B — Inventory & equipment (architecture C)** | Player Inventory main/hotbar (36), armor (4), offhand (1), selected slot, command-driven give/equip/clear/copyhand; one SavedData snapshot + per-NPC transaction receipts, idempotent replay, event-driven equipment synchronization | Owner reported Windows single-player **diamond sword give/equip, transaction replay, and inventory/receipt persistence across Save & Quit/rejoin** passed. This is limited gameplay acceptance, **not** complete P1-B Quality Gate or crash-safe exactly-once durability |
+| **C1-P1-C — Selective Vanilla lifecycle** | Persisted ALIVE/DEAD/TRANSITION, controlled death/respawn/transfer; `ServerPlayer.tick()` world phase restores spawn-invulnerability countdown, idle floor support and Vanilla fall checking | **Implementation candidate.** `ServerPlayer.doTick()` remains deliberately disabled; no full PlayerList/login parity. Windows Forge/Gameplay for this source not certified |
+| **C1-R0 — Lifecycle foundation** | `C1VanillaLifecycleCoordinator` and phase ownership policy consolidate P0 → motion → death tick/shutdown ownership without changing identity, networking protocol or SavedData schema | Dependency-free local policy checks are not a Forge gameplay pass |
+| **C1-R1 / R1-A — Death presentation** | Controlled 26-tick Vanilla player death pose, per-viewer death acknowledgment, one-shot `POOF`/`CLOUD` burst before detach | Candidate source. Presentation timing, real client visibility and keepInventory/respawn regression require Windows gameplay evidence |
+| **C1-R2 — Combat physics + Fixes #1/#2** | Vanilla damage/knockback capture (`super.knockback`), bounded COMBAT > COMMANDED > SETTLING ownership, single authoritative travel path and collision-only `Entity.move` fallback; Fix #2 retains a transient Vanilla velocity snapshot across attack/world/tick boundary | **Not yet accepted for real player Knockback II.** Latest `BuildFix1` only fixes a Java call-site (`captureVanilla`); Forge compilation and in-game displacement are still required |
 | **Multi-NPC smoke test** | Separate named C1 avatars can coexist with independent identities and commands | Owner confirmed **Yui + Hina + Ai** 3-NPC spawn, independent movement/turns, world rejoin, independent despawn and re-tracking **before P1-B**. **P1-B inventory isolation across 3 NPCs is not yet confirmed**; neither is measured load/multiplayer |
 
-**What is not implemented or not fully accepted:** autonomous Qwen-to-C1 world execution, complete C1-P1-B inventory durability/isolation/modded-item validation, survival/navigation, mining, building, crafting, TaCZ/Recruits combat, a complete Vanilla player lifecycle (next C1-P1-C scope), custom skin validation, LAN/multiplayer, and measured 5/10/20-NPC performance. No statement above proves those features exist. C1-P0 overall and broader C1 integration quality gates remain open.
+**What is not implemented or not fully accepted:** autonomous Qwen-to-C1 world execution, complete C1-P1-B inventory durability/isolation/modded-item validation, survival/navigation, mining, building, crafting, TaCZ/Recruits integration, full logged-in Vanilla PlayerList/connection-driven lifecycle, automatic portal navigation, reliable real-world knockback for all attack sources, custom skin/model validation, LAN/multiplayer, and measured 1/3/5/10-NPC load results for this source. No statement above proves those features exist. C1-P0 overall and broader C1 integration quality gates remain open.
 
 The developer ZIP's individual `docs/c1-*.md` reports were written at the *candidate* stage. The owner-reported Windows gameplay acceptance recorded in this README and in [`CHANGELOG.md`](CHANGELOG.md) is **later evidence for only the tested behaviors**; it does not rewrite or retroactively certify every item in those candidate test plans.
 
@@ -42,6 +46,9 @@ Minecraft 1.20.1 / Forge 47.4.10 (Java 17)
         |-- Operator-controlled movement + rotation           |
         |-- P1-B Vanilla inventory/equipment                     |
         |    `-- SavedData snapshot + per-NPC transaction ledger |
+        |-- P1-C / R0: guarded world tick + lifecycle coordinator|
+        |-- R1 / R1-A: death pose + one-shot poof particles      |
+        |-- R2: Vanilla combat velocity + bounded motion phase    |
         `-- Real world actions from Qwen: NOT WIRED          |
                                                             v
                                              Local Python backend
@@ -55,7 +62,7 @@ Minecraft 1.20.1 / Forge 47.4.10 (Java 17)
                                                    Ollama / qwen3:8b
 ```
 
-The C1 body is a **Custom `ServerPlayer`-based experimental entity**, not a `PathfinderMob` with a player skin. The C0 backend cannot read Minecraft's world state or execute C1 actions without a future audited sensor/executor integration. Qwen outputs are proposals, never sufficient proof of in-world success. See [C0 protocol](docs/c0-headless-agent-runtime.md), [C0→C1 handoff](docs/c0-c1-handoff.md), [C1 feasibility](docs/c1-p0-player-feasibility.md), [P0 Network Fix #2](docs/c1-p0-network-sync-fix2.md), [P1-A movement](docs/c1-p1-a-controlled-player-physics.md), and [rotation sync](docs/c1-p1-a-rotation-fix1.md), and [P1-B transactional inventory](docs/c1-p1-b-transactional-inventory.md).
+The C1 body is a **Custom `ServerPlayer`-based experimental entity**, not a `PathfinderMob` with a player skin. The C0 backend cannot read Minecraft's world state or execute C1 actions without a future audited sensor/executor integration. Qwen outputs are proposals, never sufficient proof of in-world success. See [C0 protocol](docs/c0-headless-agent-runtime.md), [C0→C1 handoff](docs/c0-c1-handoff.md), [C1 feasibility](docs/c1-p0-player-feasibility.md), [P0 Network Fix #2](docs/c1-p0-network-sync-fix2.md), [P1-A movement](docs/c1-p1-a-controlled-player-physics.md), and [rotation sync](docs/c1-p1-a-rotation-fix1.md), [P1-B transactional inventory](docs/c1-p1-b-transactional-inventory.md), [P1-C selective lifecycle](docs/c1-p1-c-selective-vanilla-lifecycle.md), [R0 foundation](docs/c1-r0-vanilla-lifecycle-foundation.md), [R1 death](docs/c1-r1-verified-vanilla-death.md), [R1-A particles](docs/c1-r1a-mob-like-death-poof.md), and [R2 Fix #2](docs/c1-r2-fix2-movement-lifecycle-refactor.md).
 
 ## Requirements and local setup (Windows)
 
@@ -128,6 +135,34 @@ The optional final transaction UUID on `give`, `equip`, `clear` and `copyhand` e
 
 The ledger and inventory snapshot share an Overworld SavedData record. `APPLIED_PENDING_WORLD_SAVE` means a transaction was applied in memory; **it does not guarantee that it has been flushed to disk**. The journal has a fail-closed 512-receipt cap per NPC, and modded inventory mutations outside this runtime are not automatically journaled. For Windows validation, test saved-world reload, NBT/enchants, re-tracking, inventory isolation across Yui/Hina/Ai and replay/conflict handling using the [P1-B acceptance checklist](docs/c1-p1-b-transactional-inventory.md). Do not treat a pure-Java test as a durability or Forge verification.
 
+### C1-P1-C / R0 / R1 / R2: lifecycle and combat acceptance (candidate)
+
+Use a **backup test world**. Confirm the Forge build finishes without a compile error before attempting combat testing. The newer source implements an operator-controlled death/respawn path and a Vanilla-derived knockback bridge; they are **not AI-driven combat or full Vanilla PlayerList emulation**.
+
+```powershell
+# Dependencies and source compatibility must be tested on your Windows JDK 17 / Forge install
+.\scripts\dev-forge.ps1 -Task build
+.\scripts\dev-forge.ps1 -Task runClient
+```
+
+```mcfunction
+/npcortex c1 spawn yui
+/npcortex c1 lifecycle yui
+/npcortex c1 motion yui
+/npcortex c1 combat yui
+/npcortex c1 damage yui 3
+/npcortex c1 lifecycle yui
+/npcortex c1 knockback yui 0.5
+/npcortex c1 motion yui
+/npcortex c1 combat yui
+/npcortex c1 kill yui
+/npcortex c1 lifecycle yui
+/npcortex c1 respawn yui
+/npcortex c1 inventory yui
+```
+
+Wait for the R1 death presentation before respawning. For actual R2 acceptance, hit the NPC with a **real player's Knockback II weapon on open level ground**, then compare the first-three-frame `C1-R2-FIX2 COMBAT_STEP` logs (`ownership`, `incoming`, `actualDelta`, collision state) and `/npcortex c1 motion` coordinates. Repeat against walls, with Zombie hits, death/respawn, inventory replay, world rejoin and multi-NPC tracking. **An impulse log alone is not proof of movement.** The current BuildFix1 changes the called method name, not knockback behavior. See [R2 Fix #2 test plan](docs/c1-r2-fix2-movement-lifecycle-refactor.md), [R2 combat](docs/c1-r2-vanilla-combat-physics.md), [R1 death](docs/c1-r1-verified-vanilla-death.md), and [R0 ownership](docs/c1-r0-vanilla-lifecycle-foundation.md).
+
 ### C1: dependency-free Java checks (not a Forge build)
 
 ```powershell
@@ -136,6 +171,12 @@ The ledger and inventory snapshot share an Overworld SavedData record. `APPLIED_
 .\scripts\test-c1-p1-rotation.ps1
 .\scripts\test-c1-p1-inventory.ps1
 .\scripts\test-c1-p1-inventory-saveddata.ps1
+.\scripts\test-c1-p1-lifecycle.ps1
+.\scripts\test-c1-p1c-vanilla-tick.ps1
+.\scripts\test-c1-r0-foundation.ps1
+.\scripts\test-c1-r1-death.ps1
+.\scripts\test-c1-r2-combat.ps1
+.\scripts\test-c1-r2-fix2.ps1
 ```
 
 These check state-machine logic and isolated SavedData test doubles with JDK 17; they **do not** prove Forge class compatibility, rendering, Minecraft physics, multiplayer, skin behavior or real world persistence. Run the Forge build separately. Local packaging reports in the C1 notes include Java-only assertions and some interrupted backend test runs: do not substitute them for a confirmed exit-0 build or an owner gameplay acceptance record.
@@ -192,7 +233,7 @@ To define a new backend character template, copy `character-packs/guide/` and ed
 
 **Already observed by the owner in Windows Minecraft (limited scope):** C1-P0 viewer recovery on world rejoin; C1-P1-A controlled movement; Rotation Fix #1 orientation persistence; basic three-NPC (Yui, Hina, Ai) movement/identity smoke test; C1-P1-B give/equip/transaction replay and Save & Quit/rejoin persistence of inventory + replay in a single-player world.
 
-**Still requires separate evidence:** full C1-P1-B Quality Gate (multi-NPC inventory isolation, crash-injection recovery, modded capabilities/NBT compatibility, load and multiplayer), complete P0 lifecycle/re-tracking/despawn matrix across conditions, Forge/CI reproducibility for this exact source, custom skin/model acceptance, LAN/multiplayer and realistic load measurements. **C1-P1-C Player Lifecycle is proposed work, not implemented in this ZIP.** Next work still follows **Audit → Options → Approval → Implement → Test** and the maintainer's **No Test, No Push** gate.
+**Still requires separate evidence:** full C1-P1-B Quality Gate (multi-NPC inventory isolation, crash-injection recovery, modded capabilities/NBT compatibility); C1-P1-C/R0 lifecycle and damage/fall/transfer; R1/R1-A real death animation and particles; R2 Fix #2 actual Knockback II server displacement, wall collision and Zombie behavior; P0 re-tracking/despawn; Forge/CI reproducibility for this exact source, LAN/multiplayer and 1/3/5/10-NPC performance. **Latest R2 BuildFix1 is an unverified compile fix candidate**; it is not proof of a successful Windows Forge Build. Next work continues **Audit → Options → Approval → Implement → Test** and **No Test, No Push**.
 
 Some older pages under `docs/` are historical candidate-time reports rather than a current end-to-end feature inventory; use this README/CHANGELOG for the snapshot's consolidated status, and the source code for exact behavior.
 

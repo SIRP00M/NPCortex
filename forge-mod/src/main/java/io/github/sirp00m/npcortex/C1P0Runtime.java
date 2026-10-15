@@ -45,6 +45,10 @@ final class C1P0Runtime {
         C1IdentityData identities = C1IdentityData.get(server);
         for (C1IdentityData.Entry entry : identities.all()) {
             if (!entry.active()) continue;
+            if (!C1P1CLifecycleRuntime.mayRestore(server, entry.profileId())) {
+                LOG.warn("NPCortex C1-P1-C restore held (DEAD/TRANSITION/corrupt) npc={}", entry.character());
+                continue;
+            }
             try {
                 spawnExisting(server, entry);
             } catch (RuntimeException ex) {
@@ -65,6 +69,9 @@ final class C1P0Runtime {
         if (!C1IdentityData.validName(name)) return "Invalid name: use 1-16 ASCII letters, digits or underscore.";
         C1IdentityData store = C1IdentityData.get(server);
         C1IdentityData.Entry prior = store.find(name);
+        if (prior != null && !C1P1CLifecycleRuntime.mayRestore(server, prior.profileId())) {
+            return "Lifecycle is DEAD/TRANSITION or corrupt: use c1 lifecycle / respawn; do not force spawn";
+        }
         if (prior != null && LIVE.containsKey(prior.profileId())) {
             C1PlayerAvatar existing = LIVE.get(prior.profileId());
             if (!existing.isRemoved()) return "Already spawned: " + prior.character() + " / " + prior.profileId();
@@ -101,7 +108,7 @@ final class C1P0Runtime {
         }
     }
 
-    private static void spawnExisting(MinecraftServer server, C1IdentityData.Entry entry) {
+    static void spawnExisting(MinecraftServer server, C1IdentityData.Entry entry) {
         if (LIVE.containsKey(entry.profileId()) && !LIVE.get(entry.profileId()).isRemoved()) return;
         ResourceLocation id = ResourceLocation.tryParse(entry.dimension());
         if (id == null) throw new IllegalArgumentException("Invalid dimension " + entry.dimension());
@@ -114,7 +121,7 @@ final class C1P0Runtime {
         C1PlayerAvatar avatar = new C1PlayerAvatar(server, level,
                 new GameProfile(entry.profileId(), entry.profileName()));
         // Restore full Vanilla ItemStacks before ChunkMap can track this avatar.
-        C1P1InventoryRuntime.restore(server, avatar);
+        C1VanillaLifecycleCoordinator.beforeSpawn(server, avatar);
         C1RotationState rotation = entry.rotation();
         avatar.moveTo(entry.x(), entry.y(), entry.z(), rotation.yaw(), rotation.pitch());
         avatar.setYHeadRot(rotation.headYaw());
@@ -126,7 +133,7 @@ final class C1P0Runtime {
         try {
             level.addNewPlayer(avatar);
             LIVE.put(entry.profileId(), avatar);
-            C1P1MotionRuntime.afterSpawn(avatar);
+            C1VanillaLifecycleCoordinator.afterSpawn(avatar);
             LOG.info("NPCortex C1-P0 ServerLevel.addNewPlayer returned {} profile={} actor={} dim={} pos=({},{},{}) (client unverified)",
                     entry.character(), entry.profileId(), entry.actorId(), entry.dimension(),
                     entry.x(), entry.y(), entry.z());
@@ -144,7 +151,7 @@ final class C1P0Runtime {
         C1IdentityData.Entry entry = identities.find(name);
         if (entry == null) return "No saved C1-P0 actor named " + name;
         C1PlayerAvatar avatar = LIVE.remove(entry.profileId());
-        C1P1MotionRuntime.beforeDespawn(server, avatar);
+        C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
         for (Map<UUID, C1P0SyncState> viewers : TRACKED.values()) viewers.remove(entry.profileId());
         if (avatar != null && !avatar.isRemoved()) avatar.discard();
         for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
@@ -154,12 +161,24 @@ final class C1P0Runtime {
         return "Deactivated " + entry.character() + "; identity retained for later respawn.";
     }
 
+    /** Remove the current avatar without deactivating persistent identity (death/dimension). */
+    static void detachForLifecycle(MinecraftServer server, UUID profileId) {
+        C1PlayerAvatar avatar = LIVE.remove(profileId);
+        C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
+        for (Map<UUID, C1P0SyncState> viewers : TRACKED.values()) viewers.remove(profileId);
+        if (avatar != null && !avatar.isRemoved()) avatar.discard();
+        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+            viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(profileId)));
+        }
+    }
+
     /** Server-only lookup; never accept a client-supplied entity ID as authority. */
     static C1PlayerAvatar activeAvatar(MinecraftServer server, String name) {
         C1IdentityData.Entry entry = C1IdentityData.get(server).find(name);
         if (entry == null || !entry.active()) return null;
         C1PlayerAvatar avatar = LIVE.get(entry.profileId());
-        return avatar != null && !avatar.isRemoved() ? avatar : null;
+        return avatar != null && !avatar.isRemoved()
+                && C1P1CLifecycleRuntime.mayRestore(server, entry.profileId()) ? avatar : null;
     }
 
     static C1PlayerAvatar liveAvatar(UUID profileId) {
@@ -213,6 +232,45 @@ final class C1P0Runtime {
                 consumer.accept(viewer);
             }
         }
+    }
+
+    /** R1: send Vanilla health metadata + viewer-token-bound client death state.
+     * A late viewer receives it after its RemotePlayer presence was verified.
+     */
+    static void syncDeathPresentation(C1PlayerAvatar npc) {
+        if (npc == null || npc.isRemoved()) return;
+        MinecraftServer server = npc.getServer();
+        if (server == null || !C1P1CLifecycleRuntime.isPresenting(npc.getUUID())) return;
+        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+            C1P0SyncState state = TRACKED.getOrDefault(viewer.getUUID(), Map.of()).get(npc.getUUID());
+            if (state != null && state.phase == C1P0SyncState.Phase.PRESENT
+                    && validatedSession(viewer, npc.getUUID(), npc.getId(), state.token) == state) {
+                sendDeathPresentation(viewer, npc, state);
+            }
+        }
+    }
+
+    private static void sendDeathPresentation(ServerPlayer viewer, C1PlayerAvatar npc, C1P0SyncState state) {
+        if (!C1P1CLifecycleRuntime.isPresenting(npc.getUUID())) return;
+        // Player health data is synced normally by ChunkMap; explicit snapshot
+        // covers clients whose tracking started during the death window.
+        var data = npc.getEntityData().getNonDefaultValues();
+        if (data != null && !data.isEmpty()) {
+            viewer.connection.send(new ClientboundSetEntityDataPacket(npc.getId(), data));
+        }
+        C1P0Network.send(viewer, new C1P0Network.DeathPresentation(
+                npc.getUUID(), npc.getId(), state.token));
+        LOG.info("NPCortex C1-R1 DEATH_PRESENTATION_SENT viewer={} npc={}",
+                viewer.getGameProfile().getName(), npc.getUUID());
+    }
+
+    static void onDeathReady(ServerPlayer viewer, C1P0Network.DeathReady msg) {
+        C1P0SyncState state = validatedSession(viewer, msg.npcId(), msg.entityId(), msg.token());
+        if (state == null || state.phase != C1P0SyncState.Phase.PRESENT
+                || !C1P1CLifecycleRuntime.isPresenting(msg.npcId())) return;
+        LOG.info("NPCortex C1-R1 CLIENT_DEATH_ANIMATION_ACK viewer={} npc={} entityId={}",
+                viewer.getGameProfile().getName(), msg.npcId(), msg.entityId());
+        // Only confirms remote entity entered dead state, NOT visual proof.
     }
 
     private static void sendRotation(ServerPlayer viewer, C1PlayerAvatar npc, C1P0SyncState state) {
@@ -348,6 +406,10 @@ final class C1P0Runtime {
             // vanilla spawn/repair (which can otherwise reset head yaw to zero).
             sendRotation(viewer, LIVE.get(state.npcId), state);
             C1P1InventoryRuntime.syncForViewer(viewer, LIVE.get(state.npcId));
+            C1P1MotionRuntime.syncCombatVelocityForViewer(viewer, LIVE.get(state.npcId));
+            if (C1P1CLifecycleRuntime.isPresenting(state.npcId)) {
+                sendDeathPresentation(viewer, LIVE.get(state.npcId), state);
+            }
             return;
         }
         // Forge StartTracking recorded this viewer for this particular profile. Only

@@ -17,7 +17,7 @@ import java.util.Optional;
 
 /** C1-P0 only: Forge play-phase handshakes, never a replacement for vanilla ChunkMap. */
 final class C1P0Network {
-    private static final String VERSION = "c1p1-rotation-1";
+    private static final String VERSION = "c1-r1-death-1";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(NPCortex.MOD_ID, "c1_sync"),
             () -> VERSION, VERSION::equals, VERSION::equals);
@@ -82,6 +82,26 @@ final class C1P0Network {
         }
     }
 
+    /** R1: piggybacks on an already-verified two-phase player session. */
+    record DeathPresentation(UUID npcId, int entityId, UUID token) {
+        static void encode(DeathPresentation m, FriendlyByteBuf b) {
+            Message.encode(new Message(m.npcId, m.entityId, m.token), b);
+        }
+        static DeathPresentation decode(FriendlyByteBuf b) {
+            Message m = Message.decode(b);
+            return new DeathPresentation(m.npcId, m.entityId, m.token);
+        }
+    }
+    record DeathReady(UUID npcId, int entityId, UUID token) {
+        static void encode(DeathReady m, FriendlyByteBuf b) {
+            Message.encode(new Message(m.npcId, m.entityId, m.token), b);
+        }
+        static DeathReady decode(FriendlyByteBuf b) {
+            Message m = Message.decode(b);
+            return new DeathReady(m.npcId, m.entityId, m.token);
+        }
+    }
+
     private C1P0Network() {}
     static void register() {
         CHANNEL.registerMessage(0, Prepare.class, Prepare::encode, Prepare::decode,
@@ -96,6 +116,10 @@ final class C1P0Network {
                 C1P0Network::handleRotationSnapshot, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(5, RotationApplied.class, RotationApplied::encode, RotationApplied::decode,
                 C1P0Network::handleRotationApplied, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(6, DeathPresentation.class, DeathPresentation::encode, DeathPresentation::decode,
+                C1P0Network::handleDeathPresentation, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(7, DeathReady.class, DeathReady::encode, DeathReady::decode,
+                C1P0Network::handleDeathReady, Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
     static void send(ServerPlayer viewer, Prepare packet) {
@@ -107,6 +131,10 @@ final class C1P0Network {
     static void send(ServerPlayer viewer, RotationSnapshot packet) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), packet);
     }
+    static void send(ServerPlayer viewer, DeathPresentation packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> viewer), packet);
+    }
+    static void deathReady(DeathReady packet) { CHANNEL.sendToServer(packet); }
     static void rotationApplied(RotationApplied packet) { CHANNEL.sendToServer(packet); }
     static void ready(ProfileReady packet) { CHANNEL.sendToServer(packet); }
     static void observation(Observation packet) { CHANNEL.sendToServer(packet); }
@@ -139,6 +167,18 @@ final class C1P0Network {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer sender = context.getSender();
         if (sender != null) context.enqueueWork(() -> C1P0Runtime.onRotationApplied(sender, msg));
+        context.setPacketHandled(true);
+    }
+    private static void handleDeathPresentation(DeathPresentation msg, Supplier<NetworkEvent.Context> supplier) {
+        NetworkEvent.Context context = supplier.get();
+        context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
+                () -> () -> C1P0ClientSync.onDeathPresentation(msg)));
+        context.setPacketHandled(true);
+    }
+    private static void handleDeathReady(DeathReady msg, Supplier<NetworkEvent.Context> supplier) {
+        NetworkEvent.Context context = supplier.get();
+        ServerPlayer sender = context.getSender();
+        if (sender != null) context.enqueueWork(() -> C1P0Runtime.onDeathReady(sender, msg));
         context.setPacketHandled(true);
     }
     private static void handleObservation(Observation msg, Supplier<NetworkEvent.Context> supplier) {

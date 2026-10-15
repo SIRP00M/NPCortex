@@ -59,6 +59,15 @@ final class C1InventoryData extends SavedData {
         setDirty();
     }
 
+    /** Lifecycle-driven snapshot, without forging a user-issued transaction receipt. */
+    void snapshotForLifecycle(UUID profile, Inventory source) {
+        if (blocked.containsKey(profile)) throw new IllegalStateException("corrupt Inventory SavedData: " + profile);
+        Record record = ensure(profile);
+        record.snapshot = source.save(new ListTag());
+        record.selected = source.selected;
+        setDirty();
+    }
+
     private static C1InventoryData load(CompoundTag root) {
         C1InventoryData data = new C1InventoryData();
         ListTag actors = root.getList("actors", Tag.TAG_COMPOUND);

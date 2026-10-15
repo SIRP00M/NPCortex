@@ -1,8 +1,108 @@
 # Changelog
 
-NPCortex maintains **one consolidated `CHANGELOG.md`** for the `Development` branch. This archive **continues** the published [`Development` baseline at `f3a9450`](https://github.com/SIRP00M/NPCortex/commit/f3a9450496d955f26ff8b7cf8db5ac6594756761), whose latest commit was `feat(agent): add C0 headless AI runtime, reliability fixes and documentation updates` (2026-10-15). The historical A2 → B1 → B2 → B3 → C0/C0-B implementation record is retained below, followed by C1 milestones including **C1-P1-B inventory/equipment** in this ZIP. **Sprint identifiers are not release tags.** This development snapshot now declares Forge (`0.1.2-alpha.1`) and Python package (`0.1.2a1`, with `__version__ = "0.1.2-alpha.1"`); no published tag or main-branch update is implied.
+NPCortex keeps **one consolidated `CHANGELOG.md`** for the `Development` branch. This history continues the earlier [`Development` C0 baseline](https://github.com/SIRP00M/NPCortex/tree/Development) and the `0.1.2-alpha.1` C1-P1-B snapshot. This local **`0.1.2-alpha.2` source candidate** is not a release/tag, does not modify `main`, and has not been pushed to GitHub by this packaging step.
 
-> **Evidence policy:** sections originally marked *candidate* record their *packaging-time* status. Later maintainer reports appear in the dated acceptance note immediately below; those reports supersede candidate status **only for the explicitly tested behaviors**, never the full C1 Quality Gate. No GitHub commit, release or build has been performed by preparing this ZIP.
+**Version display:** Forge `0.1.2-alpha.2`; Python package `0.1.2a2` (PEP 440); in-package Python `__version__ = "0.1.2-alpha.2"`. Historical earlier version numbers below are kept deliberately. A sprint title is not a published release.
+
+> **Evidence policy:** Historical entries marked candidate keep their original scope. Owner-reported acceptance of selected P0/P1-A/P1-B behaviors does not establish full C1 quality gates. Java policy tests do not verify Forge compilation or Minecraft gameplay. Do not push until the maintainer confirms the applicable Windows acceptance gates.
+
+## Unreleased — Development `v0.1.2-alpha.2`: C1-R2 Fix #2 + BuildFix1 (2026-10-15)
+
+### Changed
+
+- Advanced source/display version from the previous development snapshot `0.1.2-alpha.1` to `0.1.2-alpha.2` in Gradle `mod_version`, Forge `mods.toml`, backend distribution metadata and backend `__version__`.
+- Brought `ReadMe.md` up to the **latest uploaded source** (C1-P1-C, R0 lifecycle, R1/R1-A death presentation, R2 combat/motion ownership and the targeted BuildFix1). Kept C0–C1-P1-B history and this single changelog, without changing runtime functionality during version packaging.
+- Carried forward the source's R2 Fix #2 build-failure correction: `C1P1MotionRuntime.java` uses existing `C1VanillaMotionOwnership.captureVanilla(...)` rather than nonexistent `capture(...)`. This **code fix came with the uploaded source**, not from the version-bump packaging step.
+
+### Evidence / release gate
+
+- **This packaging session ran** 1,227 isolated Java regression assertions across P0 sync, P1-A motion/rotation, P1-B inventory/SaveData, P1-C lifecycle/tick, R0 policy/coordinator and R1/R2 combat/death policies: all passed on a **JDK 21 host using `javac --release 17`**. This does not certify a native JDK 17 Forge build. Focused backend Python tests passed **69/69 (exit 0)**: C0 agent 56, planner 10 and Windows acceptance-script static tests 3. Full Python backend regression was not run in this packaging session.
+- **Forge compile attempt failed before Java compilation** because the Gradle wrapper could not download Gradle 8.8 (`java.net.UnknownHostException: services.gradle.org`). This is an environmental blocker, **not** evidence that the reported `captureVanilla` BuildFix1 has compiled successfully under Forge.
+- **Windows Forge Build, real player Knockback II + Zombie/wall verification, death/respawn/poof, inventory/network regression, and multi-NPC/multiplayer compatibility remain open** for this exact ZIP unless independently confirmed by the maintainer.
+- No new gameplay feature or schema migration was implemented by the version/documentation changes. No GitHub commit/push/merge/tag was performed.
+
+## New milestones in this source since `v0.1.2-alpha.1`
+
+## C1-R2 Fix #2 — Build Failure Audit #1 (2026-10-15; MINIMAL COMPILE FIX CANDIDATE)
+
+- Resolved the user-reported Windows Forge `:compileJava` failure at `C1P1MotionRuntime.java:148`: changed `combatVelocity.capture(...)` to the existing `C1VanillaMotionOwnership.captureVanilla(...)` method. No changes to impulse math, movement ownership, Network, Inventory, Death, Backend, or SavedData.
+- Verification remains required: Windows Forge `build`, gameplay player Knockback II, Zombie, Movement, Death/Respawn/Poof and Inventory/Network regression. Isolated Java policy tests cannot substitute for Forge compilation or in-game acceptance. No GitHub operations performed.
+
+---
+
+## C1-R2 Fix #2 — Architecture C Movement Lifecycle Refactor (2026-10-15; IMPLEMENTATION CANDIDATE)
+
+- **User-provided failure evidence:** `VANILLA_KNOCKBACK` registered `velocity=(0.92536,0.4,0.76298)` after a real Knockback II sword hit, but `COMBAT_STEP age=1` subsequently saw `incoming=(0,0,0)` and no server displacement. This proves the motion was missing at the handoff, **not** that Minecraft did not calculate knockback; the exact external writer that cleared/replaced the vector is still unproven.
+- **Approved C movement lifecycle:** added pure-Java `C1PlayerMotionPhase` (COMBAT > COMMANDED > SETTLING) and `C1VanillaMotionOwnership` so one authoritative END-tick physics owner receives real Vanilla velocity across attack/world/tick boundaries. Repeated Vanilla calls replace, not sum, the captured vector; meaningful newer engine motion wins. After travel, only Vanilla's damped/post-collision velocity remains eligible for continuation. Transient state clears on Death/Despawn/Stop/Session End/Server Stop.
+- Preserved existing `Player.travel` and Fix #1's collision-only `Entity.move` fallback, which never teleports or computes a custom knockback. Corrected combat completion to treat grounded downward gravity as rest after the minimum duration. Added first-three-frame `C1-R2-FIX2 COMBAT_STEP` diagnostics reporting motion ownership, input, position delta, and collision state; added Windows script and acceptance document.
+- **Local tests:** 1227 isolated Java 17-target assertions passed with `javac --release 17` on JDK 21 host; focused Backend C0 tests **69 passed, exit 0**. These are NOT Forge compile or Minecraft combat confirmation. Forge wrapper is still blocked fetching Gradle 8.8 from `services.gradle.org` before Java compilation. **Windows Forge Build, actual Player Knockback II displacement, wall collision, Zombie regression, Death/Inventory/Network and 1/3/5/10 NPC testing remain open.** No GitHub operations. See `docs/c1-r2-fix2-movement-lifecycle-refactor.md`.
+
+---
+
+## C1-R2 Fix #1 — Server-authoritative Combat Physics fallback (2026-10-15; IMPLEMENTATION CANDIDATE)
+
+- **Context and evidence:** Windows player-attack logs show `reason=VANILLA_KNOCKBACK` with horizontal velocity (e.g. `0.8148, 0.4, 0.8810`), while authoritative `/npcortex c1 motion` positions remained unchanged through `IDLE → COMBAT_IMPULSE → SETTLED`. User reported Zombie hits can cause knockback, but direct sword/Knockback II hits did not visibly move the NPC. The Vanilla force calculation and session activation therefore work, whereas applying the velocity to the server position is not reliable on this synthetic, clientless `ServerPlayer`.
+- **Scoped B fix:** Preserve `LivingEntity.knockback` as the sole source of impulse magnitude/direction and `Player.travel(Vec3.ZERO)` as the first physics path. In the existing one-owner combat tick, capture incoming Velocity, call Vanilla `travel`, and measure authoritative displacement. If `travel` does **not** advance the relevant axis and no wall/ceiling collision was registered, call Vanilla `Entity.move(MoverType.SELF, remainingVelocity)` for that axis **once**. No teleport, new knockback force, full `doTick()`, second per-tick loop, protocol change, backend change, or SavedData migration. Preserve the vanilla `Entity.move` collision solver.
+- **Diagnostics:** `C1-R2-FIX1 COMBAT_STEP` reports velocity before `travel`, `travelDelta`, fallback requested, actual server displacement, collision flags and resulting velocity during the first three frames of a Combat Session. `/npcortex c1 combat` includes `collisionFallbackSteps` and `travelOnlySteps` while a session is live. These counters alone do **not** prove successful displacement: evaluate `actualDelta` and `/npcortex c1 motion` position.
+- **Tests run here:** 947 isolated Java 17-target assertions passed (baseline 928 + 19 R2 fix assertions); focused Backend C0 agent suite 56 tests passed, exit 0. Forge compile NOT verified: wrapper Gradle 8.8 distribution is unavailable in this runtime, and `./gradlew --offline compileJava` failed before Java compilation. Real Windows Forge Build and Minecraft Combat/Movement/Death/Network tests remain mandatory. No GitHub operations performed. See `docs/c1-r2-fix1-server-authoritative-physics.md`.
+
+## C1-R2 — Vanilla Combat Physics (Architecture C, connection-safe integration; 2026-10-15; IMPLEMENTATION CANDIDATE)
+
+- Based on user-accepted C1-R1-A death animation/poof. Added a distinct **COMBAT** phase to the R0 lifecycle policy, while preserving the single P1-A travel owner. C1 `ServerPlayer` still uses Vanilla world `tick()` and real `super.knockback()`, `hurt()`, resistance and damage cooldown; its synthetic listener still **does not run connection-driven `doTick()`**. This is a staged C implementation, not full logged-in PlayerList parity.
+- Added `C1CombatTickPolicy` and a bounded per-NPC combat impulse window to the original `C1P1MotionRuntime`: actual Vanilla velocity is integrated via `Player.travel(Vec3.ZERO)` while a planned movement intent is paused; no custom strength formula or second physics loop. Fall checks continue through the existing Vanilla `doCheckFallDamage` path. Death/detach clears the pending session and does not reanimate dead entities.
+- `C1PlayerAvatar.knockback` calls `super.knockback` first, then schedules only changed finite impulses. Also monitors Vanilla `hasImpulse` opportunistically for externally injected velocity while idle. Sends Vanilla `ClientboundSetEntityMotionPacket` to verified real viewers on an accepted impact and on late verified tracking; original C1-P0 two-phase recovery and protocol version remain unchanged. Added operator-only `/npcortex c1 combat <name>` read-only diagnostics and `/npcortex c1 knockback <name> <0.1..2>` Vanilla callback fixture.
+- Maintained R1-A one-shot death particles, R1 death window, R0 lifecycle, P0 tracking, P1-A motion/rotation, P1-B inventory/ledger, C0 backend, persistent actor identities and SavedData schema. Portal navigation, Qwen combat AI, monster targeting, and full connection `doTick` are out of scope.
+- **Local test evidence:** 928 isolated Java regression assertions (including 114 new R2 and updated R0 test doubles) passed with `javac --release 17`/JDK 21 host. Unchanged Backend C0 focused test: 56 tests plus 8 subtests, exit 0. **Forge compile was not reached:** Gradle 8.8 download hit `UnknownHostException: services.gradle.org`. No new Minecraft gameplay, enchantment/attack verification, 1/3/5/10-NPC benchmarks, multiplayer or modded velocity validation. See `docs/c1-r2-vanilla-combat-physics.md`. No GitHub operations.
+
+---
+
+## C1-R1-A — Mob-Like Death Despawn Particles (2026-10-15; CANDIDATE)
+
+- User-approved R1 presentation-only enhancement: after the existing **26-tick** Vanilla Player death fallover, the server broadcasts a single bounded burst of Vanilla `POOF` (26) and `CLOUD` (10) particles at the dead NPC's position **before** detaching the avatar. Uses `ServerLevel.sendParticles`, not a custom renderer/network packet, and is visible only to nearby players in the same dimension (subject to client particle settings).
+- Hardened emission preconditions: burst only after the normal presentation deadline, while the original avatar is still tracked and not removed, and SavedData confirms `DEAD`; never emit on stale avatar, early teardown, interrupted lifecycle or server shutdown. Removing the volatile presentation record makes the burst one-shot.
+- Kept R1 death animation, authoritative death/keepInventory transaction, respawn, R0 lifecycle foundation, P0 two-phase tracking, P1 movement/rotation/inventory, Qwen backend, UUIDs and SavedData schema unchanged. No knockback, portals or AI in this scope.
+- Extended dependency-free death-policy regression checks; **Forge Compile and visual particle confirmation on Windows are still required**. No GitHub operations.
+
+---
+
+## C1-R1 — Verified Vanilla Player Death Presentation (2026-10-15; CANDIDATE)
+
+- Added a bounded **26-tick Vanilla Player death pose window** after authoritative Death/Inventory processing (previously death immediately discarded `ServerPlayer` in the same tick). Death persistence remains `DEAD` from the initial END tick, so dead actors cannot move, interact, or auto-restore after restart.
+- Added per-viewer, token-checked `DeathPresentation` / `DeathReady` messages atop C1-P0 Two-Phase Networking. Client enters `RemotePlayer` zero-health state for native death rendering and acknowledges dead state; a visual screenshot/gameplay check is still required. Late viewers can receive death state after normal entity-presence verification.
+- Respawn waits until the short presentation ends; R0/P0/P1-A/P1-B lifecycle, Inventory Journal, UUID persistence and GameRules remain authoritative. This does not add knockback, automatic portals, AI or full PlayerList login.
+- Local isolated Java 17 tests: **764 assertions passed** (R1 policy 43 + R0/P0/P1 regression 721). Unchanged Backend C0 focused regression: **56 tests + 8 subtests passed, exit code 0**. See `docs/c1-r1-verified-vanilla-death.md` for Windows Acceptance. Forge compile and Minecraft rendering **not yet confirmed** for this candidate. No GitHub operations.
+
+---
+
+## C1-R0 — Vanilla Lifecycle Foundation (2026-10-15; IMPLEMENTATION CANDIDATE)
+
+- Approved **R0 only** of C1 full lifecycle refactor. Added `C1VanillaLifecycleCoordinator` and `C1VanillaLifecyclePolicy` to make phase ownership explicit: Vanilla WORLD `ServerPlayer.tick`; **no** synthetic `ServerPlayer.doTick`; NPCortex owns bounded MOTION, deferred DEATH and per-viewer TRACKING. A detached/non-ALIVE avatar cannot advance WORLD tick. No full PlayerList/Connection emulation, portal, death animation or knockback expansion is included.
+- Consolidated the three existing server-tick listeners into a coordinator that preserves **P0 network → P1 motion → P1-C death** event order and preserves server-shutdown ordering. Moved pre-spawn Inventory and Lifecycle restore, after-spawn Motion preparation, and pre-detach Motion cleanup behind the same boundary. Existing APIs, SavedData formats, Backend and the two-phase client repair protocol are unchanged.
+- Added dependency-free R0 ownership test (13 assertions) and coordinator test-double harness (12 assertions), plus `scripts/test-c1-r0-foundation.ps1` and `docs/c1-r0-vanilla-lifecycle-foundation.md`.
+- **Local results:** 25 new + 696 existing isolated assertions **PASS** under `javac --release 17` / JDK 21 host, each test process exited 0. Backend file contents are unchanged; focused C0-agent Backend regression **56 passed, 8 subtests passed (exit 0)**; full suite not rerun. Forge Build **could not start compilation** because Gradle 8.8 distribution download fails with `UnknownHostException: services.gradle.org`. Windows Build, gameplay, network, 1/3/5/10-NPC benchmark, multiplayer and mod compatibility are NOT certified. No GitHub operations were made.
+
+---
+
+## C1-P1-C — Fix #1: Selective Vanilla World Tick, Idle Gravity & Damage (2026-10-15; CANDIDATE)
+
+- **Source diagnosis:** `C1PlayerAvatar.tick()` and `doTick()` were both overridden to no-op in P0/P1. Minecraft 1.20.1 normally decrements `ServerPlayer.spawnInvulnerableTime` inside `ServerPlayer.tick()`, explaining the user-observed `damageAccepted=false`/20 HP even with `setInvulnerable(false)`. `settle` temporarily activating `Player.travel` confirms that physics is separately session-controlled, not continuously simulated while idle.
+- **Approved selective Vanilla integration:** `C1PlayerAvatar.tick()` now calls `super.tick()` (server WORLD phase) and then performs a lightweight idle support check. **`doTick()` remains disabled** because the passive synthetic connection is not a logged-in real player's movement connection and could duplicate the P1-A controlled physics. This is not full Vanilla Player tick parity.
+- **Idle physics:** when an idle, active, loaded NPC loses floor support, a support probe every 4 server ticks starts the existing bounded P1-A settle session. No chunk forcing, AI polling or secondary physics system. Walk/jump commands continue through the original motion controller.
+- **Fall-damage integration:** after each authoritative `Player.travel()` step, call the Vanilla `ServerPlayer.doCheckFallDamage` method (normally invoked by real player movement packets). Fall checks run **after** iterating motion sessions, preventing a fatal fall from mutating the same iteration's map. Vanilla gravity/friction/collision remain in `Player.travel`.
+- Expanded read-only `/npcortex c1 lifecycle <name>` diagnostics to show GameMode, invulnerable/flying abilities and noGravity, so Creative vs. spawn protection vs. incomplete physics can be distinguished without guessing. No SavedData format changes, no Backend/SQLite modifications and no GitHub operations.
+- **Local checks:** P0 Network 26 + Motion 29 + Rotation 29 + Inventory Journal 544 + Inventory SavedData test doubles 14 + Lifecycle SavedData test doubles 22 + new idle-physics policy 32 = **696 isolated Java 17 compatibility assertions passed**. These tests ran on a JDK 21 host using `javac --release 17`; they are NOT Forge compilation. The local Forge Gradle wrapper failed to download Gradle 8.8 (`UnknownHostException: services.gradle.org`) before `compileJava`. Windows Forge Build, Damage, fall damage, player world-tick compatibility, three-NPC regression and performance remain unverified. Details: `docs/c1-p1-c-vanilla-tick-fix1.md`.
+
+---
+
+## C1-P1-C — C-Optimized Selective Vanilla Player Lifecycle (2026-10-15; CANDIDATE)
+
+- Added `C1LifecyclePhase`, `C1LifecycleData` and `C1P1CLifecycleRuntime` with ALIVE/DEAD/TRANSITION SavedData states, health/phase revisions, safe legacy-P1-B defaults and blocked corrupt/ambiguous lifecycle data. Respects stable World/Actor/Profile UUID mapping.
+- Enabled Vanilla `ServerPlayer.hurt`/Health and selectively dispatches cancellable Forge `LivingDeathEvent`, without calling unverified `ServerPlayer.die` or `PlayerList.respawn` on a passive connection. Lethal events queue a bounded tick-END teardown and inspect **current** `keepInventory`, dropping via Vanilla `Inventory.dropAll` only when the rule is false; snapshot/ledger receipts stay separate.
+- Added operator-only `lifecycle`, `damage`, `kill`, `respawn`, and guarded `dimension` commands. Controlled respawn uses saved location; dimension transfer is allowed only to an already loaded, collision-free position beside an operator in that destination dimension. Reuses existing P0 viewer tracking and P1-A rotation/equipment restoration.
+- Explicit crash limitation: separate lifecycle/inventory/world ItemEntity writes are not an atomic transaction; interrupted transitions stay fail-closed (manual reconciliation not implemented). Full Vanilla PlayerList/bed/XP/login/clone/portal parity and Mod compatibility are NOT claimed. No Qwen/NPC autonomous skill work and no GitHub operations.
+- Local Java mock checks: lifecycle SavedData **22 assertions** passed; P1-B Inventory SavedData **14 assertions** passed; prior isolated P0/P1-A/P1-B regression tests are retained. **Forge Gradle wrapper cannot fetch Gradle 8.8 from services.gradle.org**, so no Forge Compile/Windows Gameplay acceptance is claimed. See `docs/c1-p1-c-selective-vanilla-lifecycle.md`.
+
+---
 
 ## Unreleased — C1-P1-B Transactional Inventory & Equipment (2026-10-15)
 
