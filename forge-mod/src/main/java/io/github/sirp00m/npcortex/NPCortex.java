@@ -12,14 +12,25 @@ import net.minecraftforge.fml.config.ModConfig;
 
 import java.util.concurrent.CompletableFuture;
 
-/** Phase 3: developer-only command bridge. No NPC entity is spawned yet. */
+/** Phase 3 chat bridge with opt-in C1-P0 experimental ServerPlayer tracking rig. */
 @Mod(NPCortex.MOD_ID)
 public final class NPCortex {
     public static final String MOD_ID = "npcortex";
 
     public NPCortex() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, NPCortexConfig.SPEC);
+        C1P0Network.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStarted);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogin);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStartTracking);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStopTracking);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogout);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(C1P1MotionRuntime::onTick);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerChangedDimension);
+        MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerRespawn);
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -28,6 +39,129 @@ public final class NPCortex {
                         // This is a developer command; limit access to operators in multiplayer.
                         // Enable cheats in a local test world to use it.
                         .requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("c1")
+                                .then(C1P1InventoryCommands.build())
+                        .then(C1P1InventoryCommands.equipment())
+                        .then(C1P1InventoryCommands.ledger())
+                        .then(C1P1InventoryCommands.give())
+                        .then(C1P1InventoryCommands.equip())
+                        .then(C1P1InventoryCommands.clear())
+                        .then(C1P1InventoryCommands.copyHand())
+                        .then(Commands.literal("spawn")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P0Runtime.spawn(source.getServer(),
+                                                            source.getPlayerOrException(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("despawn")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P0Runtime.despawn(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("info")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P0Runtime.info(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("rotation")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P0Runtime.rotationInfo(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("sync")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P0Runtime.syncInfo(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("move")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .then(Commands.argument("direction", StringArgumentType.word())
+                                                        .suggests((context, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                                                java.util.List.of("forward", "back", "left", "right"), builder))
+                                                        .then(Commands.argument("blocks", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(0.5, 8.0))
+                                                                .executes(context -> {
+                                                                    var source = context.getSource();
+                                                                    String result = C1P1MotionRuntime.move(source.getServer(),
+                                                                            StringArgumentType.getString(context, "name"),
+                                                                            StringArgumentType.getString(context, "direction"),
+                                                                            com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(context, "blocks"));
+                                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                                    return 1;
+                                                                })))))
+                                .then(Commands.literal("turn")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .then(Commands.argument("yaw", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(-180f, 180f))
+                                                        .executes(context -> {
+                                                            var source = context.getSource();
+                                                            String result = C1P1MotionRuntime.turn(source.getServer(),
+                                                                    StringArgumentType.getString(context, "name"),
+                                                                    com.mojang.brigadier.arguments.FloatArgumentType.getFloat(context, "yaw"));
+                                                            source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                            return 1;
+                                                        }))))
+                                .then(Commands.literal("jump")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P1MotionRuntime.jump(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("settle")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P1MotionRuntime.settle(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("stop")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P1MotionRuntime.stop(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("motion")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(context -> {
+                                                    var source = context.getSource();
+                                                    String result = C1P1MotionRuntime.status(source.getServer(),
+                                                            StringArgumentType.getString(context, "name"));
+                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                    return 1;
+                                                })))
+                                .then(Commands.literal("list")
+                                        .executes(context -> {
+                                            var source = context.getSource();
+                                            String result = C1P0Runtime.list(source.getServer());
+                                            source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                            return 1;
+                                        })))
                         .then(Commands.literal("status")
                                 .executes(context -> {
                                     var source = context.getSource();

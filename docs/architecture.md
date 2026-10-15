@@ -48,17 +48,15 @@ Headless B1 caller (PowerShell/HTTP)
                        --> AI Provider / Ollama Qwen
                        --> atomic verified user/assistant transcript append
 
-B2: Explicit NPC-NPC multi-party turns (headless API)
-B3: Qwen-selected speaker and stop (explicit headless steps)
-C0: persisted Goal, observations, Qwen skill requests and verification (headless only)
-C1: Forge player-based NPC and physical world integration (NOT IMPLEMENTED)
+B2: Explicit NPC-NPC multi-party turns (headless API, implemented candidate)
+Future C: Goals, perception, planning, actions (ROADMAP ONLY)
 ```
 
 Conversations have a stable UUID derived from world ID, actor ID and player ID.
 Character packs are templates, not NPC identities. SQLite connections are scoped
 to individual operations, with WAL mode and foreign keys enabled. Backend is a
 **single local process**, so A2 turn locks protect one process only. DB schema
-version 4 is current; earlier v1/v2/v3 versions migrate forward and unsupported future versions fail closed. Transcript
+version 1 is explicitly checked and unsupported versions fail closed. Transcript
 retention is configurable and bounded; no secret/auth protection exists.
 See [B1 API](api.md) and [Future C roadmap](future-autonomy-roadmap.md).
 
@@ -105,8 +103,7 @@ locks or authentication are available. See [B2 Windows verification](b2-verifica
   repositories: they route read/write units of work through the same manager.
   No network AI call occurs while an SQLite transaction is open.
 - A connection belongs to exactly one operation/thread. No long-lived shared
-  SQLite handle, speculative connection pool or distributed lock. At this B2-C
-  historical stage the schema was v2; later B3/C0 migrated forward.
+  SQLite handle, speculative connection pool, distributed lock, or schema v3.
 - `WorldStore.get_conversation()` reads metadata and transcript in one read
   snapshot rather than two independent transactions.
 
@@ -118,9 +115,8 @@ unread socket buffer on Windows.
 
 Tests explicitly close raw sqlite3 connections via `sqlite_test_utils` (the
 native `sqlite3.Connection` context manager **does not close connections**).
-At the B2-C milestone the database remained SQLite v2 with the same B1/B2
-API payloads. The **current tree is SQLite v4** after later B3/C0 work.
-B2-C itself did not add B3, NPC entities, or world actions.
+The database remains SQLite v2, with identical B1/B2 API payloads and SQL
+schema. No B3 scheduling, NPC entity, autonomous behaviors, or C-world features.
 
 ## B3: AI-driven, bounded, headless social runtime (candidate)
 
@@ -140,20 +136,4 @@ B3 adds two tables on SQLite schema v3. Its planner is advisory and cannot
 submit Minecraft game actions or access B1 private actor/player transcripts.
 A caller must advance each step; this is NOT a free-running/background simulation.
 See [B3 social runtime](b3-headless-social.md) for failure budgets and limitations.
-Later C0 added only headless contracts; **real Forge sensors and world actions**
-require a separate audit, approval and implementation.
-
-
-## Development-line C0 boundary (October 2026)
-
-The source tree includes **SQLite schema v4** and headless modules
-`agent_contracts.py`, `agent_skills.py`, and `agent_runtime.py`. A trusted caller
-provides observations; Qwen proposes only skills actually advertised in the
-snapshot; new observations verify an action outcome independently. It is not
-an automatic game-world simulation and the Python backend does not execute
-Minecraft actions. Forge still exposes only the developer chat-command bridge.
-
-C1 True Player-based NPC identity, networking, rendering, lifecycle, and later
-real-world skill execution are separate feasibility/implementation milestones.
-See [C0 contract](c0-headless-agent-runtime.md), [C1 handoff](c0-c1-handoff.md),
-[roadmap](roadmap.md), and [single Changelog](../CHANGELOG.md).
+Any future C event/sensor/world-action adapter requires a new audit and approval.

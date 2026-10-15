@@ -1,23 +1,41 @@
-# NPCortex — Long-term Autonomous Companion Roadmap
+# NPCortex — Future C Extension Roadmap (design only)
 
-**Current implementation in this ZIP:** C0-B provides a **headless general-purpose agent protocol** (Goals, Snapshots, advertised Skill contracts, Qwen planning, persisted action requests and evidence-based verification). It does **not** read a live Minecraft world or directly actuate a player/NPC. See [C0 protocol](c0-headless-agent-runtime.md), [roadmap](roadmap.md) and [single Changelog](../CHANGELOG.md).
+**Current scope:** B — Multi-NPC Social Runtime (B1, then B2, then B3).
+**Not authorized in B1/B2/B3:** C — Full Autonomous World Simulation.
 
-| Capability | Current foundation | What's still missing |
+| Future C capability | B foundation that can support it | Status |
 |---|---|---|
-| Durable actor identity | B1 UUID registry and SQLite | Binding to a real player-based Minecraft NPC lifecycle |
-| Multiple conversational actors | B2 explicit dialogues and B3 caller-stepped social runs | Autonomous initiation, relationships, scalable population policies |
-| World perception | C0 typed, validated observation snapshots | Real server-authoritative Forge sensors and freshness handling |
-| AI skill planning | C0 Qwen decisions over advertised verified SkillRegistry contracts | Actual movement, breaking/placing, inventory integration on game server |
-| Evidence-based execution | C0 idempotent requests/results, conservative postcondition checks | Real-world action executor, crash-safe side effects and gameplay verification |
-| Navigation & world survival | C0 **contracts**, not locomotion | Player-like 3D navigation, recovery, resource gathering, building and survival |
-| C1 True Player-based NPC | Approved architectural direction | Prove network, rendering, spawn/tracking and lifecycle first |
-| Optional mod interoperability | Integrations folder contains plans | Compatibility testing and explicit opt-in integrations (e.g. TaCZ) |
+| Autonomous goals & personal agendas | Actor UUID and persistent identity | PLANNED — no goal engine |
+| Dynamic social relationships | Stable actor references & conversations | PLANNED — no relationship scoring |
+| World perception / spatial truth | Namespaced world and dimension identity | PLANNED — no sensors/events |
+| AI planning & action execution | Provider boundary and service separation | PLANNED — no action API |
+| Daily routines / background thoughts | Actor lifecycle boundaries | PLANNED — no autonomous loop |
+| NPC-to-NPC autonomous social initiation | B2 dialogue + B3 step-driven AI-selected speaker | PLANNED for C: no background self-initiation |
+| Scalable population policies | A2 capacity bounds; future B scheduler | BLOCKED by performance tests |
+| Forge locomotion and world interactions | Future Minecraft entity adapter | DEFERRED |
 
-## Development sequence
+Do not add stub classes or fake implemented skills solely for future-proofing.
+In B1/B2, identity, persistent transcripts and explicit dialogue turns exist;
+there is NO background world loop, goal planner, social self-initiation,
+relationship updater or world-action adapter. No C code is enabled.
+Any scope change requires a new repository audit, options and user approval.
 
-1. **C1-P0 feasibility:** Prove `ServerPlayer`/`FakePlayer`-based player-like NPC identity, spawn, network tracking, rendering, save/load lifecycle. No assumptions that Forge `FakePlayer` is a visible player avatar.
-2. **Later C1 milestones:** Build safe server-authoritative movement, inventory and block interactions with real-world observations and correlated action results, only after independent approval.
-3. **Perfect vertical slices:** Complete one real task reliably with verified world outcomes, collection and cleanup before expanding into unrelated gameplay capabilities.
-4. **Future broader autonomy:** Scheduling, social life, goal selection, long-running plans and mod compatibility once lower-level execution is stable.
+### B3 foundation boundary
 
-The existing backend is not a fully autonomous agent in Minecraft. Avoid implementing mock classes solely to suggest missing integrations exist. Keep runtime, Forge world adapter and integrations modular and validate every real effect server-side.
+B3 implements AI-assisted choice of speaker and model-driven stop **only when a
+trusted localhost caller explicitly advances a headless social step**. The
+persisted `social_runs`/`social_steps` journal provides a future orchestration
+boundary, but there is NO background timer, no sensor feed, no game event
+reader, no autonomous goals, no social relationship modeling, and no game
+execution. Do not mistake B3 headless AI turn choice for C world autonomy.
+
+
+## C0 update (October 2026)
+
+C0 now offers a **headless bounded** world snapshot contract, persistent goals,
+AI-selected SkillRegistry calls and observed-postcondition result checks. These
+are BACKEND protocol mechanisms, not real world sensors, actions or autonomy.
+The C1 True Player-based NPC is an approved *architecture target* only: network,
+rendering, lifecycle, physical movement and mod compatibility feasibility still
+need a separate Forge Implementation Sprint. No autonomous world simulation or
+background loop is implemented.

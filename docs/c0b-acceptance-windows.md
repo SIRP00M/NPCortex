@@ -13,10 +13,10 @@
 ## Verify the already-completed goal (Terminal B)
 
 ```powershell
-.\scripts\test-c0-headless.ps1 -VerifyGoalId 'YOUR-GOAL-UUID'
+.\scripts\test-c0-headless.ps1 -VerifyGoalId '6fcaafda-cb0b-4911-9e34-12d41d6644ca'
 ```
 
-Expected: the six checks for Backend, goal ID, completed status, 2 action attempts, 1 unverified status, and 1 succeeded status all pass. Replace `YOUR-GOAL-UUID` with a Goal ID actually present in your SQLite database. This verification does **not** call Qwen again and should not create a new goal. It requires the existing SQLite database from the earlier test.
+Expected: the six checks for Backend, goal ID, completed status, 2 action attempts, 1 unverified status, and 1 succeeded status all pass. This verification does **not** call Qwen again and should not create a new goal. It requires the existing SQLite database from the earlier test.
 
 If the old goal's database is not present, run the full headless test after starting Ollama and the Backend:
 
@@ -43,7 +43,3 @@ The script now prints actual action counts and a table containing `action_id`, `
 ## Boundaries
 
 No gameplay/Forge test is implied. This change does not alter Qwen prompting, runtime action verification, schemas, or player-based NPC features. User manages all GitHub operations; no push before Quality Gate approval.
-
-## Acceptance status note
-
-The maintainer reported that the corrected `-VerifyGoalId` script passed on Windows after the script-only patch. This is historical owner-reported evidence, not a new execution of the script or a Minecraft gameplay acceptance.

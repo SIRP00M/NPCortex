@@ -63,7 +63,7 @@ handles all GitHub actions. No Test, No Push.
 
 No C1 Source Code or world simulation is implemented in the C0 ZIP.
 
-## C0-B Planner error contract (implemented in this headless snapshot)
+## C0-B Planner error contract (candidate)
 
 - `provider_unavailable` (HTTP 502): Ollama/model transport error, or model unavailable.
 - `planner_invalid_decision` (HTTP 502): model responded but decision failed
@@ -71,4 +71,4 @@ No C1 Source Code or world simulation is implemented in the C0 ZIP.
 - Forge should handle neither error by inventing a fallback action; it should
   surface the failure and obey the existing goal failure budget.
 - C0-specific Ollama schema changes are not part of Forge's protocol.
-- See `docs/c0-planner-reliability.md`. The maintainer reported headless real-Qwen and Windows acceptance-script success; **C1 Forge gameplay is still unverified**.
+- See `docs/c0-planner-reliability.md`. Await Windows Qwen gate before treating as accepted.
