@@ -66,6 +66,7 @@ final class C1VanillaLifecycleCoordinator {
         C1P0Runtime.onServerTick(event);
         C1P1MotionRuntime.onTick(event);
         C1P1CLifecycleRuntime.onTick(event);
+        C2AgentRuntime.onServerTick(event);
     }
 
     static void onServerStopping(ServerStoppingEvent event) {
@@ -73,5 +74,6 @@ final class C1VanillaLifecycleCoordinator {
         // deaths as TRANSITION without auto-recreating an ambiguous player.
         C1P0Runtime.onServerStopping(event);
         C1P1CLifecycleRuntime.onServerStopping(event);
+        C2AgentRuntime.beforeServerStop(event.getServer());
     }
 }

@@ -1,0 +1,62 @@
+NPCortex Development — v0.2.0-alpha.1
+C2-P1-A World Representation — PENDING TESTS / ACCEPTANCE STATUS
+Updated: 2026-10-16
+
+This is an evidence ledger, NOT a declaration that the full C2-P1-A Quality Gate passed.
+Developer ZIP packaging changes documentation/metadata only and has not pushed to GitHub.
+
+SCOPED PASS / OBSERVED (not all acceptance gates)
+--------------------------------------------------
+[OWNER-REPORTED PASS, WINDOWS] C2-P1-A Forge Build on Windows, 2026-10-16.
+[OWNER-REPORTED PASS, WINDOWS MINECRAFT] Flat-terrain navscan; place/break/
+  rescan reaction; hazard checks; lifecycle checks; five-NPC SEQUENTIAL
+  navscan smoke test. These do not measure concurrent server tick impact.
+[OWNER-REPORTED PASS] Java self-test groups including P1-A C2NavGrid 27
+  assertions and C2 foundation 42 assertions; other C1/C2 self-tests.
+[OWNER-REPORTED PASS] Backend full regression: 193 tests.
+[OWNER-REPORTED LIMITED PASS] C2-P0 move-to-target and short-distance
+  precision movement, previously confirmed on Windows Minecraft.
+
+OPEN — NOT YET TESTED (DO NOT MARK PASS)
+----------------------------------------
+[NOT YET TESTED] C2-P1-A Unloaded Chunk Safety — real Minecraft gameplay
+  near an actually unloaded chunk boundary, correct UNLOADED sentinel,
+  no forced chunk load, no accidental read of unloaded cells and no unsafe
+  WALKABLE classification. Unit tests alone do not establish this.
+  Evidence needed: world setup and chunk state; navscan output/logs;
+  client/server behavior and evidence no force-loading occurred.
+
+[NOT YET TESTED] C2-P1-A Partial Block / Terrain Accuracy — per-coordinate
+  semantic validation of candidate support heights and classifications
+  on slabs, stairs, fences, thin/partial collision shapes, hills and
+  multi-level structures. Confirm WALKABLE vs PARTIAL_SUPPORT,
+  OBSTRUCTED and UNSUPPORTED against actual Vanilla collision/support.
+  Evidence needed: representative block positions and heights, expected
+  vs observed cell classifications, logs/screenshots and any mismatches.
+
+OTHER OPEN ACCEPTANCE / NOT CERTIFIED
+--------------------------------------
+[OPEN] Concurrent 1/3/5/10 NPC performance/MSPT, latency and memory
+  profiling during repeated navscan; five-NPC sequential smoke is NOT
+  equivalent to concurrent profiling.
+[OPEN] Dedicated server/multiplayer, modded block compatibility,
+  repeated lifecycle/retracking regression, crash-recovery and broader
+  C1/C2 cross-feature regressions where unverified.
+[OPEN] Any other C2-P1-A Quality Gate acceptance criterion not explicitly
+  verified or disposed by the maintainer. Do not infer P1-B readiness.
+
+LATEST PACKAGING SESSION — SEPARATE EVIDENCE
+---------------------------------------------
+Local testing performed during packaging is reported separately in the
+accompanying response / CHANGELOG. It does not replace owner Minecraft
+acceptance. The original P1-A candidate documented a Linux Gradle
+wrapper-download failure before compilation; the maintainer's later
+Windows Forge Build PASS is distinct and more relevant to Windows build.
+
+NEXT ACTION / CHANGE CONTROL
+-----------------------------
+Run the missing gameplay checks on Windows, record real coordinates,
+expected/observed navgrid classifications and MSPT/latency data. Close
+an item only on maintainer-verified evidence or an explicit documented
+risk disposition. Keep C2-P1-B/P1-C/P1-D NOT IMPLEMENTED until separately
+approved under Audit -> Options -> Approval -> Implement -> Test.

@@ -1,5 +1,67 @@
 # Changelog
 
+NPCortex maintains **one consolidated `CHANGELOG.md`** for the [`Development` branch](https://github.com/SIRP00M/NPCortex/tree/Development). New C2 entries are added above the existing C1 and C0 history rather than replacing previous milestones. The base before this local candidate was **`v0.1.2-alpha.2`** at Development commit `591f3adbdf90a13c4039acb9469e174c32933176` (2026-10-15).
+
+**Active source version:** Forge `0.2.0-alpha.1` · Python distribution `0.2.0a1` (PEP 440) · Python `__version__ = "0.2.0-alpha.1"`. **This is a Development pre-release identifier, not a GitHub release/tag or evidence of promotion to `main`.** Historical version numbers and dated results in earlier entries are intentionally retained.
+
+**Evidence policy:** Distinguish author/tool-environment tests, maintainer-reported Windows Forge/Minecraft acceptance, and items still not tested. C2-P1-A is **not** fully accepted. Refer to [`PENDING_TESTS.txt`](PENDING_TESTS.txt) for unresolved gameplay accuracy/safety and performance gates. No GitHub commit/push/merge is performed during preparation of this archive.
+
+## Unreleased — Development `v0.2.0-alpha.1`: C2 Embodied AI / C2-P1-A World Representation (2026-10-16)
+
+### Packaging changes (this archive only)
+
+- Promoted the **Development source identifier** from `v0.1.2-alpha.2` to `v0.2.0-alpha.1`; synchronized Forge Gradle, Forge `mods.toml`, Python package metadata and Python runtime `__version__` (PEP 440 `0.2.0a1`). No released tag created.
+- Preserved all C2-P0 and C2-P1-A runtime/source changes **exactly as supplied** in `NPCortex_C2-P1-A_C_WorldRepresentation_FullRepository_CANDIDATE(1).zip`; this packaging step does **not** implement A*, waypoints, replanning, or change game logic.
+- Rebased this README and consolidated CHANGELOG on the previous Development documentation, appended the supplied C2 milestone history, and added a plain-text `PENDING_TESTS.txt`. Historic candidate-era test reports in `docs/` are left untouched.
+
+### Packaging-session verification (this environment)
+
+- **Archive / scope:** 187 regular files; 6 approved files modified, only `PENDING_TESTS.txt` added; ZIP integrity and metadata consistency checked. Markdown local links checked: **36 links, 0 broken**.
+- **Java isolated regression:** 11 self-test classes, **1,222 assertions PASS**, `javac --release 17` on a Linux **JDK 21** host. This does **not** verify Gradle/Forge compilation on Windows JDK 17.
+- **Python focused regression:** 11 tests **PASS (exit code 0)** across C2 embodied contract and C0 Windows acceptance-script static checks. Full Python discovery printed **193 tests / OK**, but the overall command did **not** terminate cleanly within the outer timeout; do **not** claim an independently verified full-suite exit code 0 for this packaging run.
+- **Forge/Minecraft:** no new Windows Forge Build, live Minecraft or real Ollama integration test was run during packaging. The separately reported maintainer Windows acceptance follows below.
+
+### Maintainer-reported acceptance vs. open gates
+
+- **Windows Forge Build:** maintainer-reported **PASS** for C2-P1-A (2026-10-16), after local build validation. **This packaging session has not independently reproduced a Windows Forge build.** The original candidate's Linux Gradle download failure remains historical tool-environment evidence only.
+- **Automated test evidence for the P1-A candidate:** 27 NavGrid Java assertions, 42 C2 Foundation assertions and other retained Java self-tests were reported passing; **193 backend Python tests** were reported passing. These test results do **not** validate unloaded chunks or real partial-block semantics.
+- **Maintainer-reported Windows Minecraft gameplay (scoped):** flat-terrain navscan; place/break/rescan response; hazard classification; lifecycle checks; and a five-NPC *sequential* navscan smoke test. These do **not** establish per-coordinate semantic accuracy, actual unloaded-chunk boundary safety, or *concurrent* 1/3/5/10-NPC performance/MSPT.
+- **C2-P0 scoped acceptance:** maintainer reported single-player movement to a nearby same-height target reaching `C2=COMPLETED` / `verified=true`, and later short-range precision movement working; this is not independent proof of Qwen decision trace, recovery or multiplayer.
+- **`NOT YET TESTED` P1-A gates:** real unloaded-chunk gameplay safety; per-coordinate Partial Block / Terrain Accuracy. Concurrent performance/MSPT and broader regression/compatibility coverage also remain open. See `PENDING_TESTS.txt`.
+- **Release / sprint gate:** P1-A is **not** marked fully accepted; do not infer P1-B pathfinding or publish an unconditional quality-gate claim. Continue Audit → Options → Approval → Implement → Test. Maintainer manages GitHub operations.
+
+---
+
+## C2-P1-A — Bounded 3D World Representation (Architecture C; 2026-10-16; CANDIDATE)
+
+- First staged delivery for user-approved **C2-P1 Architecture C**. Added testable bounded immutable `C2NavGrid` and read-only `C2NavigationSensor` with server-authoritative collision/foot-surface checks, hazard classification, unknown/unloaded sentinels, world-border/loaded-chunk guards. Radius defaults to 4, max 6, support levels ±2, at most 845 cells per observation. Multiple 3D candidate heights per X/Z column are retained; complex support shapes remain conservatively `PARTIAL_SUPPORT`.
+- Added operator-only `/npcortex c2 navscan <name> [radius]` for diagnostic capture on the Minecraft server thread, P1-A tests and Windows test checklist in `docs/c2-p1a-world-representation.md` plus `scripts/test-c2-p1a.ps1`. No model/API schema changes, no tick polling, no new locomotion/pathfinding; C1 P0/P1 mechanics and existing P0 `move_to` remain unchanged.
+- **Local tests:** 27 new P1-A Java assertions + 1,195 retained dependency-free Java C1/C2 assertions **PASS**, Python Backend discovery **193 tests PASS**. Forge compile **NOT VERIFIED** (Gradle 8.8 download `UnknownHostException: services.gradle.org`). Real Forge collision and 1/3/5/10 NPC MSPT, gameplay and compatibility testing still required.
+- **Quality Gate pending**: Do NOT start/claim P1-B A*, P1-C waypoints or P1-D replanning until Windows Forge build and Minecraft P1-A acceptance. No GitHub operations.
+
+---
+
+## C2-P0 — Precision Movement & Configurable Goal Tolerance (Architecture C, 2026-10-16; CANDIDATE)
+
+- **User-approved C precision enhancement** to the existing Architecture C: allow short-distance C2 `move_to` through the *same* C1 Vanilla player motion session (no second physics system), preserve normal C1 operator minimum 0.5 block, and add bounded per-goal precision radius via `/npcortex c2 move <name> <x> <y> <z> [tolerance]` (default 0.35; explicit 0.20–0.75 blocks).
+- Align C2 precheck/goal creation/live verifier and C0 `move_to` expected effect using the validated matching goal criterion. A target already within tolerance is reported as such without sending an unnecessary Action. Do not report success for a moved-but-unverified result.
+- Verified locally: **1,224 JVM isolated assertions PASS** (11 tests; `javac --release 17` on JDK 21 host); **193 backend unittest cases PASS** (includes 8 C2 contract tests). No direct Forge dependencies compiled by these isolated checks.
+- Forge compile **NOT VERIFIED**: wrapper cannot download Gradle 8.8 (`UnknownHostException: services.gradle.org`). Windows gameplay precision, boundary/collision, motion regressions, real Qwen, 1/3/5/10 NPC, multiplayer and crash tests remain open. This is an **Implementation Candidate**, not a completed Quality Gate; no GitHub operations.
+- Windows checklist and limitations: `docs/c2-p0-precision-movement-c.md`. One unified `CHANGELOG.md`; no separate sprint changelog.
+
+---
+
+## C2-P0 — Architecture C Event-Driven Embodied AI Foundation (2026-10-16; IMPLEMENTATION CANDIDATE)
+
+- Implemented initial C2 cross-runtime chain using existing C0 endpoints and C1 Custom ServerPlayer with no PathfinderMob, teleport, or second physics controller. Built `C2Scheduler`, `C2Events`, extensible `C2SkillRegistry`/`C2MoveExecutor`, `C2MoveGeometry`, `C2ActionJournal` (overworld SavedData), trusted Forge `C2WorldSensor`, `C2ActionVerifier`, `C2AgentRuntime` and async `ChatBridge.c2Post` client.
+- Operator-only `/npcortex c2 move/status/cancel/reset` commands. Actual skill available in this P0 is **only** straight, same-height `move_to` within 7.5 blocks. Qwen selects the skill, Forge independently restricts destination, then C1 executes Vanilla travel and C0 verifies a fresh post-result position. No autonomous multi-step nav or natural-language target grounding yet.
+- Lifecycle fail-closed on cancel, death, despawn, ambiguous callback/timeout, save/quit/restart; explicit journal reconciliation/reset required. SavedData alone is not crash-proof; no exactly-once guarantee, cross-runtime automatic crash recovery or multiplayer FIFO claims.
+- Tests: C2 pure JVM geometry/event/scheduler **32 assertions PASS** with Java 17 target; C0 backend focused **69 tests PASS**; C2 service-backed integration contract **4 tests PASS**; full Backend suite **189 tests PASS** with mocked model and sensor. Full Forge Gradle compilation was **blocked before compilation** by unavailable Gradle 8.8 distribution, Windows gameplay and real Ollama test **NOT RUN**, 1/3/5/10-NPC performance and compatibility gates **OPEN**. **Candidate only — NOT Quality Gate passed**. See `docs/c2-p0-event-driven-embodied-agent.md` and `scripts/test-c2-p0.ps1`. No GitHub operations.
+
+---
+
+---
+
 NPCortex keeps **one consolidated `CHANGELOG.md`** for the `Development` branch. This history continues the earlier [`Development` C0 baseline](https://github.com/SIRP00M/NPCortex/tree/Development) and the `0.1.2-alpha.1` C1-P1-B snapshot. This local **`0.1.2-alpha.2` source candidate** is not a release/tag, does not modify `main`, and has not been pushed to GitHub by this packaging step.
 
 **Version display:** Forge `0.1.2-alpha.2`; Python package `0.1.2a2` (PEP 440); in-package Python `__version__ = "0.1.2-alpha.2"`. Historical earlier version numbers below are kept deliberately. A sprint title is not a published release.

@@ -3,6 +3,7 @@
 Forge advertises which registered skills are actually available in a snapshot.
 A skill's result must be backed by a *new* observation, not Qwen prose.
 """
+import math
 from .agent_contracts import block_position, position, resource, observed
 from .identity import IdentityError
 
@@ -85,14 +86,24 @@ class SkillRegistry:
         return [skill for skill in snapshot["available_skills"] if skill in cls.DESCRIPTIONS]
 
     @classmethod
-    def prepare(cls, skill_id, args, before):
+    def prepare(cls, skill_id, args, before, goal_criteria=None):
         if skill_id not in cls.available(before):
             raise IdentityError("skill is not supported or was not advertised by the sensor")
         if not isinstance(args, dict):
             raise IdentityError("skill args must be an object")
         if skill_id == "move_to" and set(args) == {"position"}:
             target = position(args["position"])
-            expected = {"kind": "position_near", "position": target, "distance": 1.5}
+            # For coordinate-goal C2, use the goal's own accepted radius for both
+            # preconditions and post-action verification. Legacy C0 goals retain
+            # the original default when no criterion matches the action target.
+            radius = 1.5
+            if goal_criteria is not None:
+                matching = [c["distance"] for c in goal_criteria
+                            if c.get("kind") == "position_near"
+                            and math.dist(c["position"], target) <= 0.05]
+                if matching:
+                    radius = min(matching)
+            expected = {"kind": "position_near", "position": target, "distance": radius}
             if observed(expected, before):
                 raise IdentityError("already at movement target")
             return {"position": target}, expected

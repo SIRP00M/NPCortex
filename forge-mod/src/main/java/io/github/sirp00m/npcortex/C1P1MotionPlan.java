@@ -18,6 +18,7 @@ final class C1P1MotionPlan {
     enum Phase { MOVING, SETTLING, COMPLETE, BLOCKED, TIMED_OUT, CANCELLED, CHUNK_UNLOADED }
 
     static final double MIN_DISTANCE = 0.5;
+    static final double C2_PRECISION_MIN_DISTANCE = 0.10;
     static final double MAX_DISTANCE = 8.0;
     static final int MAX_TICKS = 240;
     static final int STALL_LIMIT = 16;
@@ -38,9 +39,15 @@ final class C1P1MotionPlan {
     Phase phase;
 
     C1P1MotionPlan(Direction direction, double distance, float yaw, double x, double z) {
+        this(direction,distance,yaw,x,z,false);
+    }
+
+    /** C2-only short movement; ordinary C1 movement keeps its 0.5-block minimum. */
+    C1P1MotionPlan(Direction direction, double distance, float yaw, double x, double z, boolean c2Precision) {
+        double minimum = c2Precision ? C2_PRECISION_MIN_DISTANCE : MIN_DISTANCE;
         if (direction == null || !Double.isFinite(distance)
-                || distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
-            throw new IllegalArgumentException("Distance must be finite and between 0.5 and 8 blocks");
+                || distance < minimum || distance > MAX_DISTANCE) {
+            throw new IllegalArgumentException("Distance must be finite and within movement bounds");
         }
         this.direction = direction;
         this.requested = distance;

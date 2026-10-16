@@ -22,6 +22,15 @@ public final class C1P1MotionPlanSelfTest {
         illegal(() -> make(C1P1MotionPlan.Direction.FORWARD, Double.NaN), "nan rejected");
         illegal(() -> make(C1P1MotionPlan.Direction.FORWARD, Double.POSITIVE_INFINITY), "infinite rejected");
         illegal(() -> make(C1P1MotionPlan.Direction.FORWARD, 0.49), "below minimum rejected");
+        C1P1MotionPlan tiny = new C1P1MotionPlan(C1P1MotionPlan.Direction.FORWARD,
+                0.35, 0, 0, 0, true);
+        check(tiny.moving(),"C2 precision uses normal C1 motion state machine");
+        tiny.observe(0,0.24);
+        check(tiny.phase==C1P1MotionPlan.Phase.COMPLETE,"C2 short progress completes normally");
+        illegal(()->new C1P1MotionPlan(C1P1MotionPlan.Direction.FORWARD,
+                0.09,0,0,0,true),"C2 below precision minimum rejected");
+        illegal(()->new C1P1MotionPlan(C1P1MotionPlan.Direction.FORWARD,
+                8.1,0,0,0,true),"C2 beyond C1 maximum rejected");
         illegal(() -> make(C1P1MotionPlan.Direction.FORWARD, 8.01), "above maximum rejected");
         for (C1P1MotionPlan.Direction direction : C1P1MotionPlan.Direction.values()) {
             C1P1MotionPlan plan = make(direction, 1);

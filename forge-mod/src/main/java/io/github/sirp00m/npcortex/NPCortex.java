@@ -38,6 +38,7 @@ public final class NPCortex {
                         // This is a developer command; limit access to operators in multiplayer.
                         // Enable cheats in a local test world to use it.
                         .requires(source -> source.hasPermission(2))
+                        .then(C2Commands.build())
                         .then(Commands.literal("c1")
                                 .then(C1P1CLifecycleCommands.build())
                                 .then(C1P1CLifecycleCommands.damage())

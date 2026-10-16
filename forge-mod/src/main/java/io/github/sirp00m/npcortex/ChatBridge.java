@@ -114,6 +114,33 @@ public final class ChatBridge {
         }
     }
 
+    /** C2 structured calls. Never block the Minecraft server thread. */
+    static CompletableFuture<JsonObject> c2Post(String path, JsonObject body, int timeoutSeconds) {
+        try {
+            if (!path.matches("/v1/(worlds|actors|agent/goals(?:/[0-9a-f-]+/(?:observe|decide))?|agent/actions/[0-9a-f-]+/result)")) {
+                throw new IllegalArgumentException("C2 endpoint is not allowlisted");
+            }
+            String encoded = body.toString();
+            if (encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 8192) {
+                throw new IllegalArgumentException("C2 request is too large");
+            }
+            HttpRequest request = HttpRequest.newBuilder(endpoint(path))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .POST(HttpRequest.BodyPublishers.ofString(encoded))
+                    .build();
+            return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(response -> {
+                        if (response.statusCode() != 200 && response.statusCode() != 201) {
+                            ensureSuccess(response);
+                        }
+                        return payload(response);
+                    });
+        } catch (RuntimeException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
+    }
+
     public static String describeFailure(Throwable failure) {
         Throwable cause = failure;
         while ((cause instanceof CompletionException || cause instanceof ExecutionException)

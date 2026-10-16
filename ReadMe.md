@@ -5,12 +5,12 @@
 
 [Development branch](https://github.com/SIRP00M/NPCortex/tree/Development) · [Changelog](CHANGELOG.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development version: `0.1.2-alpha.2` — C1-R2 Combat Physics / Movement Lifecycle Fix #2 + Compile Fix #1 (2026-10-15); candidate, not tagged or released**  
-> This repository ZIP continues from the public `Development` branch baseline at [`f3a9450`](https://github.com/SIRP00M/NPCortex/commit/f3a9450496d955f26ff8b7cf8db5ac6594756761) (C0 headless AI runtime). **Forge and in-package Python display versions declare `0.1.2-alpha.2`; Python distribution metadata uses equivalent PEP 440 `0.1.2a2`.** C1-P0 through C1-R2 identify implementation milestones, not published releases. This ZIP does not itself update GitHub.
+> **Development snapshot: `v0.2.0-alpha.1` — C2-P0 Embodied AI + C2-P1-A World Representation (2026-10-16)**  
+> This source ZIP preserves the previous `v0.1.2-alpha.2` Development history (GitHub base `591f3adb`) and adds the C2-P0/P1-A implementation shipped in the attached candidate ZIP. **Forge and Python runtime display `0.2.0-alpha.1`; Python distribution metadata is `0.2.0a1` (PEP 440).** This snapshot is **not** a tagged release and does not modify GitHub on its own. See [open test gates](PENDING_TESTS.txt).
 
-**Branch/version policy:** `Development` carries pre-release builds and may advance independently of `main`. A `0.1.2-alpha.2` label identifies this development snapshot only; it is **not** a stable release or a guarantee that the branch can be promoted to `main` without reconciling their existing version lines and completing the required tests. Do not create a release tag just because the source version changed.
+**Branch/version policy:** `Development` carries pre-release builds and may advance independently of `main`. A `0.2.0-alpha.1` label identifies this development snapshot only; it is **not** a stable release or a guarantee that the branch can be promoted to `main` without reconciling their existing version lines and completing the required tests. Do not create a release tag just because the source version changed.
 
-NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python backend uses **Ollama + Qwen 3 8B** and supports JSON character packs, durable actor identity, dialogue/social workflows and a headless agent contract. The experimental Forge C1 layer adds **visible player-based NPCs with operator-controlled movement, rotation, transactional Vanilla inventory/equipment, selective Vanilla lifecycle/death presentation and a combat-motion integration candidate**, while keeping the LLM backend and game-entity architecture separate. Development dialogue targets English first.
+NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python backend uses **Ollama + Qwen 3 8B** and supports JSON character packs, durable actor identity, dialogue/social workflows and a headless agent contract. The Forge **C1** layer adds visible Custom-`ServerPlayer` NPCs, operator movement/rotation, transactional Vanilla inventory, selective lifecycle/death presentation and combat-motion work. The **C2-P0** layer bridges bounded, operator-requested `move_to` actions through the backend to real NPC motion and requires independent post-action verification; C2 precision movement supports a configurable arrival radius. **C2-P1-A** adds a read-only, bounded 3D server terrain scan (`C2NavGrid`/`C2NavigationSensor`); it does **not** implement A*, multi-step waypoints, dynamic replanning or autonomous harvesting. Development dialogue targets English first.
 
 ## What is implemented (and what has actually been verified)
 
@@ -18,7 +18,7 @@ NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python back
 |---|---|---|
 | **A2 — Forge chat bridge** | `/npcortex status`, `/npcortex ask` via Python `/v1/chat` | Developer command route, separate from C1 NPC actor control |
 | **B1–B3 — Identity, dialogue and social runtime** | Durable worlds/actors, manually advanced multi-actor dialogue and Qwen-chosen social turns | Backend/HTTP workflows; no always-on autonomous society or Forge binding |
-| **C0 / C0-B — Headless AI Agent** | Snapshots, bounded Goals, advertised SkillRegistry (`move_to`, `break_block`, `place_block`, `pickup_item`), Qwen decision validation and independent verification | Mock/trusted caller supplies world observations and action results; **not connected to C1's actual Minecraft actions**. Owner reported Windows C0-B acceptance success |
+| **C0 / C0-B — Headless AI Agent** | Snapshots, bounded Goals, advertised SkillRegistry (`move_to`, `break_block`, `place_block`, `pickup_item`), Qwen decision validation and independent verification | C0 alone is headless; C2-P0 now binds **only bounded `move_to`** to the Forge NPC. Other headless skill contracts are not Minecraft executors. Owner reported Windows C0-B acceptance success |
 | **C1-P0 — True player-based prototype** | `C1PlayerAvatar extends ServerPlayer`, persistent World/Actor/Profile UUIDs, spawn/despawn, vanilla player rendering/tracking, viewer-scoped two-phase sync and bounded repair | Owner reported Windows initial spawn and world-rejoin repair **passed**; not the complete P0 Quality Gate |
 | **C1-P1-A — Controlled movement** | Separate server-side intent controller, bounded `move`/`jump`/`turn`/`settle`/`stop`; state persisted to C1 SavedData | Owner reported Windows Minecraft core movement gameplay acceptance; **not autonomous navigation or full player lifecycle** |
 | **C1-P1-A — Rotation Fix #1** | Persist independent yaw/pitch/headYaw/bodyYaw, apply per-viewer rotation snapshot after verified entity presence, acknowledge application | Owner confirmed head **and** body facing survive world exit/rejoin in Minecraft on Windows |
@@ -27,9 +27,11 @@ NPCortex targets **Minecraft 1.20.1 / Forge 47.4.10 / Java 17**. The Python back
 | **C1-R0 — Lifecycle foundation** | `C1VanillaLifecycleCoordinator` and phase ownership policy consolidate P0 → motion → death tick/shutdown ownership without changing identity, networking protocol or SavedData schema | Dependency-free local policy checks are not a Forge gameplay pass |
 | **C1-R1 / R1-A — Death presentation** | Controlled 26-tick Vanilla player death pose, per-viewer death acknowledgment, one-shot `POOF`/`CLOUD` burst before detach | Candidate source. Presentation timing, real client visibility and keepInventory/respawn regression require Windows gameplay evidence |
 | **C1-R2 — Combat physics + Fixes #1/#2** | Vanilla damage/knockback capture (`super.knockback`), bounded COMBAT > COMMANDED > SETTLING ownership, single authoritative travel path and collision-only `Entity.move` fallback; Fix #2 retains a transient Vanilla velocity snapshot across attack/world/tick boundary | **Not yet accepted for real player Knockback II.** Latest `BuildFix1` only fixes a Java call-site (`captureVanilla`); Forge compilation and in-game displacement are still required |
+| **C2-P0 — Event-driven AI-to-motion integration** | `C2AgentRuntime`, server observation, bounded operator `/npcortex c2 move`, async backend calls, action journal and position/result verification. `move_to` is a single same-height segment within 7.5 blocks; C2 precision tolerance defaults to **0.35** (configurable **0.20–0.75**). | Owner reported real Windows Minecraft basic move-to-target and short-range precision movement **working**. These are scoped gameplay results, not proven Qwen trace, multiplayer, crash safety or pathfinding |
+| **C2-P1-A — Read-only World Representation** | `C2NavGrid` and `C2NavigationSensor` observe up to 845 candidate terrain cells within radius 1–6 (default 4), with collision/support/hazard/unloaded classifications; `/npcortex c2 navscan <name> [radius]` is an operator diagnostic. | Maintainer-reported **Windows Forge Build PASS**, flat/dynamic/hazard/lifecycle and **five-NPC sequential** gameplay checks. **Unloaded-chunk gameplay** and **per-coordinate partial-block accuracy remain NOT YET TESTED**; concurrent performance/MSPT open. See [pending tests](PENDING_TESTS.txt) |
 | **Multi-NPC smoke test** | Separate named C1 avatars can coexist with independent identities and commands | Owner confirmed **Yui + Hina + Ai** 3-NPC spawn, independent movement/turns, world rejoin, independent despawn and re-tracking **before P1-B**. **P1-B inventory isolation across 3 NPCs is not yet confirmed**; neither is measured load/multiplayer |
 
-**What is not implemented or not fully accepted:** autonomous Qwen-to-C1 world execution, complete C1-P1-B inventory durability/isolation/modded-item validation, survival/navigation, mining, building, crafting, TaCZ/Recruits integration, full logged-in Vanilla PlayerList/connection-driven lifecycle, automatic portal navigation, reliable real-world knockback for all attack sources, custom skin/model validation, LAN/multiplayer, and measured 1/3/5/10-NPC load results for this source. No statement above proves those features exist. C1-P0 overall and broader C1 integration quality gates remain open.
+**What is not implemented or not fully accepted:** C2-P1-B 3D A*, C2-P1-C waypoint execution, C2-P1-D dynamic replanning, obstacle-routing autonomy, generalized block break/place/pickup Minecraft skills, survival/tree harvesting/mining/building/crafting, TaCZ/Recruits, and comprehensive crash-recovery/multiplayer performance. C1-P0/C1-P1-B and other broader regression/compatibility gates remain open. In particular, P1-A unloaded-chunk Minecraft gameplay and detailed partial-block semantic accuracy are **NOT YET TESTED**. A positive `navscan` result describes standing candidates, **not** a reachable route. See [PENDING_TESTS.txt](PENDING_TESTS.txt).
 
 The developer ZIP's individual `docs/c1-*.md` reports were written at the *candidate* stage. The owner-reported Windows gameplay acceptance recorded in this README and in [`CHANGELOG.md`](CHANGELOG.md) is **later evidence for only the tested behaviors**; it does not rewrite or retroactively certify every item in those candidate test plans.
 
@@ -37,32 +39,23 @@ The developer ZIP's individual `docs/c1-*.md` reports were written at the *candi
 
 ```text
 Minecraft 1.20.1 / Forge 47.4.10 (Java 17)
-  |-- A2 legacy chat commands ----------> /v1/chat -----------+
-  |                                                         |
-  `-- C1 True Player-based NPC prototype                    |
-        |-- C1PlayerAvatar : ServerPlayer                     |
-        |-- World / Actor / GameProfile UUID SavedData        |
-        |-- Viewer-specific network sync + bounded repair     |
-        |-- Operator-controlled movement + rotation           |
-        |-- P1-B Vanilla inventory/equipment                     |
-        |    `-- SavedData snapshot + per-NPC transaction ledger |
-        |-- P1-C / R0: guarded world tick + lifecycle coordinator|
-        |-- R1 / R1-A: death pose + one-shot poof particles      |
-        |-- R2: Vanilla combat velocity + bounded motion phase    |
-        `-- Real world actions from Qwen: NOT WIRED          |
-                                                            v
-                                             Local Python backend
-                                               A2: sessions
-                                               B1: actor identity
-                                               B2/B3: dialogues / social
-                                               C0: snapshot -> Qwen decision
-                                                   -> skill request -> verify
-                                                            |
-                                                            v
-                                                   Ollama / qwen3:8b
+  |-- A2 legacy /npcortex ask --------> Python /v1/chat
+  |-- C1: Custom ServerPlayer avatar
+  |     |-- identity + viewer-scoped sync + lifecycle/physics
+  |     `-- controlled movement + inventory/equipment
+  |-- C2-P0: operator /npcortex c2 move [tolerance]
+  |     |-- server sensor -> async Python C0 -> Ollama/Qwen
+  |     |-- bounded single-segment move_to -> C1 movement
+  |     `-- fresh world observation + postcondition verification
+  `-- C2-P1-A: operator /npcortex c2 navscan [radius]
+        `-- immutable read-only C2NavGrid / C2NavigationSensor
+            (support, collision, hazards, unknown/unloaded)
+
+Python backend: B1–B3 identity/social + C0 skills/goals/verification
+NEXT (not implemented): P1-B A* -> P1-C waypoints -> P1-D replanning
 ```
 
-The C1 body is a **Custom `ServerPlayer`-based experimental entity**, not a `PathfinderMob` with a player skin. The C0 backend cannot read Minecraft's world state or execute C1 actions without a future audited sensor/executor integration. Qwen outputs are proposals, never sufficient proof of in-world success. See [C0 protocol](docs/c0-headless-agent-runtime.md), [C0→C1 handoff](docs/c0-c1-handoff.md), [C1 feasibility](docs/c1-p0-player-feasibility.md), [P0 Network Fix #2](docs/c1-p0-network-sync-fix2.md), [P1-A movement](docs/c1-p1-a-controlled-player-physics.md), and [rotation sync](docs/c1-p1-a-rotation-fix1.md), [P1-B transactional inventory](docs/c1-p1-b-transactional-inventory.md), [P1-C selective lifecycle](docs/c1-p1-c-selective-vanilla-lifecycle.md), [R0 foundation](docs/c1-r0-vanilla-lifecycle-foundation.md), [R1 death](docs/c1-r1-verified-vanilla-death.md), [R1-A particles](docs/c1-r1a-mob-like-death-poof.md), and [R2 Fix #2](docs/c1-r2-fix2-movement-lifecycle-refactor.md).
+Qwen can participate in a bounded C2-P0 `move_to` choice, but model output **never** establishes success by itself. C2-P1-A terrain snapshots are for diagnosis/future planning and are **not** fed directly as a large grid to the C0 API. Forge does not force-load chunks for navscan; uncertain/unloaded surfaces must not be considered safe. Source details: [C2-P0 architecture](docs/c2-p0-event-driven-embodied-agent.md), [precision movement](docs/c2-p0-precision-movement-c.md), [C2-P1-A world representation](docs/c2-p1a-world-representation.md), [C0 protocol](docs/c0-headless-agent-runtime.md), [C1 feasibility](docs/c1-p0-player-feasibility.md), and [inventory](docs/c1-p1-b-transactional-inventory.md).
 
 ## Requirements and local setup (Windows)
 
@@ -86,6 +79,42 @@ ollama pull qwen3:8b
 
 `dev-backend.ps1` normally serves `http://127.0.0.1:8765`; `/health` checks HTTP liveness only, not whether Qwen can answer. The local backend has **no authentication**: do not expose port 8765 to the internet. Consult `backend/.env.example` and [Development guide](docs/development.md) for environment variables.
 
+### C2-P0 and C2-P1-A: embodied movement and diagnostic world scans
+
+C2-P0 requires the local backend and Ollama for AI-driven move decisions. P1-A `navscan` is read-only, permission-level-2, server-thread diagnostics; it does not create a goal or move an NPC. In **Windows PowerShell** with **Temurin JDK 17**:
+
+```powershell
+.\scripts\test-c2-p1a.ps1      # isolated Java + backend regression; requires javac 17
+.\scripts\test-c2-p0.ps1
+.\scripts\dev-forge.ps1 -Task build
+# Backend and Forge client run in separate terminals:
+.\scripts\dev-backend.ps1
+.\scripts\dev-forge.ps1 -Task runClient
+```
+
+In a backed-up single-player development world with cheats enabled:
+
+```mcfunction
+/npcortex c1 spawn yui
+/npcortex c2 navscan yui
+/npcortex c2 navscan yui 1
+/npcortex c2 navscan yui 6
+/npcortex c2 status yui
+/npcortex c1 info yui
+```
+
+For C2-P0 movement, choose actual loaded same-height coordinates near the NPC; do **not** type the following sample target without replacing it:
+
+```mcfunction
+/npcortex c2 move yui 100 64 100 0.35
+/npcortex c2 status yui
+/npcortex c2 cancel yui
+```
+
+C2-P0 requires an in-range destination; `reset` requires investigation of any pending backend goal. Scan radius defaults to 4, maximum 6, scanning at most 845 candidate cells. Classifications include `WALKABLE`, `OBSTRUCTED`, `PARTIAL_SUPPORT`, `UNSUPPORTED`, `HAZARDOUS`, and `UNLOADED`; `WALKABLE` **does not** imply a route exists. Detailed tests: [C2-P1-A checklist](docs/c2-p1a-world-representation.md) and [precision test guide](docs/c2-p0-precision-movement-c.md).
+
+**Acceptance distinction:** the owner reported Windows Forge Build PASS and successful flat-terrain, dynamic place/break/rescan, hazard/lifecycle and five-NPC *sequential* navscan. That is not proof of loaded-chunk boundary safety or per-coordinate slab/stair/fence accuracy; **both remain NOT YET TESTED**. Concurrent MSPT/1/3/5/10-NPC load and other comprehensive gates remain open; see [`PENDING_TESTS.txt`](PENDING_TESTS.txt).
+
 ### C1: controlled Minecraft acceptance commands
 
 Use a backed-up **single-player** developer test world with cheats/operator commands enabled:
@@ -105,7 +134,7 @@ Use a backed-up **single-player** developer test world with cheats/operator comm
 /npcortex c1 despawn yui
 ```
 
-`/npcortex c1 move <name> <forward|back|left|right> <distance>` is limited to **0.5–8 blocks**, measured relative to the NPC's current facing. `turn` takes degrees. These commands are explicit test controls, **not commands generated by Qwen**. They do not cut trees, place blocks, pick up dropped items or plan a route. Inventory commands below explicitly modify an NPC inventory for manual testing; they are not AI/autonomous survival skills. For multi-NPC smoke testing, register `hina` and `ai` as well using the same `spawn`/control/despawn surface; don't confuse the three distinct C1 actor identities with character-pack templates or C0 registered actors.
+`/npcortex c1 move <name> <forward|back|left|right> <distance>` is limited to **0.5–8 blocks**, measured relative to the NPC's current facing. `turn` takes degrees. These **C1 commands** are explicit operator test controls, not direct Qwen commands. Separately, **C2-P0** can use Qwen to select a *bounded single-segment `move_to`* through the C1 motion runtime. Neither route cuts trees, places blocks, collects drops or plans a multi-waypoint route. Inventory commands below explicitly modify an NPC inventory for manual testing; they are not AI/autonomous survival skills. For multi-NPC smoke testing, register `hina` and `ai` as well using the same `spawn`/control/despawn surface; don't confuse the three distinct C1 actor identities with character-pack templates or C0 registered actors.
 
 Restart/rejoin checks must verify **persistent World/Actor/Profile UUIDs**, correct visible orientation, tracking recovery and lack of duplicate entities. `CLIENT_ENTITY_PRESENT` confirms the client's entity observation, not full visual or gameplay correctness. Diagnostic and acceptance details are in [C1-P0 sync](docs/c1-p0-network-sync-fix2.md), [C1-P1-A movement](docs/c1-p1-a-controlled-player-physics.md) and [rotation](docs/c1-p1-a-rotation-fix1.md).
 
@@ -197,7 +226,7 @@ $body = @{
     -Method Post -ContentType 'application/json' -Body $body).reply
 ```
 
-The C0 backend stores durable agent goals in **SQLite schema v4**. For an existing SQLite file, **stop the backend and back it up before upgrading**; migrations are forward-only. C0 test observations simulate a Minecraft world, rather than connecting to the C1 player avatar:
+The C0 backend stores durable agent goals in **SQLite schema v4**. For an existing SQLite file, **stop the backend and back it up before upgrading**; migrations are forward-only. C0 acceptance tests still simulate a Minecraft world; **C2-P0 separately** provides a real-world sensor/executor bridge for bounded `move_to`:
 
 ```powershell
 .\scripts\test-c0-planner.ps1 -Repeat 3
@@ -214,10 +243,11 @@ Older backend workflows remain available: B2 `test-b2-dialogues.ps1`, B3 `test-b
 
 ```text
 NPCortex-Development/
-├── ReadMe.md                  # GitHub landing page, C1 milestone status
+├── ReadMe.md                  # GitHub landing page, C1 + C2 milestone status
 ├── CHANGELOG.md               # One consolidated development history
+├── PENDING_TESTS.txt          # P1-A open gameplay/performance acceptance gates
 ├── backend/                   # Python HTTP + B1–B3/C0 runtime and tests
-├── forge-mod/                 # Forge Java C1 player-based prototype + A2 bridge
+├── forge-mod/                 # Forge C1 NPC + C2 sensor/agent/motion bridge
 ├── character-packs/           # yui and guide JSON templates
 ├── docs/                      # Architecture, milestones and acceptance plans
 ├── scripts/                   # Backend/Forge test and launch scripts
@@ -231,11 +261,11 @@ To define a new backend character template, copy `character-packs/guide/` and ed
 
 ## Next gates and roadmap
 
-**Already observed by the owner in Windows Minecraft (limited scope):** C1-P0 viewer recovery on world rejoin; C1-P1-A controlled movement; Rotation Fix #1 orientation persistence; basic three-NPC (Yui, Hina, Ai) movement/identity smoke test; C1-P1-B give/equip/transaction replay and Save & Quit/rejoin persistence of inventory + replay in a single-player world.
+**Previously accepted by maintainer on Windows Minecraft (limited scope):** C1-P0 viewer recovery on world rejoin; C1-P1-A controlled movement and persisted rotation; 3-NPC (Yui/Hina/Ai) movement/identity smoke; C1-P1-B inventory give/equip/transaction replay and Save & Quit/rejoin persistence. C2-P0 single same-height target movement and subsequent short-range precision movement were also observed working. C2-P1-A Windows Forge Build and scoped flat/dynamic/hazard/lifecycle/five-NPC sequential navscan gameplay were reported passed on 2026-10-16.
 
-**Still requires separate evidence:** full C1-P1-B Quality Gate (multi-NPC inventory isolation, crash-injection recovery, modded capabilities/NBT compatibility); C1-P1-C/R0 lifecycle and damage/fall/transfer; R1/R1-A real death animation and particles; R2 Fix #2 actual Knockback II server displacement, wall collision and Zombie behavior; P0 re-tracking/despawn; Forge/CI reproducibility for this exact source, LAN/multiplayer and 1/3/5/10-NPC performance. **Latest R2 BuildFix1 is an unverified compile fix candidate**; it is not proof of a successful Windows Forge Build. Next work continues **Audit → Options → Approval → Implement → Test** and **No Test, No Push**.
+**Still open:** C2-P1-A live unloaded-chunk boundary gameplay (**NOT YET TESTED**); per-coordinate Partial Block/Terrain Accuracy (**NOT YET TESTED**); *concurrent* 1/3/5/10-NPC MSPT/performance, broader regression and multiplayer/mod compatibility. Earlier C1 acceptance gaps and R2 combat testing are not implicitly closed by C2 evidence. Open checks and verification source distinctions are tracked in [PENDING_TESTS.txt](PENDING_TESTS.txt).
 
-Some older pages under `docs/` are historical candidate-time reports rather than a current end-to-end feature inventory; use this README/CHANGELOG for the snapshot's consolidated status, and the source code for exact behavior.
+Future C2 stages are **P1-B 3D A***, **P1-C waypoint execution** and **P1-D bounded dynamic replanning** — planned only, **not implemented**. Follow **Audit → Options → Approval → Implement → Test**, do not advance based solely on a version bump, and keep all GitHub operations with the maintainer. Historical candidate notes under `docs/` are not automatically promoted to PASS by later results.
 
 ## Security, license and contributions
 

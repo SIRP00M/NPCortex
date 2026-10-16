@@ -20,7 +20,7 @@ class PlannerDecisionError(RuntimeError):
     """Model responded, but not with a valid C0 decision (not an Ollama outage)."""
 
 
-def _validate_model_decision(answer, snapshot):
+def _validate_model_decision(answer, snapshot, goal_criteria=None):
     """Fail-closed validation. No model output executes without SkillRegistry.prepare."""
     if not isinstance(answer, str) or len(answer) > 4096:
         raise ValueError("response_not_bounded_text")
@@ -40,7 +40,7 @@ def _validate_model_decision(answer, snapshot):
     if not isinstance(parsed["skill_id"], str) or parsed["skill_id"] not in SkillRegistry.available(snapshot):
         raise ValueError("unadvertised_skill")
     try:
-        args, effect = SkillRegistry.prepare(parsed["skill_id"], parsed["args"], snapshot)
+        args, effect = SkillRegistry.prepare(parsed["skill_id"], parsed["args"], snapshot, goal_criteria)
     except (IdentityError, ValueError, TypeError, KeyError) as exc:
         # The registry raises fixed, safe contract explanations, not raw input.
         raise ValueError("invalid_skill_arguments: " + str(exc)) from exc
@@ -195,7 +195,7 @@ class AgentRuntime:
                 self._planner_failure(gid, row["snapshot_seq"], "model_unavailable")
                 raise
             try:
-                decision = _validate_model_decision(answer, snap)
+                decision = _validate_model_decision(answer, snap, context["success_criteria"])
                 break
             except ValueError as exc:
                 feedback = str(exc)

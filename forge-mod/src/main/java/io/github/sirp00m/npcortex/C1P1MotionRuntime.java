@@ -206,6 +206,16 @@ final class C1P1MotionRuntime {
     }
 
     static String move(MinecraftServer server, String name, String directionText, double distance) {
+        return moveInternal(server,name,directionText,distance,false);
+    }
+
+    /** Called by C2 move_to only, on the server thread; reuses the same Vanilla motion session. */
+    static String moveC2Precision(MinecraftServer server, String name, String directionText, double distance) {
+        return moveInternal(server,name,directionText,distance,true);
+    }
+
+    private static String moveInternal(MinecraftServer server, String name, String directionText,
+                                       double distance, boolean c2Precision) {
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         C1P1MotionPlan.Direction direction;
@@ -214,15 +224,16 @@ final class C1P1MotionRuntime {
         } catch (IllegalArgumentException ex) {
             return "Direction must be forward, back, left or right";
         }
-        if (!Double.isFinite(distance) || distance < C1P1MotionPlan.MIN_DISTANCE
-                || distance > C1P1MotionPlan.MAX_DISTANCE) {
-            return "Distance must be 0.5 to 8 blocks";
+        double minimum = c2Precision ? C1P1MotionPlan.C2_PRECISION_MIN_DISTANCE
+                : C1P1MotionPlan.MIN_DISTANCE;
+        if (!Double.isFinite(distance) || distance < minimum || distance > C1P1MotionPlan.MAX_DISTANCE) {
+            return c2Precision ? "C2 distance must be 0.10 to 8 blocks" : "Distance must be 0.5 to 8 blocks";
         }
         refreshGroundContact(avatar);
         if (ACTIVE.containsKey(avatar.getUUID())) return "Movement busy; use /npcortex c1 stop " + name;
         if (!avatar.onGround()) return "NPC must be on ground before movement (use c1 settle to test gravity)";
         C1P1MotionPlan plan = new C1P1MotionPlan(direction, distance, avatar.getYRot(),
-                avatar.getX(), avatar.getZ());
+                avatar.getX(), avatar.getZ(), c2Precision);
         preparePhysics(avatar);
         ACTIVE.put(avatar.getUUID(), new Session(avatar, plan));
         LAST_RESULT.put(avatar.getUUID(), "MOVING " + directionText + " " + distance + " blocks");
@@ -297,6 +308,15 @@ final class C1P1MotionRuntime {
         return name + " motion=" + state + " pos=" + fmt(avatar.getX()) + "," + fmt(avatar.getY()) + "," + fmt(avatar.getZ())
                 + " grounded=" + avatar.onGround() + " horizontalCollision=" + avatar.horizontalCollision
                 + " velocity=" + fmt(avatar.getDeltaMovement().length());
+    }
+
+    /** Read-only action receipt, after C1 has completed its one authoritative physics tick. */
+    record MotionReceipt(boolean active, String phase) {}
+
+    static MotionReceipt c2Receipt(UUID profileId) {
+        Session session = ACTIVE.get(profileId);
+        if (session != null) return new MotionReceipt(true, "ACTIVE");
+        return new MotionReceipt(false, LAST_RESULT.getOrDefault(profileId, "UNKNOWN"));
     }
 
     private static C1VanillaMotionOwnership.Velocity toOwned(Vec3 v) {
