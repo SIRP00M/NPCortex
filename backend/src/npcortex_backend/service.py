@@ -162,6 +162,11 @@ class ChatService:
         from .agent_runtime import AgentRuntime
         return AgentRuntime(self).result(action_id, result_id, status, observation_id, snapshot)
 
+    def cancel_agent_goal(self, goal_id: str, world_id: str, actor_id: str,
+                          action_id: str | None = None) -> dict:
+        from .agent_runtime import AgentRuntime
+        return AgentRuntime(self).cancel_goal(goal_id, world_id, actor_id, action_id)
+
     # B2: explicit, durable multi-party dialogue. No automatic turn generation.
     def create_dialogue(self, world_id: str, dimension_id: str, actor_ids: list,
                         player_ids: list, topic: str, max_turns: int = 24) -> dict:

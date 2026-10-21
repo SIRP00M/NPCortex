@@ -126,6 +126,25 @@ public final class NPCortex {
                                                             source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
                                                             return 1;
                                                         }))))
+                                .then(Commands.literal("traverse")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                        .suggests((context, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                                                java.util.List.of("step_up", "step_down", "jump_up", "safe_descend"), builder))
+                                                        .then(Commands.argument("direction", StringArgumentType.word())
+                                                                .suggests((context, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(
+                                                                        java.util.List.of("forward", "back", "left", "right"), builder))
+                                                                .then(Commands.argument("blocks", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(0.65, 1.45))
+                                                                        .executes(context -> {
+                                                                            var source = context.getSource();
+                                                                            String result = C1P1MotionRuntime.traverse(source.getServer(),
+                                                                                    StringArgumentType.getString(context, "name"),
+                                                                                    StringArgumentType.getString(context, "type"),
+                                                                                    StringArgumentType.getString(context, "direction"),
+                                                                                    com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(context, "blocks"));
+                                                                            source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+                                                                            return 1;
+                                                                        }))))))
                                 .then(Commands.literal("jump")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .executes(context -> {

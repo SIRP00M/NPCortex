@@ -16,11 +16,23 @@ final class C2NavGrid {
     static final int MAX_CANDIDATES = (2 * MAX_RADIUS + 1) * (2 * MAX_RADIUS + 1)
             * (2 * VERTICAL_RADIUS + 1);
 
-    enum Condition { WALKABLE, OBSTRUCTED, PARTIAL_SUPPORT, UNSUPPORTED, HAZARDOUS, UNLOADED }
-    record Cell(int x, int supportY, int z, double footY, Condition condition) {
+    enum Condition { WALKABLE, STAIR_TRANSITION, OBSTRUCTED, PARTIAL_SUPPORT, UNSUPPORTED, HAZARDOUS, UNLOADED }
+    /** Stair transitions are motion candidates only after Minecraft collision
+     * and support checks. They are not upgraded to a FULL standing surface.
+     */
+    static boolean plannable(Condition condition) {
+        return condition==Condition.WALKABLE || condition==Condition.STAIR_TRANSITION;
+    }
+    record Cell(int x, int supportY, int z, double footY, Condition condition, double riskPenalty) {
+        Cell(int x,int supportY,int z,double footY,Condition condition) {
+            this(x,supportY,z,footY,condition,0.0);
+        }
         Cell {
             Objects.requireNonNull(condition, "condition");
             if (!Double.isFinite(footY)) throw new IllegalArgumentException("Non-finite standing height");
+            if (!Double.isFinite(riskPenalty) || riskPenalty < 0
+                    || (riskPenalty > 0 && !plannable(condition)))
+                throw new IllegalArgumentException("Invalid terrain risk penalty");
         }
     }
 

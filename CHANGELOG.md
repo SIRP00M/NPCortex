@@ -1,10 +1,267 @@
 # Changelog
 
-NPCortex maintains **one consolidated `CHANGELOG.md`** for the [`Development` branch](https://github.com/SIRP00M/NPCortex/tree/Development). New C2 entries are added above the existing C1 and C0 history rather than replacing previous milestones. The base before this local candidate was **`v0.1.2-alpha.2`** at Development commit `591f3adbdf90a13c4039acb9469e174c32933176` (2026-10-15).
+NPCortex has **one consolidated development changelog**. Entries here describe source milestones and limited testing evidence; they are **not independent GitHub releases or tags**. The active Forge source version in this archive is **`0.2.0-alpha.2`**; Python distribution metadata is **`0.2.0a2`** (PEP 440). Earlier version identifiers and dated results are intentionally retained as history.
 
-**Active source version:** Forge `0.2.0-alpha.1` · Python distribution `0.2.0a1` (PEP 440) · Python `__version__ = "0.2.0-alpha.1"`. **This is a Development pre-release identifier, not a GitHub release/tag or evidence of promotion to `main`.** Historical version numbers and dated results in earlier entries are intentionally retained.
+> **Development-only packaging, 2026-10-21.** This ZIP is derived from the uploaded **C-S1–C-S4 Persistent Follow C + BuildFix1 Option A** repository; it includes earlier C2 navigation and Follow milestones since the last packaged `v0.2.0-alpha.1` C2-P1-A snapshot. The package operation updates only version metadata and documentation; implementation code is unchanged. The public `Development` and `main` branches are **not modified** by this packaging step.
 
-**Evidence policy:** Distinguish author/tool-environment tests, maintainer-reported Windows Forge/Minecraft acceptance, and items still not tested. C2-P1-A is **not** fully accepted. Refer to [`PENDING_TESTS.txt`](PENDING_TESTS.txt) for unresolved gameplay accuracy/safety and performance gates. No GitHub commit/push/merge is performed during preparation of this archive.
+> **Evidence policy:** A pure-Java self-test, mock API compilation, owner-reported earlier Minecraft gameplay, and a full Windows Forge build of this *exact patched ZIP* are different gates. **The latest Follow BuildFix1 still requires Windows JDK 17 Forge rebuilding and Minecraft acceptance.** Older pending cases remain open unless independently verified by the maintainer.
+
+## Unreleased — Development `v0.2.0-alpha.2`: Navigation, Player-like Follow and Persistent Motion (2026-10-21)
+
+### Version and documentation (packaging-only)
+
+- Advanced Forge `mod_version` and `mods.toml` from the source ZIP's stale `0.1.1-alpha` to `0.2.0-alpha.2`; aligned Python package version as `0.2.0a2` and runtime `__version__` as `0.2.0-alpha.2`. This continues the previously packaged `v0.2.0-alpha.1` development line, **not** the old C1/C0 identifiers in the input ZIP.
+- Updated `ReadMe.md` to reflect the code now present through C2-P1-B1/B2/B3/C/D, 3D Terrain Sprint 1–4, Follow F1/F2, B+ steering and persistent Follow C-S1–C-S4; removed stale statements that these were unimplemented.
+- Added [human-readable Patch Notes](docs/patch-notes/v0.2.0-alpha.2.md) for this candidate, and updated `PENDING_TESTS.txt` without dropping the earlier detailed checklist. **`CHANGELOG.md` remains the only consolidated chronological changelog.**
+- Preserved detailed new C2 milestone history from the uploaded ZIP below and the prior packaged `v0.2.0-alpha.1` and C1/C0/B/A historical entries after it. No runtime Java/Python, data migrations, test logic, Gradle dependencies, GitHub branches or tags were changed by this packaging operation.
+
+### Highlights present in this source (not all gameplay-certified)
+
+- Reliable A* / hierarchical region planning; transactional C2 waypoint execution, cancellation and bounded recovery; Terrain-Aware 3D inspection, steps, jump and safe descent, plus responsive dynamic replanning.
+- Follow Player with bounded local rolling targets, player-collision parity/risk-aware traversability, turn-aware paths, 360-degree safe corridor local steering, and client-side locomotion presentation.
+- Persistent bounded Follow Motion Session: when fresh graph, token and live swept collision checks permit it, append verified flat WALK segments without retiring the same C1 motion token at every short route boundary. This does not create global navigation, teleport, unbounded motion or autonomous restart replay.
+- Latest `C2FollowRuntime` BuildFix1 corrects an out-of-scope `extended` variable compilation error in two lines, **but Forge success is unverified for this patched candidate**.
+
+### Acceptance boundary
+
+- Prior maintainer-reported Windows Minecraft: basic flat navigation/obstacle avoidance; Sprint 2 STEP_UP +0.5, JUMP_UP +1.0 and SAFE_DESCEND -1.0 on valid fixtures; Sprint 3 automatic JUMP_UP and SAFE_DESCEND; Sprint 4 main recovery scenarios; basic F1 Follow Player; and an observed visual improvement from newer adaptive steering. These are **scoped observations**, not a pass for all C2 safety gates or for this final Persistent Follow BuildFix1 ZIP.
+- **Packaging-session regression rerun (this ZIP): PASS** — all **17 isolated Java suites / 2,490 assertions** compiled with `javac --release 17` and executed on OpenJDK 21 with exit code 0; focused backend `test_c2_*.py` **16/16 tests PASS** with clean exit 0. This matches the source-carried BuildFix1 test report, but still does **not** compile any Forge/Minecraft-dependent classes or certify JDK 17 runtime behavior. Windows Forge rebuild, real Follow gameplay and 1/3/5/10 NPC MSPT remain open. Review `PENDING_TESTS.txt` and the [Windows checklist](docs/c2-persistent-follow-session-c-windows-checklist.md).
+
+---
+
+## Detailed C2 implementation history carried from the uploaded candidate
+
+## 2026-10-21 — Persistent Follow C Build Fix #1 (Option A: minimal compile fix; WINDOWS REBUILD PENDING)
+
+- **Baseline:** `NPCortex_C-S1-S4_PersistentFollowMotionSession_C_FullRepository_CANDIDATE.zip`; user-provided Windows JDK 17 Forge `compileJava` evidence: `C2FollowRuntime.java:223: cannot find symbol: variable extended`.
+- **Fix:** In `C2FollowRuntime.tick`, move `boolean extended=false;` to the enclosing `ticket.active()` scope before the route-extension conditional, and change the inner statement to assign `extended=...` instead of declaring a shadow/local variable. **Exactly two source lines changed.** Short-circuit logic, fallback and safety checks are otherwise unchanged.
+- **Out of scope / unchanged:** C1 motion ownership, transactional cancellation, combat, 3D Navigation, route planning, watchdogs, Vanilla physics, Gradle dependencies and unrelated `ModLoadingContext.get()` deprecation warning. No GitHub actions.
+- **Verification here:** Pure Java `javac --release 17` 17/17 suites / **2,490 assertions PASS** and focused backend C2 **16/16 tests PASS**. These tests do **not** compile `C2FollowRuntime` with Forge. **Windows JDK 17 Forge Gradle build on the patched ZIP is PENDING**; do not mark the original user-reported build failure resolved until the user rebuilds. Windows gameplay and 1/3/5/10 NPC MSPT remain PENDING.
+- **Docs:** Same `CHANGELOG.md`, updated `PENDING_TESTS.txt`, and `docs/c2-persistent-follow-session-c-test-report.md` (Build Fix #1 section).
+
+---
+
+## 2026-10-21 — C-S1..C-S4 Persistent Follow Motion Session C (IMPLEMENTATION CANDIDATE; Forge/Gameplay PENDING)
+
+- **Baseline:** B+ Hybrid Any-Angle + Continuous Adaptive Steering Candidate. Explicit implementation approval C-S1..C-S4, no GitHub operations.
+- **C-S1:** Follow maintains its ephemeral C2 Session while C1 keeps a single owned motion token across multiple dynamically approved flat route windows. Bounded cumulative C1 walking lease enlarged to 600 ticks, 64 targets / 96 approved blocks; no extensions in last 80 ticks (clean terminal drain); C2 failure, segment/route watchdog and terminal receipts remain. Actual terminal/cancel still zeros horizontal speed; no new physics controller.
+- **C-S2:** Added fresh-graph rolling path continuation anchored at current committed endpoint. Require loaded local snapshot, pure-WALK same-elevation edges, bounded planner cadence, matching C1 token and non-combat owner, fresh graph edge + risk and live player-width swept corridor for EACH added leg. Atomically extend C1 before C2 receipt route. Route journal remains session-level; never persist transient movement or replay Follow after restart. New `followstatus` counters `persistentAppends` / `rollingMisses`.
+- **C-S3:** Corrected zero-forward turn-in-place preflight: no speculative forward collision probe when forward input is zero. Inertia is cleared and Vanilla travel tick retained; nonzero forward still checks loaded chunks, terrain, hazard and swept collision.
+- **C-S4:** Added new 68-assertion pure-Java safety/route/token/turn regression, dedicated Windows JDK17 runner and game acceptance report/checklist. Static C2 Navigation, 3D traversal, combat and C0 ownership unchanged. No GitHub operations.
+- **Evidence:** `javac --release 17` JDK21: 17/17 pure Java suites / 2,490 assertions PASS, focused backend 16/16 PASS. **Forge Build BLOCKED** due unavailable Gradle 8.8 download; **Gameplay and 1/3/5/10 NPC MSPT PENDING**. Do not interpret isolated tests as real Forge acceptance.
+
+---
+
+## 2026-10-21 — B+ Hybrid Any-Angle + Continuous Adaptive Steering (CANDIDATE; Windows Gameplay PENDING)
+
+- **Baseline:** C-L1..L4 Full Locomotion Animation Controller C Full Repository Candidate. Explicit H1–H4 approval; no other architecture rewrite and **no GitHub operations**.
+- **H1 Follow goal stability:** `C2FollowPlanner.selectRolling` scores up to four reachable, freshly planned rolling targets with forward progress, lateral error, path cost and a bounded preference for the previous target. Changes apply only to Follow; ordinary C2 navigation/agent A* remains unchanged. Verified final goals remain graph standing nodes; sub-block precision is introduced at the local steering stage, not by inventing an unverified moving target/landing coordinate.
+- **H2 certified 360° flat corridors:** added `C2BPlusCorridor`, a bounded, player-footprint-wide (.32 half-width) level, zero-extra-risk Graph certificate, replacing only the Follow-only overly conservative enclosing-rectangle shortcut proof. Require all touched standing cells, same foot height, bidirectional directed WALK edges and ordinary edge cost. No direct shortcut over missing ground, unknown/unloaded cells, risky floor or unverified jumps/slabs/stairs. `C2WaypointBridge.sweptFollowCorridorClear` samples the live player-volume along Follow chains/extensions (<=48 steps at <=.16-block interval), rechecks loaded chunks/world-border/collision/block risk. The original `sweptWalkClear` stays unchanged for static C2 Navigation and existing C1 per-tick fail-closed checks.
+- **H3 continuous local heading:** added `C1F2AdaptiveSteering` to steer toward a sub-block lookahead projected on the *current certified horizontal segment* instead of aiming at its endpoint every Tick; 360° yaw remains under `C1VanillaMoveControlAdapter`/`C1PlayerAvatar.travel()`. Never blend across a corner without a chord certificate; off-lane input falls back to the original committed endpoint. Never change the receipt target or the terminal verification coordinate.
+- **H4 safety + bounded recovery:** keeps one original C1 owner/ticket per committed Follow WALK chain; unchanged C1 Combat ownership and Cancel, loaded-chunk safety, 3D primitives, bounded 4-candidate/3000-expansion plans and 10-actor cap. Adds pure Java B+ regression and a Windows Java17 test script, and repairs old self-test scripts' explicit source dependency lists. Any existing Follow pause/cooldown, real-world corner collision or risk condition can still stop motion and request bounded recovery; smoothness is **not** gameplay-certified.
+- **LOCAL TESTS:** `javac --release 17` using installed JDK21: **16/16 suites, 2,422 assertions PASS**, including 18 new B+ assertions. **Backend C2 focused 16/16 PASS**. Full backend suite emitted **201 tests / OK** in log, but the outer command timed out; do not claim a clean timed runner exit. **Forge build BLOCKED before compile** (`UnknownHostException: services.gradle.org`, Gradle 8.8 unavailable). Windows Forge build, real gameplay, collision/smoothness, 1/3/5/10 NPC MSPT and compatibility remain PENDING. No GitHub operation performed.
+
+---
+
+## 2026-10-21 — C-L1..L4 Full Locomotion Animation Controller C (CANDIDATE; Gameplay PENDING)
+
+- Approved scoped C-L1..4 based on Turn-Aware Safe Smoothing B baseline. Added transient per-avatar `C1LocomotionPresentation` phases (IDLE/TURNING/STARTING/WALKING/CORNERING/STOPPING/INTERRUPTED). Display via existing C1 motion status.
+- Split physical movement yaw from visual head/body pose; capped per-tick body/head turns with bounded head lead and twist using shortest-arc wrapping; ease-out follow yaw turn cap reduced from 32° to 24° with forward braking and collision checks retained. Vanilla Player.travel, collision, C1 ticket tokens, combat priority, cancel, and C2 path safety unchanged.
+- Added `C1ClientRotationBlend` and revision-scoped client END-tick pose easing for verified RemotePlayer views; first rotation snapshot restores angles, subsequent updates no longer force custom yaw over Vanilla tracker. World/token/death transitions retain viewer fencing.
+- Added 52-assertion C pure Java test and Windows Java17 runner, test report/checklist. **15/15 isolated suites / 2,404 assertions PASS**; Forge build **BLOCKED** by missing Gradle 8.8 distribution (`UnknownHostException services.gradle.org`); actual Forge compilation, animation visuals, gameplay, multiplayer and 1/3/5/10 NPC MSPT **NOT VERIFIED**. Focused C2 Python backend regression **16/16 PASS** (backend code unchanged).
+- Exactly one CHANGELOG.md retained; PENDING_TESTS.txt updated. No GitHub operations.
+
+## 2026-10-21 — C2-F2 Turn-Aware Path Planning + Safe Smoothing B (Candidate; Windows Acceptance PENDING)
+
+- Added follow-only bounded directional A* (`C2TurnAwarePlanner`) with small turn penalty **on top of** existing physical directed-edge and risk costs. Static C2 operator Navigation hierarchy unchanged.
+- Added conservative graph-certified, max-3-cell any-angle flat WALK shortcut selection (`C2F2SafeShortcut`), with fresh-graph execution revalidation; untouched C1 motion ownership, physics, swept collision and hazard checks.
+- Preserved all vertical traversal edges and verified original nearest follow ring/HOLD/cancellation contracts.
+- Updated isolated PowerShell regression scripts and added `scripts/test-c2-turn-aware-b.ps1` plus Windows test report/checklist.
+- Local Java 17 target compilation and 14 isolated pure-Java suites **PASS (2,352 assertions)**. Forge Gradle build **BLOCKED by DNS resolving services.gradle.org**; actual Forge gameplay and MSPT **PENDING**.
+- No GitHub commits, pushes or branch operations.
+
+## 2026-10-21 — C2 Generalized Block Traversal C (CANDIDATE; WINDOWS GAMEPLAY PENDING)
+
+- **Approved C1–C4 Scope**: Player Collision Parity over native `noCollision` and support shapes; independent passable/costly/forbidden risk; directional weighted graph edges; integration with Follow and C2 Motion preflight; no PathfinderMob or replacement Player physics.
+- Added `C2BlockTraversalWorld.java` for conservative, bounded server-world risk classification across full player-sized volumes. No passability block whitelist: vanilla or modded plants without blocking collision may be crossed; risk severity for selected vanilla hazards and optional datapack tags is separate. Forbidden/unloaded remains fail-closed.
+- `C2NavGrid.Cell` now carries `riskPenalty` while retaining the five-parameter constructor; `C2TerrainObservation.Risk.AVOIDABLE` represents physically traversable but costly terrain, including underlying floor block risks. Added `C2TraversalCost.java` (pure policy).
+- `C2TraversabilityGraph.build3DWithRisk` adds positive risk costs from swept volume and source/target surfaces to every verified directed movement edge. Diagonal, reverse-edge validation, step, landing, movement ownership and time-of-check revalidation remain. `C2GraphWorldProbe`, `C2WaypointBridge`, `C1P1MotionRuntime`, `C2AgentRuntime` now distinguish soft from hard risks.
+- Added extension tags `npcortex:traversal_costly` and `npcortex:traversal_forbidden`, Java isolated regression runner and 23-assertion C suite. **PASS** 13 Java `--release 17` pure-Java suites / 2,331 assertions on JDK21; **Forge compile BLOCKED** by Gradle 8.8 distribution DNS; actual Windows/Forge/1-3-5-10 NPC gameplay still **PENDING**. Backend unchanged, not rerun; no GitHub operations.
+- See `docs/c2-generalized-traversal-c-test-report.md`, `docs/c2-generalized-traversal-c-windows-checklist.md` and `PENDING_TESTS.txt`. Changes are NOT certified on Minecraft server runtime yet.
+
+## 2026-10-21 — C2-F2 Adaptive Follow B (CANDIDATE; NOT GAMEPLAY VERIFIED)
+
+- **Approved Scope B:** Follow-only reachability-prefiltered local goal selection, previously failed route avoidance / ring-goal hysteresis, safe corner steering with turn/endpoint deceleration, and one bounded delayed stuck-recovery re-probe; preserve C1 Custom ServerPlayer physics, all transactional motion ownership and C2 navigation isolation.
+- `C2FollowPlanner.java` uses directed graph reachability to reserve the existing 4 expensive hierarchical plans for candidates that can be reached topologically; supports read-only per-session avoid hints and stable preferred ring position; immediately HOLD if already on a verified follow-ring node. `C2FollowAlternatives.java` keeps at most 8 recently failed waypoint/goal nodes in memory per active follow session.
+- `C1F2ContinuousWalk.java` no longer blends toward an unverified corner-cut chord; maintains intermediate walk ticket continuity and conservative waypoint/receipt verification. `C1VanillaMoveControlAdapter.java` adds near-corner deceleration without replacing Player.travel.
+- `C2FollowPolicy.java` + `C2FollowRuntime.java` add a single 120-tick delayed fresh-graph recovery window after the existing 3 failures while stationary, then fail closed until target movement. Follow status now reports `avoided`.
+- Pure JVM 7-suite Java17-target regression validation; one obsolete Fix #2 look-ahead assertion updated to enforce the safer new steering contract; new 26-assertion B regression suite and Windows test script. **Not an in-game PASS.**
+- Actual Forge build blocked by missing local Gradle 8.8 distribution and DNS; full backend test attempt incomplete; Windows gameplay/performance/3D/combat/ownership gates remain pending. No GitHub operations performed. See `docs/c2-f2-adaptive-follow-b-test-report.md`, checklist and `PENDING_TESTS.txt`.
+
+## C2-F2 Fix #3 — Vanilla-inspired Follow MoveControl Adapter A (2026-10-21; CANDIDATE)
+
+- Baseline: C2-F2 Fix #2 Full Repository Candidate. Source-audited repeated short Follow tickets and zero extension events in user logs; follow movement worked but visual smoothness not accepted.
+- Added Follow-only, pure-Java `C1VanillaMoveControlAdapter` for bounded yaw rotlerp and smoother forward input speed changes, without inheriting `Mob`, using Minecraft `MoveControl` directly or adding a second physics owner. Existing grounded/swept collision validation, C1 `Player.travel`, 3D typed traversal, combat, cancellation and token ownership preserved.
+- Permit quicker **bounded** local follow replanning only after verified route terminal (2-tick floor), preserving 20-tick failure backoff and global planner-per-tick guard; no new C0 goals on follow.
+- Added `C2F2VanillaInspiredFollowASelfTest`, `scripts/test-c2-f2-fix3-vanilla-adapter.ps1`, report and Windows checklist. Local **30 Java self-test suites / 5,096 assertions PASS** targeting Java 17 on JDK21; Backend **16 C2-focused tests PASS**. Full Backend suite **TIMED OUT** in this run (unchanged code). Forge compilation **BLOCKED** by unavailable Gradle wrapper distribution. Real Windows visual smoothness/gameplay and 1/3/5/10 NPC MSPT **PENDING**.
+- Known limit: C1 still stops horizontal velocity at independent Follow route terminal; no claim of PathfinderMob-level visual parity, persistent cross-route movement or Forge gameplay PASS. No GitHub operations; `PENDING_TESTS.txt` preserved, exactly one CHANGELOG.md.
+
+---
+
+## C2-F2 Fix #2 — Follow Steering and Motion Telemetry (Architecture C; 2026-10-20; CANDIDATE)
+
+- **Baseline:** C2-F2 Fix #1 Full Repository Candidate. User observed improvement over F2 but still not PathfinderMob-like visual smoothness; no claim of visual PASS.
+- Added pure-Java `C1F2MotionTelemetry` per owned Follow WALK ticket (distance, nearStationary, zero-forward, turns, extensions, waypoints), single terminal `WALK_TELEMETRY` INFO line and live owned-ticket progress in `c2 followstatus`. No per-tick log flood; client interpolation requires Windows observation.
+- Extended `C1F2ContinuousWalk` with short look-ahead steering around verified flat turns, retaining yaw rate and fail-closed ground/collision checks. Added bounded same-ticket precommit from `C2WaypointBridge.extendFollowWalkChain` backed by new `C2WaypointExecution.walkExtensionAllowed` and exact C1 token/owner validation. Up to 24 queued nodes / 32 total blocks / 240 ticks per owned session; extension never crosses vertical traversal and does not extend when player substantially changed direction.
+- Pure Java test `C2F2MotionSmoothingFix2SelfTest` (42 new assertions), Windows script `test-c2-f2-fix2-smoothing.ps1`, architecture note, test report and Windows checklist. **29 Java suites / 5,068 assertions PASS**, unchanged Backend **201 tests OK** (verbose rerun), Forge-facing **mock API compilation PASS**. **Forge Gradle build BLOCKED by 8.8 DNS; Windows Gameplay, client visual smoothness, MSPT and all other PENDING_TESTS remain NOT VERIFIED.**
+- Scope guard: no new world interaction, C0/Backend schema, PathfinderMob, teleport, force-loaded chunks, multi-chunk global planner, Vanilla combat/physics modification or GitHub operations. **Still discontinuous at independent local Follow route terminal boundaries; don't claim fully seamless path-mob quality.**
+
+---
+
+## C2-F2 Fix #1 — Continuous Player-like Locomotion (Architecture C; 2026-10-20; CANDIDATE)
+
+- Baseline: C2-F2 Full Repository Candidate. Source Audit traced stop/start jitter to per-ticket `stopHorizontalVelocity()`, idle pre-turn in Follow and client `*RotO` interpolation resets. **This fix does not change ordinary C1 operator movement, C0 navigation, combat impulses, jump/descend physics or C0 journaling**.
+- Added bounded Follow-only `C1F2ContinuousWalk` steering (max 6 flat targets, 7.75 total blocks, 200 ticks, stall/cancel/height validation), executed within a **single owned C1 Vanilla `travel()` session** and one correlated C1 ticket across multiple verified WALK nodes. Face turns <=18 degrees/tick during motion; sharp unsafe turns get zero forward input until aligned enough. Velocity only stops on terminal receipt, cancel or unsafe condition, not every flat intermediate waypoint.
+- Added Follow-only multi-node receipt in `C2WaypointExecution` and preflight in `C2WaypointBridge`: verify every directed graph edge, world loaded/border and swept full-player collision before issuing a token; check current heading ahead, floor support/hazard and AABB collision each authoritative C1 tick. Terminal receipt must match token and reached final node; typed 3D primitives **never** join WALK chain. Combat cancels stale Follow chain then follows existing Vanilla knockback and safe replan behavior.
+- For rotation, preserve `*RotO` endpoints on subsequent verified client snapshots (reset only first snapshot per viewer token), cap active C1 explicit rotation sync at once per 2 ticks, and downgrade per-revision rotation sync/ack INFO logs to DEBUG. Viewer revision validation unchanged.
+- Added one pure Java contract self-test (`C2F2ContinuousFollowFix1SelfTest`, **41 assertions**) and `scripts/test-c2-f2-fix1-continuous.ps1`; architecture, Test Report, Windows Checklist. Local `javac --release 17` **28 pure Java suites / 5,026 assertions PASS**, Backend **201 tests OK**, Follow/Waypoint mock API compilation PASS. **Real Forge compile blocked by Gradle 8.8 download DNS (`UnknownHostException`) before compile; Windows gameplay/MSPT/packet metrics PENDING**. No GitHub operations, no new Qwen/Interaction Skills/multi-chunk navigation.
+
+---
+
+## C2-F2 — Natural Player-like Locomotion & Rolling Local Follow (Architecture C; 2026-10-20; CANDIDATE)
+
+- Built **only** on the C2-F1 Follow Candidate, preserving C1 Vanilla travel/jump/combat motion ownership, C0 transactional navigation/cancel, S4 Fix #1 recovery, one CHANGELOG.md and one PENDING_TESTS.txt. No GitHub operations.
+- C2 live 3D NavGrid now has verified **flat-only diagonal WALK** transitions, Euclidean cost `sqrt(2)` and an admissible Euclidean lower-bound heuristic in B2/B3. Both orthogonal alternatives must consist of existing verified, bidirectional WALK edges, **and** the direct diagonal sweep must pass the world collision probe; otherwise no diagonal edge. No diagonally jumping, drops, unknown chunks or wall corner-cutting.
+- Kept the old 4-way `C2TraversabilityGraph.build()` and legacy waypoint constructor strict for historical regression; C2 live static navigation uses a separate verified-3D route factory. Follow's separate factory permits at most **3 collinear same-height WALK edges** to be combined into one C1 motion ticket, but every omitted edge is reverified on a fresh graph at start, as is a loaded/world-border-safe **AABB swept from the avatar's current physical position** to the endpoint. No skipped jump/step/landing receipt, and no change to C1 physics.
+- Follow-only pre-segment **yaw interpolation** (<=18 degrees/server tick) reduces instantaneous facing changes while the NPC has no active C1 ticket; after heading alignment, original `C2WaypointBridge` issues exactly one owned C1 motion ticket. This is not an animation overhaul, acceleration model or mid-motion steering; animation/client smoothness remains for Windows visual acceptance.
+- **Rolling local Follow** replaces the F1 hard pause at approximately 8 blocks horizontal separation. For far-but-same-dimension targets, choose a finite safe forward frontier **inside the radius-6 currently loaded local graph**, walk there, rescan/replan once C1 verifies progress, and repeat under existing cooldown / four-candidate / planning budget / failure budget. Never teleport, force-load chunks or build a multi-chunk persistent planner. Unknown terrain, unsafe/no-path, dimension changes, foreign C1 motion, death, offline, canceled sessions and reboot remain fail-closed. No C0 Goal per follow hop.
+- New `C2F2Locomotion` and `C2F2NaturalLocomotionSelfTest`, `scripts/test-c2-f2-natural.ps1`, `docs/c2-f2-architecture.md`, `docs/c2-f2-test-report.md`, `docs/c2-f2-windows-checklist.md`.
+- **Local evidence**: `javac --release 17` Pure JVM **27 self-test suites / 4,985 assertions PASS**; F2 tests include no-corner-cut, diagonal B2/B3 cost, old route contract, fresh intermediate proof, stale tickets, angle wrap, target >8 blocks, near-ring compatibility, and 10 independent policy instances. Mock Forge-facing adapter compilation PASS. Unmodified Backend **201 tests OK (36.518s)**. **Actual Windows Forge Build, real diagonal/player-looking locomotion, >8-block Follow and 1/3/5/10 NPC MSPT not yet verified**; these remain in PENDING_TESTS.txt. Forge Gradle wrapper is not available locally. No feature creep to Qwen/interaction/multi-chunk.
+
+---
+
+## C2-F1 — Reliable Follow Player (Architecture C; 2026-10-20; CANDIDATE)
+
+- Built on the verified Windows core-gameplay Sprint 4 Fix #1 Full Repository (no GitHub actions). Added **operator-only** UUID-based Follow Session with `c2 follow <npc> <onlinePlayer>`, `unfollow`, `followstatus`; `c2 cancel <npc>` also safely stops an active Follow Session when no C0 static navigation is present.
+- Added bounded 3D Follow-ring route selection using fresh B3 local graph (radius6), stop/resume hysteresis 2.5/4.0 blocks, movement threshold 1.5, 20-tick cooldown, <=4 route candidates / 3000 expansions each, at most one plan batch per global server tick; no C0 Goal/Action or Qwen request on target movement. No multi-chunk following or teleport.
+- Shared proven `C2WaypointBridge` execution across C0 static and ephemeral Follow owners without changing C1 Vanilla movement. Route/C1 token correlation and mutual exclusion prevent simultaneous C2 static/Follow ownership; foreign C1 action remains fail-closed, C0 unresolved journal blocks Follow.
+- Added `C2FollowJournal` SavedData for **audit only**, with old sessions disabled after Save/Quit/restart and no movement replay. Stop owned C1 ticket on unfollow/offline/near stop, bounded failure retry and timeout, allow resumption when target comes back within local loaded radius. No new C0 backend tool or schema.
+- New `C2FollowPolicy`, `C2FollowPlanner`, two self-tests, Windows test script, architecture/report/checklist. Local **26 Java 17-target pure suites / 4,923 assertions PASS**; unchanged Backend **201 tests PASS**; mock Forge-facing compilation PASS. **Actual Forge Build / Windows Gameplay / 1/3/5/10 NPC MSPT pending** (Gradle download unavailable locally). Existing PENDING_TESTS unchanged except appended F1 checklist.
+
+---
+
+## Terrain-Aware 3D Traversal — Sprint 4 Fix #1: Transactional Replanning Recovery Hardening (2026-10-20; CANDIDATE)
+
+- **Source-audited regression from Windows Gameplay:** `/npcortex c2 status yui` became `INTERRUPTED` with `P1-D C1 motion resumed during replanning; fail closed`, despite C1 later reporting `SETTLED`/grounded. The latter does **not** prove the active C1 session at interruption was `AUTO_SETTLING`.
+- Added read-only, immutable origin data to the existing `C1P1MotionRuntime.C2MotionTicket` (`AUTO_SETTLING`, `AUTO_COMBAT`, `C2_COMMAND`, `OPERATOR_COMMAND`, `SPAWN_SETTLING`); no change to Vanilla travel/jump/gravity/combat calculation. Preserve each session's terminal origin/token to detect a foreign command even if it finished between C2 ticks.
+- Added `C2S4RecoveryPolicy.replanOwnership`: **only** verified automatic settling/combat physics may keep C2 in bounded wait without starting another movement; any C2/Operator/Spawn session that appears during replanning fails closed. All replacement routes still require inactive C1, three stable loaded supported ground ticks, fresh terrain and B3 checks.
+- When an active C0 action is interrupted, release the local owner and record `CANCEL_PENDING` for idempotent async terminal C0 cancellation acknowledgment instead of leaving an indefinitely blocking `INTERRUPTED` journal. Stop a C1 session only when its *active token exactly matches* the C2 route; never stop a foreign owner. Preserve original goal/action IDs. When the terminal state is verified by C0, a new navigation no longer needs unsafe manual reset.
+- Support **narrow legacy migration** of the three known action-owning `P1-D` replan interruption reasons to `CANCEL_PENDING`; unknown `INTERRUPTED` rows remain fail-closed and never auto-reset or replay movement. C0 / Backend schema unchanged.
+- Added `C2S4TransactionalRecoveryFix1SelfTest` (267 pure-Java assertions) and `scripts/test-terrain-s4-fix1.ps1`. Latest isolated Java suite: **24 classes / 4,706 assertions PASS** (Java 17 target executed with Java 21). Backend C2-focused **16 tests PASS**; full Backend suite **201 tests PASS (37.184s)** on this unchanged Backend in Fix #1. **Forge Build NOT VERIFIED** locally (Gradle 8.8 download unavailable), nor gameplay, crash safety, or MSPT. See `docs/terrain-sprint4-fix1-test-report.md` and `docs/terrain-sprint4-fix1-windows-checklist.md`.
+- Scope preserved: no new pathfinding algorithms, no new C1 Physics, no interaction skills, no multi-chunk navigation, no GitHub operations. ONE `CHANGELOG.md` and one `PENDING_TESTS.txt`.
+
+---
+
+## Terrain-Aware 3D Traversal — Sprint 4 (Architecture C; 2026-10-20; CANDIDATE)
+
+- Built on Sprint 3 Candidate **only**. Added typed `C2S4RecoveryPolicy` for terminal C1 3D receipts with exact ticket identity, bounded stable-ground recovery and fail-closed handling for foreign/unknown/unloaded states. Preserved B3/P1-D replan limits, C0 action ownership, C1 Vanilla Physics and existing cancellation transaction.
+- Introduced S4 recovery WAIT/READY events and a 3-tick grounded/loaded/supported confirmation window with 100-tick settle deadline before using a fresh 3D graph. Replan results never count as verified goal completion without C1/C0 receipts.
+- Normal Save/Quit transitions action-owning C2 runs to durable `CANCEL_PENDING` and stops C1 motion; stale action-owning journal records after restart are reconciled asynchronously with C0, never replayed. Ambiguous HTTP creation, crash/fync, absent backend and unknown motion remain fail-closed.
+- Added `C2S4RecoverySelfTest` (696 isolated Java assertions PASS), Sprint 4 Windows script/checklist/report. S3 104 assertions and P1-D 187 assertions re-ran PASS; total isolated Java regression 23 suites / 4,439 assertions PASS. Backend C2-focused suite 16 tests PASS, **full backend retry 201 tests PASS** (initial run timed out; retry completed). Forge Gradle 8.8 download failed (UnknownHostException) before compile: Forge Build and all Sprint 4 live gameplay / actual 1/3/5/10 NPC MSPT PENDING. No GitHub operations.
+
+---
+
+## Terrain-Aware 3D Traversal — Sprint 3: Verified Transactional 3D Navigation (Architecture C; 2026-10-17; CANDIDATE)
+
+- Built on Sprint 2 Candidate, no Sprint 4. Added **directed weighted 3D graph** kinds WALK, STEP_UP, STEP_DOWN, JUMP_UP, SAFE_DESCEND, with independent ascending/descending collision approvals and no dangerous invented reverse edges. Preserved legacy flat graph tests.
+- Added conservative world read-only 3D clearance with loaded swept-player footprint, safe standing AABBs and jump headroom; no chunk force-load. Distinguishes verified `STAIR_TRANSITION` (partial >=50% support, Vanilla stair, headroom and noCollision confirmed) from FULL WALKABLE, and excludes generic partial support.
+- Unified half-height footY→supportY interpretation across terrain scan, start/goal planning, C2 route and replan. `c2 navigate`, `navplan`, `navhier` accept fractional target feet Y, with strict target-height verification for live navigation.
+- Extended C2 Waypoint and C1 Bridge with typed C1 Vanilla S2 Traversal Tickets and exact terminal `TRAVERSAL_COMPLETE_<KIND>` phase checks; off-center vertical approach first consumes a separately verified flat centering ticket. Maintained one C0 goal/action, per-segment C1 ticket ownership, P1-D bounded replanning and Fix #1 cancellation/reconciliation.
+- B3 Region partition now uses weak local connectivity for grouping only, **without** losing directed portal and path rules. Added S3 synthetic planner/waypoint/multi-NPC self-tests, Windows test script, test report/checklist; preserved one `CHANGELOG.md` + `PENDING_TESTS.txt`.
+- **Evidence:** 21 isolated Java suites / 3,657 assertions PASS (recheck count in final report); Backend full 201 tests PASS. Forge build cannot fetch Gradle 8.8 locally: **Windows Forge build and 3D gameplay remain NOT VERIFIED**. STEP_DOWN, dynamic 3D recovery, crash/rejoin and real MSPT remain pending. No GitHub operations.
+
+---
+
+## Terrain-Aware 3D Traversal — Sprint 2: Verified Vanilla 3D Motion Primitives (Architecture C; 2026-10-17; CANDIDATE)
+
+- Based strictly on Terrain Sprint 1 Candidate; **operator-only Forge C1** `/npcortex c1 traverse <npc> <step_up|step_down|jump_up|safe_descend> <forward|back|left|right> <blocks>`, bounded to 0.65..1.45 blocks. This is **not** autonomous C2 3D navigation, not a Jump/Step edge in B1, and does not call C0/Ollama.
+- Added dependency-free `C1S2TraversalPlan` (typed primitive, target Y, finite bounded inputs, grounded/airborne/landing verification, actual horizontal position, fail-closed combat interruption). New runtime session fields reuse **one existing C1 Vanilla `travel()`/`jumpFromGround()` owner**, without teleport, `setPos`, dual travel ticks or changed Qwen/Backend contracts. Combat impulses retain priority and cancel stops commanded input while preserving gravity until landing.
+- Reused Sprint 1 terrain observations with a new server-thread `C2NavigationSensor.landingAt()` for exact destination preflight (loaded 3x3 neighbor footprint, support, height, hazard, headroom / AABB collision). Stair half-footprint only eligible for **operator physics proof** if at least half supported and exact Vanilla collision is clear; this does not declare graph WALKABLE. Verify target terrain again before any success receipt to fence placed/removed landing blocks.
+- Added `C1S2TraversalPlanSelfTest`, `scripts/test-terrain-s2.ps1`, Windows fixtures/checklist and test report. No additions to automatic C2 Waypoint, Region, A*, C2 Replanning, Backend, Inventory or C1 Combat formula/lifecycle.
+- **Local evidence:** Sprint 2 Java contract 64 assertions PASS; isolated baseline Java Terrain/Nav/A*/Waypoint/Cancellation regressions PASS (2,371 unique assertions including new contract); Backend full 201 tests PASS. Forge Gradle 8.8 wrapper distribution cannot be downloaded in this sandbox, therefore **actual Windows Forge compilation, Vanilla physics movement/landing, all stair orientations, multiplayer/MSPT, and dynamic terrain safety gameplay are PENDING**. The package is a Candidate, not Full Quality Gate PASS. No GitHub operations.
+
+---
+
+## Terrain-Aware 3D Traversal — Sprint 1: Reliable Terrain Intelligence (Architecture C; 2026-10-16; CANDIDATE)
+
+- Approved scope only: improve **read-only Terrain Geometry + Collision Classification**, preserving C1 Vanilla Physics, C2-P1-D replanning, Fix #1 post-cancel recovery, B1-B3 flat `WALK` planner and Backend behavior. **No Sprint 2/3/4 or Jump/Step/Drop execution**.
+- Added `C2TerrainGeometry` (player-footprint support using a union of VoxelShape collision rectangles, preserving conservative classification), immutable `C2TerrainObservation` (typed Support/Clearance/Risk/Reason), and integrated the same evidence into `C2NavigationSensor` NavGrid scan and new operator-only bounded `/npcortex c2 terraininspect <name> <x> <supportY> <z>` diagnostic.
+- Added dependency-free `C2TerrainGeometrySelfTest` and `scripts/test-terrain-s1.ps1`; Windows test checklist + report under `docs/terrain-sprint1-*`. Preserved one `CHANGELOG.md` and `PENDING_TESTS.txt`.
+- **Local tests**: 1,073 new pure Java assertions PASS; eight core terrain/navigation self-tests PASS (2,296 reported assertions including new suite); 201 Backend tests PASS; mock Minecraft sensor compilation/10 mock adapter checks and mock command-tree compile PASS. **Forge Gradle Build NOT VERIFIED**: Gradle 8.8 unavailable in this environment. Real Minecraft block-shape accuracy, per-coordinate inspection, unloaded-chunk behavior and Server MSPT still require Windows acceptance.
+- No GitHub Operations.
+
+---
+
+## [Unreleased] — C2-P1-D Reliable Transactional Dynamic Replanning (Candidate) — 2026-10-16
+
+- Added `C2ReplanningPolicy`: bounded per-Goal route generations, maximum 3 replan attempts, 20-tick cooldown, 12,000 expansion budget per attempt / 36,000 per Goal, and explicit stop on cancel.
+- Integrated synchronous server-thread route replacement into existing `C2AgentRuntime`/`C2WaypointExecution` without creating an additional C0 action or a second C1 physics owner.
+- Fresh World Sensor + Traversability Graph + B3 hierarchical search for blocked/deviated flat WALK routes; C1 bridge continues to re-check edges before every segment.
+- Enforced same-ticket terminal receipt correlation, fail-closed unknown/mismatched tickets, `REPLANNING` action journal state, ownership checks before route replacement, and one global replanning attempt per END tick.
+- Preserved Fix #1 Cancellation/Recovery semantics and original C1 Vanilla movement. Added domain events for replanning and route replacement.
+- Added `test-c2-p1d.ps1`, pure Java regressions, Windows checklist, test report and carried forward all outstanding cases in `PENDING_TESTS.txt`.
+- This is a **candidate**, NOT Windows Gameplay Acceptance; no GitHub operations. Forge Build blocked locally due unavailable Gradle 8.8 download.
+
+## C2-P1-C Fix #1 — Transactional Post-Cancel Recovery (Architecture C; 2026-10-16; CANDIDATE)
+
+- Added goal-scoped `POST /v1/agent/goals/{goal_id}/cancel` to C0, guarded by world/actor/action identity and the existing goal session lock. Pending C0 action is atomically fenced as `failed` with `operator_cancelled` verdict, and `pending_action_id` cleared without forging a successful action result; repeat cancellation is idempotent. No SQLite schema rewrite needed.
+- Added Forge `C2CancellationRecovery`, persistent `CANCEL_PENDING` state, asynchronous retry with existing ChatBridge and terminal acknowledgement validation. On verified terminal C0 state and inactive local C1 motion, journal becomes `CANCELLED` (or truthful previous terminal state), permitting another C2 job with **no manual `/npcortex c2 reset`**. Legacy operator-cancelled `INTERRUPTED` rows can reconcile, but arbitrary interruption remains fail-closed.
+- Added cancellation guard against manual reset during pending reconciliation. Did **not** change C1 physics, B3 path planning, P1-D or GitHub.
+- Added Python cancellation tests (8), pure Java cancellation policy assertions (11), Windows `scripts/test-c2-p1c-fix1.ps1`, candidate docs and test report. Local Backend full suite **201 tests PASS**, Java isolated regression **2,286 assertions PASS**; Forge build remains **NOT VERIFIED** here because Gradle distribution download is blocked. Windows Build and Minecraft Acceptance **PENDING**.
+- Maintained single `CHANGELOG.md` and `PENDING_TESTS.txt`, including existing **NOT YET TESTED** Unloaded Chunk and Partial Block/Terrain cases, plus new cancellation network/crash recovery coverage gaps.
+
+---
+
+## C2-P1-C — Reliable Transactional Waypoint Engine (Architecture C; 2026-10-16; IMPLEMENTATION CANDIDATE)
+
+- Built on user-confirmed B3 Core Acceptance. Added bounded `C2WaypointExecution` pure-Java route/segment ownership state machine, `C2WaypointBridge` Forge adapter, and `/npcortex c2 navigate <name> <x> <feetY> <z>` (integer target standing-block position); C1 `C2MotionTicket` allows correlating each transient motion session with exactly one waypoint. Existing B3/B2 diagnostics remain read-only.
+- One C0 Qwen-selected `move_to` action owns the entire path, rather than one Ollama request per step. A fresh B1 collision Graph is checked before **each** next segment; results require matching ticket, `COMPLETE` phase and actual position within tolerance. Final Goal also requires successful C0 verification. No automatic replan (P1-D), jump, step/drop or teleport; collision/physics remain Vanilla-owned by C1.
+- Added pure protocol regression 261 assertions, Windows `scripts/test-c2-p1c.ps1`, implementation notes, Windows Checklist, Test Report and updated `PENDING_TESTS.txt` while retaining one unified CHANGELOG.md. Local pure-Java 17-target aggregate 2,275 assertions PASS; Backend 193 tests PASS. Forge wrapper blocked fetching Gradle 8.8 BEFORE compilation; **Windows Forge Build, Gameplay, runtime C1 ticket integration, crash-injection and concurrent MSPT PENDING**. Stub-based command syntax check is NOT Forge acceptance. No GitHub operations.
+
+---
+
+## C2-P1-B3 — Reliable Hierarchical Region Planner (Architecture C; 2026-10-16; IMPLEMENTATION CANDIDATE)
+
+- Added pure-Java `C2RegionGraph`: bounded tile partition, connected components within each tile, immutable Region/Portal metadata; only existing verified B1 directed edges can become portals (no invented cross-wall links).
+- Added `C2HierarchicalPlanner`: exact intra-region shortest-path costs, exhaustive portal overlay with deterministic weighted route, shared bounded search budget and independent B2 A* reference verification / explicit fallback. Results distinguish `PATH_FOUND`, `NO_PATH`, `OUT_OF_SCAN`, `UNSAFE_TARGET`, `INVALID_START`, `BUDGET_EXCEEDED` and `INCONSISTENT_GRAPH` with immutable paths.
+- Added read-only Minecraft diagnostics `/npcortex c2 navregion` and `/npcortex c2 navhier`; scoped actor/dimension/lifecycle/motion checks and one coherent Graph+Snapshot capture per command. No NPC execution, no caching, no Qwen/Backend/C1 motion changes.
+- Added pure-JVM `C2HierarchicalPlannerSelfTest`, `scripts/test-c2-p1b3.ps1`, Windows gameplay checklist, test report, and carried forward `PENDING_TESTS.txt` with **NOT YET TESTED** P1-A unloaded-chunk gameplay and partial-block/terrain per-coordinate accuracy. One `CHANGELOG.md` retained.
+- **Local candidate tests:** B3 pure JVM **677 assertions PASS**, Java B2/B1/P1-A/C1 aggregate **2,014 assertions PASS**; Backend **193 tests PASS**. See `docs/c2-p1b3-test-report.md` for environment and measured limits. Forge Build / Windows Gameplay / concurrent MSPT **NOT YET VERIFIED** for this candidate. No GitHub operations.
+
+---
+
+## C2-P1-B2 — Reliable General-Purpose A* Engine (2026-10-16; IMPLEMENTATION CANDIDATE)
+
+- On the latest B1 Traversability Graph ZIP, implemented pure-Java, immutable, deterministic, bounded `C2AStarPlanner`, with typed `PATH_FOUND`, `NO_PATH`, `INVALID_START`, `OUT_OF_SCAN`, `UNSAFE_TARGET`, `BUDGET_EXCEEDED`; expansion budget max 845, fail-closed snapshot/graph vertex consistency, weighted admissible horizontal heuristic, exact goal and ordered path/metadata.
+- Added **operator-only read-only** `/npcortex c2 navplan <npc> <x> <feetY> <z> [radius] [budget]`, a coherent Graph+Snapshot capture on the Minecraft server thread, and per-call diagnostics. It does **not** move NPCs, create regions, persist routes, call Ollama or execute Waypoints. Existing C1/C2 commands and movement behavior are preserved.
+- Added Java 17 `C2AStarPlannerSelfTest`, Windows `scripts/test-c2-p1b2.ps1`, `docs/c2-p1b2-astar-path-planning.md`, `docs/c2-p1b2-test-report.md`; retained one unified `CHANGELOG.md`.
+- **P1-A pending tests remain NOT YET TESTED** in `PENDING_TESTS.txt`: Unloaded Chunk Safety gameplay and Partial Block/Terrain Accuracy per-coordinate. B1 per-edge correctness and concurrent MSPT remain open.
+- Forge Build and Minecraft Gameplay **NOT VERIFIED** for B2 until Windows user acceptance. No GitHub operations.
+
+---
+
+## C2-P1-B1 — Traversability Graph (Architecture C; 2026-10-16; IMPLEMENTATION CANDIDATE)
+
+- Implemented the FIRST substage of the user-approved hierarchical 3D navigation plan: immutable `C2TraversabilityGraph` vertices at distinct support heights, bounded four-cardinal `WALK` edges and explicit bidirectional collision-clearance validation. Conservative fail-closed treatment for unloaded, blocked, hazardous, unsupported or partially-supported cells; rejects duplicate/out-of-bounds input, diagonal shortcuts and guessed step/jump/drop edges.
+- Added `C2GraphWorldProbe` binding P1-A fresh on-demand world snapshots to Minecraft server-thread swept player-AABB collision checks with no force-loading. Added operator-only read-only `/npcortex c2 navgraph <name> [radius]` to display graph counts and timing without commanding movement. **No A*, region hierarchy, autonomous movement or waypoint execution** is enabled.
+- Added `C2TraversabilityGraphSelfTest`, `scripts/test-c2-p1b1.ps1`, `docs/c2-p1b1-traversability-graph.md`, `docs/c2-p1b1-test-report.md` and requested `PENDING_TESTS.txt`. Only **one** unified `CHANGELOG.md` exists. Unloaded Chunk Safety and Partial Block / Terrain Accuracy gameplay remain explicitly **NOT YET TESTED**.
+- Local test results, Windows Forge build and gameplay evidence are listed in the test report. Isolated JVM assertions do not prove actual Forge collision, MSPT or final acceptance. No GitHub operations.
+
+---
+
+---
+
+## Earlier consolidated Development history (preserved)
 
 ## Unreleased — Development `v0.2.0-alpha.1`: C2 Embodied AI / C2-P1-A World Representation (2026-10-16)
 

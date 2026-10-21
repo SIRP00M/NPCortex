@@ -280,7 +280,7 @@ final class C1P0Runtime {
         if (revision <= 0) return;
         C1P0Network.send(viewer, new C1P0Network.RotationSnapshot(
                 npc.getUUID(), npc.getId(), state.token, revision, rotation));
-        LOG.info("NPCortex C1-P1 ROTATION_SYNC viewer={} npc={} revision={} yaw={} pitch={} head={} body={}",
+        LOG.debug("NPCortex C1-P1 ROTATION_SYNC viewer={} npc={} revision={} yaw={} pitch={} head={} body={}",
                 viewer.getGameProfile().getName(), npc.getUUID(), revision,
                 rotation.yaw(), rotation.pitch(), rotation.headYaw(), rotation.bodyYaw());
     }
@@ -288,7 +288,7 @@ final class C1P0Runtime {
     static void onRotationApplied(ServerPlayer viewer, C1P0Network.RotationApplied message) {
         C1P0SyncState state = validatedSession(viewer, message.npcId(), message.entityId(), message.token());
         if (state != null && state.rotationApplied(message.revision())) {
-            LOG.info("NPCortex C1-P1 ROTATION_APPLIED viewer={} npc={} revision={}",
+            LOG.debug("NPCortex C1-P1 ROTATION_APPLIED viewer={} npc={} revision={}",
                     viewer.getGameProfile().getName(), message.npcId(), message.revision());
         }
     }

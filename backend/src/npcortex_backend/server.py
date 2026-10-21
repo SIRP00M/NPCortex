@@ -31,6 +31,7 @@ SOCIAL_STOP = re.compile(r"^/v1/social-runs/([^/]+)/stop$")
 AGENT_GOAL_GET = re.compile(r"^/v1/agent/goals/([^/]+)$")
 AGENT_OBSERVE = re.compile(r"^/v1/agent/goals/([^/]+)/observe$")
 AGENT_DECIDE = re.compile(r"^/v1/agent/goals/([^/]+)/decide$")
+AGENT_CANCEL = re.compile(r"^/v1/agent/goals/([^/]+)/cancel$")
 AGENT_RESULT = re.compile(r"^/v1/agent/actions/([^/]+)/result$")
 
 
@@ -149,6 +150,7 @@ def make_handler(service):
                 or SOCIAL_STOP.fullmatch(self.path)
                 or AGENT_OBSERVE.fullmatch(self.path)
                 or AGENT_DECIDE.fullmatch(self.path)
+                or AGENT_CANCEL.fullmatch(self.path)
                 or AGENT_RESULT.fullmatch(self.path))
 
             # The server does not support request transfer codings. Never try
@@ -210,6 +212,12 @@ def make_handler(service):
                     if set(data) != {"request_id"}:
                         return self._error(400,"invalid_request","Decide requires request_id")
                     return self._json(200, service.agent_decide(agent_decide.group(1),data["request_id"]))
+                agent_cancel = AGENT_CANCEL.fullmatch(self.path)
+                if agent_cancel:
+                    if not {"world_id", "actor_id"}.issubset(data) or not set(data).issubset({"world_id", "actor_id", "action_id"}):
+                        return self._error(400, "invalid_request", "Cancel requires world_id and actor_id with optional action_id")
+                    return self._json(200, service.cancel_agent_goal(agent_cancel.group(1),
+                        data["world_id"], data["actor_id"], data.get("action_id")))
                 agent_result = AGENT_RESULT.fullmatch(self.path)
                 if agent_result:
                     if set(data) != {"result_id","observation_id","status","snapshot"}:

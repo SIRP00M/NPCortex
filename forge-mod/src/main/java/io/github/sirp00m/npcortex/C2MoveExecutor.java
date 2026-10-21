@@ -23,6 +23,7 @@ final class C2MoveExecutor implements C2SkillRegistry.Executor {
         if (run.avatar() == null || !run.isAlive()) return "Actor no longer alive";
         if (!run.avatar().serverLevel().hasChunkAt(BlockPos.containing(tx,ty,tz)))
             return "Destination chunk is not loaded";
+        if (run.route!=null) return C2WaypointBridge.beginSegment(run);
         C2MoveGeometry.Plan plan;
         try {
             plan = C2MoveGeometry.plan(run.avatar().getX(), run.avatar().getY(),run.avatar().getZ(),tx,ty,tz);

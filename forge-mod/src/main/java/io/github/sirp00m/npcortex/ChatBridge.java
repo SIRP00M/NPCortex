@@ -117,7 +117,7 @@ public final class ChatBridge {
     /** C2 structured calls. Never block the Minecraft server thread. */
     static CompletableFuture<JsonObject> c2Post(String path, JsonObject body, int timeoutSeconds) {
         try {
-            if (!path.matches("/v1/(worlds|actors|agent/goals(?:/[0-9a-f-]+/(?:observe|decide))?|agent/actions/[0-9a-f-]+/result)")) {
+            if (!path.matches("/v1/(worlds|actors|agent/goals(?:/[0-9a-f-]+/(?:observe|decide|cancel))?|agent/actions/[0-9a-f-]+/result)")) {
                 throw new IllegalArgumentException("C2 endpoint is not allowlisted");
             }
             String encoded = body.toString();

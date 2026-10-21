@@ -12,7 +12,8 @@ import java.util.UUID;
  */
 final class C2Events {
     enum Kind { REQUESTED, REGISTERED, OBSERVED, DECIDED, ACTION_STARTED,
-        ACTION_FINISHED, VERIFIED, REJECTED, INTERRUPTED }
+        ACTION_FINISHED, RECOVERY_WAIT, RECOVERY_READY, REPLAN_QUEUED, ROUTE_REPLACED, REPLAN_EXHAUSTED,
+        VERIFIED, REJECTED, INTERRUPTED }
     record Event(Kind kind, UUID actor, UUID goal, UUID action, String detail) {}
     private static final int HISTORY_LIMIT = 128;
     private final ArrayDeque<Event> history = new ArrayDeque<>();

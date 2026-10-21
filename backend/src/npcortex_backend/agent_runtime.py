@@ -239,6 +239,54 @@ class AgentRuntime:
         return {"goal_id":gid,"request_id":record["request_id"],"decision":_obj(record["decision_json"]),
                 "action_id":record["action_id"],"replayed":replayed}
 
+    def cancel_goal(self, goal_id, world_id, actor_id, action_id=None):
+        """Idempotently fence an existing goal and its pending action.
+
+        This is an operator-authorized cancellation, not a forged action result.
+        It never claims success or verification. The Forge caller MUST stop its
+        local C1 movement before calling this endpoint. Serialization with
+        decide/observe/result prevents a late model decision from reopening work.
+        """
+        gid = canonical_uuid(goal_id, "goal_id")
+        wid = canonical_uuid(world_id, "world_id")
+        aid = canonical_uuid(actor_id, "actor_id")
+        action = canonical_uuid(action_id, "action_id") if action_id is not None else None
+        with self.service.sessions.conversation("c0-goal", gid):
+            with self.db.write() as db:
+                goal = self._row(db, gid)
+                if goal["world_id"] != wid or goal["actor_id"] != aid:
+                    raise RegistryConflictError("Cancellation goal/actor/world mismatch")
+                pending = goal["pending_action_id"]
+                # A stale/mismatched action identifier must not claim that an
+                # unrelated transaction was reconciled, including replays.
+                if action is not None:
+                    known = db.execute("SELECT 1 FROM agent_actions WHERE action_id=? AND goal_id=?",
+                                       (action, gid)).fetchone()
+                    if known is None:
+                        raise RegistryConflictError("Cancellation action does not belong to goal")
+                if pending is not None and action is not None and pending != action:
+                    raise RegistryConflictError("Cancellation action does not match pending action")
+                terminal = goal["status"] in ("completed", "failed")
+                if terminal and pending is not None:
+                    raise RegistryConflictError("Terminal goal still has pending action; manual investigation required")
+                replayed = terminal and goal["last_error"] == "operator_cancelled"
+                if not terminal:
+                    if pending:
+                        updated = db.execute(
+                            "UPDATE agent_actions SET status='failed', verdict='operator_cancelled' "
+                            "WHERE action_id=? AND goal_id=? AND status='pending'",
+                            (pending, gid))
+                        if updated.rowcount != 1:
+                            raise RegistryConflictError("Pending action changed during cancellation")
+                    db.execute("UPDATE agent_goals SET status='failed',pending_action_id=NULL," 
+                               "last_error='operator_cancelled' WHERE goal_id=?", (gid,))
+                status = "failed" if not terminal else goal["status"]
+                return {"goal_id": gid, "actor_id": aid, "status": status,
+                        "cancelled": (not terminal or replayed),
+                        "replayed": replayed, "terminal": True,
+                        "pending_action_id": None,
+                        "action_id": pending if not terminal else action}
+
     def result(self, action_id, result_id, status, observation_id, snapshot):
         aid = canonical_uuid(action_id,"action_id")
         rid = canonical_uuid(result_id,"result_id")

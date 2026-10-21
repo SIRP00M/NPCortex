@@ -67,11 +67,14 @@ final class C1VanillaLifecycleCoordinator {
         C1P1MotionRuntime.onTick(event);
         C1P1CLifecycleRuntime.onTick(event);
         C2AgentRuntime.onServerTick(event);
+        C2FollowRuntime.onServerTick(event);
     }
 
     static void onServerStopping(ServerStoppingEvent event) {
         // Persist motion before clearing live identity; record interrupted
         // deaths as TRANSITION without auto-recreating an ambiguous player.
+        // Release active F1-owned C1 tickets while the Vanilla avatar is still live.
+        C2FollowRuntime.beforeServerStop(event.getServer());
         C1P0Runtime.onServerStopping(event);
         C1P1CLifecycleRuntime.onServerStopping(event);
         C2AgentRuntime.beforeServerStop(event.getServer());

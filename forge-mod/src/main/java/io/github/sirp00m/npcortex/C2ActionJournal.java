@@ -16,7 +16,7 @@ import java.util.UUID;
 final class C2ActionJournal extends SavedData {
     private static final String KEY = "npcortex_c2_actions";
     record Row(UUID actor, UUID goal, UUID action, String state, String message) {
-        boolean uncertain() { return !state.equals("COMPLETED") && !state.equals("FAILED") && !state.equals("RESET"); }
+        boolean uncertain() { return !state.equals("COMPLETED") && !state.equals("FAILED") && !state.equals("RESET") && !state.equals("CANCELLED"); }
     }
     private final Map<UUID, Row> rows = new LinkedHashMap<>();
 
@@ -26,6 +26,8 @@ final class C2ActionJournal extends SavedData {
     }
 
     Row find(UUID actor) { return rows.get(actor); }
+
+    java.util.List<Row> entries() { return java.util.List.copyOf(rows.values()); }
 
     void record(UUID actor, UUID goal, UUID action, String state, String message) {
         if (state == null || message == null || state.length() > 48 || message.length() > 180)

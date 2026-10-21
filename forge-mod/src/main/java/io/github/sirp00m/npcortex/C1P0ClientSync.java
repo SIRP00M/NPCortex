@@ -32,6 +32,7 @@ public final class C1P0ClientSync {
         final int entityId;
         final UUID token;
         int revision;
+        final C1ClientRotationBlend blend = new C1ClientRotationBlend();
         RotationSession(int entityId, UUID token) {
             this.entityId = entityId;
             this.token = token;
@@ -102,19 +103,34 @@ public final class C1P0ClientSync {
         Entity entity = client.level.getEntity(packet.entityId());
         if (!(entity instanceof RemotePlayer player) || !entity.getUUID().equals(packet.npcId())) return;
         C1RotationState rotation = packet.rotation();
-        player.setYRot(rotation.yaw());
-        player.setXRot(rotation.pitch());
-        player.setYHeadRot(rotation.headYaw());
-        player.setYBodyRot(rotation.bodyYaw());
-        // Reset the render interpolation endpoints on a one-off initial restore.
-        player.yRotO = rotation.yaw();
-        player.xRotO = rotation.pitch();
-        player.yHeadRotO = rotation.headYaw();
-        player.yBodyRotO = rotation.bodyYaw();
+        // Keep authoritative physical yaw and pitch in the existing vanilla
+        // stream. Revisioned snapshots set *targets* for visual head/body;
+        // never jump the latter every two server ticks.
+        // Vanilla tracker interpolates physical yaw on subsequent updates;
+        // avoid a competing 10Hz absolute yaw snap from this custom packet.
+        // Explicit operator turns remain server-authoritative via the tracker.
+        if (session.revision == 0) {
+            player.setYRot(rotation.yaw());
+            player.setXRot(rotation.pitch());
+        }
+        session.blend.accept(rotation.headYaw(), rotation.bodyYaw());
+        if (session.revision == 0) {
+            player.setYHeadRot(rotation.headYaw());
+            player.setYBodyRot(rotation.bodyYaw());
+        }
+        // Only the FIRST snapshot for this verified viewing session resets
+        // interpolation endpoints. Subsequent authoritative rotation deltas
+        // preserve the previous render frame to allow smooth yaw blending.
+        if (session.revision == 0) {
+            player.yRotO = rotation.yaw();
+            player.xRotO = rotation.pitch();
+            player.yHeadRotO = rotation.headYaw();
+            player.yBodyRotO = rotation.bodyYaw();
+        }
         session.revision = packet.revision();
         C1P0Network.rotationApplied(new C1P0Network.RotationApplied(
                 packet.npcId(), packet.entityId(), packet.token(), packet.revision()));
-        LOG.info("NPCortex C1-P1 CLIENT_ROTATION_APPLIED npc={} entityId={} revision={} yaw={} head={} body={}",
+        LOG.debug("NPCortex C1-P1 CLIENT_ROTATION_APPLIED npc={} entityId={} revision={} yaw={} head={} body={}",
                 packet.npcId(), packet.entityId(), packet.revision(),
                 rotation.yaw(), rotation.headYaw(), rotation.bodyYaw());
     }
@@ -150,6 +166,18 @@ public final class C1P0ClientSync {
             sessionLevel = client.level;
         }
         if (client.level == null || client.player == null || client.getConnection() == null) return;
+        // Presentation-only interpolation after Vanilla's entity tick. Viewer
+        // sessions and revision fences prevent stale packets crossing worlds.
+        for (var entry : ROTATION_SESSIONS.entrySet()) {
+            RotationSession rs = entry.getValue();
+            if (!rs.blend.ready() || DEATH_REPORTS.containsKey(entry.getKey())) continue;
+            Entity entity = client.level.getEntity(rs.entityId);
+            if (!(entity instanceof RemotePlayer remote)
+                    || !entity.getUUID().equals(entry.getKey()) || remote.isDeadOrDying()) continue;
+            var smooth = rs.blend.advance();
+            remote.setYHeadRot(smooth.head());
+            remote.setYBodyRot(smooth.body());
+        }
         var deaths = DEATH_REPORTS.entrySet().iterator();
         while (deaths.hasNext()) {
             var item = deaths.next();
