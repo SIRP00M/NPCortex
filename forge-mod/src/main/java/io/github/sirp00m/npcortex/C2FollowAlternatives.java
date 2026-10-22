@@ -33,4 +33,20 @@ final class C2FollowAlternatives {
     }
     void verifiedProgress() { avoided.clear(); }
     void targetRelocated() { avoided.clear(); preferred=null; }
+    /** Keep a recently verified follow-heading preference while the player
+     * keeps moving ahead. A relocated target must still get a FRESH 3D plan:
+     * this only biases scoring, never resurrects a route or bypasses a graph. */
+    void targetRelocated(double actorX,double actorZ,double playerX,double playerZ) {
+        avoided.clear();
+        if(preferred==null) return;
+        double fx=playerX-actorX,fz=playerZ-actorZ;
+        double px=preferred.x()+.5-actorX,pz=preferred.z()+.5-actorZ;
+        double forward=fx*px+fz*pz;
+        double distance=Math.hypot(px,pz);
+        double projection=Math.hypot(fx,fz);
+        // No preference behind the actor, past the newly reached player,
+        // or beyond the radius of the local follow scan.
+        if(projection<1e-6 || forward<=0 || distance<.9 || distance>5.8
+                || forward/projection<.4) preferred=null;
+    }
 }

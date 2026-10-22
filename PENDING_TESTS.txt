@@ -1,25 +1,53 @@
-NPCortex Development v0.2.0-alpha.2 — PRIMARY QUALITY GATE (2026-10-21)
-====================================================================
-Source baseline: C-S1..C-S4 Persistent Follow Motion Session C + BuildFix1 Option A.
-The detailed historical pending registers follow below; keep them until verified, do not infer a PASS from pure Java tests. Packaging session reran 17 pure-Java suites (2,490 assertions) and focused backend C2 16/16 PASS (exit 0), NOT Forge/JDK17 acceptance.
+NPCortex Development v0.2.1-alpha.1 — Follow Stability milestone acceptance ledger (2026-10-22)
+=======================================================================
+[OWNER-REPORTED GAMEPLAY PASS — LIMITED] After testing Airborne Follow Target Projection in Minecraft, the maintainer confirmed the previously observed flying-player-related zigzag disappeared. This is a PASS only for the scenario tried, not the full FLY-01..FLY-14 matrix or a verified build log.
+[OWNER-REPORTED EARLIER GAMEPLAY PASS — LIMITED] Terrain-Native Follow found a new route and resumed following after a brief pause in the tested scenario; not evidence of every terrain fixture or zero pauses.
+[PENDING] Full current-archive Windows Temurin17 Forge build and full FLY-01..FLY-14 acceptance with followstatus evidence (targetMode/targetProjection/projectedY).
+[PENDING] Full owner/control regression, midair cancellation, combat, save/rejoin, unsupported ravines/unsafe/unloaded chunks, 3D STEP_DOWN and mixed terrain, modded hazards and 1/3/5/10 NPC Forge MSPT/multiplayer.
+[NOTE] Original checklist below reflects the candidate's pre-gameplay verification state. Individual checkbox rows remain unchecked until each full case is explicitly completed; do not overwrite partial evidence with blanket PASS.
 
-[ ] FIRST: Windows JDK 17 Forge compile of the *patched* ZIP after BuildFix1 (original build failed: C2FollowRuntime.java:223 `extended` out of scope). Provide actual BUILD SUCCESSFUL or full error, NOT an old compile screenshot.
-[ ] Run scripts/test-c2-persistent-follow-c.ps1 on Windows JDK 17 and backend regression; record command output, exits and environment.
-[ ] Persistent Follow straight 50+ blocks: check single-token `persistentAppends`, minimal stop/start, bounded renewals and terminal receipts.
-[ ] 360-degree diagonal steering and zero-forward pre-turn beside obstacles: no speculative BLOCKED ticks=1 or illegal movement.
-[ ] Changed target direction, moving-player stop/resume ring, wall/U-corner collision, dynamic obstacle and unloaded chunk without unsafe traversal.
-[ ] Player Collision Parity in grass/flowers/ferns + separately costly/forbidden hazard blocks and modded passability tags.
-[ ] Real 3D Follow and C2 navigation regression: STEP_UP +0.5, JUMP_UP +1.0, SAFE_DESCEND -1.0, STEP_DOWN -0.5 (not yet verified), mixed slabs/stairs and clearance.
-[ ] Cancel/unfollow during motion, combat/knockback and foreign C1 owner, death/despawn, Save & Quit/rejoin, no transient session replay.
-[ ] 1/3/5/10 NPC Forge measurements: MSPT/TPS, path planning latency, packet/rotation update rate, token count; no performance PASS from isolated JVM.
-[ ] Backend offline, crash/rejoin, old journal migration and other historical Navigation Full Quality Gate items in the register below.
+# Airborne Follow Target Projection (2026-10-22) — Windows Forge/Gameplay PENDING
+- [ ] Temurin JDK17: `scripts/test-c2-airborne-target-projection.ps1` and stable trajectory baseline runner PASS.
+- [ ] Forge `compileJava`/`build` PASS on Windows 1.20.1 (local Gradle distribution unavailable).
+- [ ] FLY-01..FLY-07 grounded/flying/vertical only/diagonal/takeoff/landing/jump baseline, including mode status and lack of flight-triggered zigzag.
+- [ ] FLY-08..FLY-10 ravine/water/unsafe terrain, elevated 3D support, collision/hazard/unloaded fail-closed behavior.
+- [ ] FLY-11..FLY-13 cancellation/combat, save/rejoin, generic C2 Navigate safety and regression.
+- [ ] FLY-14 1/3/5/10 NPC actual Forge MSPT and multiplayer/client interpolation, performance budget and ownership isolation.
+- [ ] Check any remaining zigzag while truly GROUNDED separately; this fix addresses flying-player target Y handling, not every steering instability.
+- [ ] See `docs/c2-airborne-target-projection-windows-checklist.md` for commands and evidence.
 
-Owner-reported PRIOR gameplay, not a pass for this exact BuildFix1:
-- C2 basic nav/detour, S2 STEP_UP/JUMP_UP/SAFE_DESCEND, S3 auto uphill/downhill, S4 main transactional recovery, F1 basic Follow, and newer B+ visual improvement in attempted scenes. All other gates remain explicitly open.
+# Stable Trajectory Follow B (2026-10-21) — NOT YET VERIFIED ON WINDOWS
+- [ ] `scripts/test-c2-stable-trajectory-follow-b.ps1` PASS on JDK 17 (Linux --release 17 pure Java PASS is not a substitute).
+- [ ] Forge 1.20.1 compileJava / full build succeeds; local Gradle 8.8 DNS blocked.
+- [ ] ST-B-01..ST-B-05 cardinal/diagonal straight travel, small lateral perturbation, near-stop wobble, overshoot and receipt.
+- [ ] ST-B-06..ST-B-09 wall/narrow corners, player-passable vegetation, slab/stair/jump/descend/unsafe-edge hazards.
+- [ ] ST-B-10..ST-B-12 cancellation, knockback/combat, save/rejoin and stale-ticket behavior.
+- [ ] ST-B-13 multi-NPC (1/3/5/10) MSPT, stability and token isolation.
+- [ ] ST-B-14 generic `/npcortex c2 navigate` regression.
+- [ ] Actual residual steering error/heading jitter and approach-time variability not instrumented; record video/telemetry and confirm before calling smoothness PASS.
 
-References: docs/c2-persistent-follow-session-c-windows-checklist.md and docs/patch-notes/v0.2.0-alpha.2.md.
+# C-TN Persistent Terrain-Native Follow — Pending Windows Quality Gate (2026-10-21)
+- [ ] `scripts/test-c2-terrain-native-follow-c.ps1` on actual Windows JDK 17 and `scripts/dev-forge.ps1 -Task build` Forge 1.20.1 compile/pass.
+- [ ] Original ravine/ridge screenshot fixture: avoid permanent `PAUSED_UNREACHABLE` when reachable path exists; no cliff descent, collision bypass, fake success or repeat left/right zigzag. Capture new `terrainDecision`, `lastFailure`, `detourHops` and server logs.
+- [ ] Confirm bounded lateral detour truly escapes corner without oscillation; unreachable terrain still safe PAUSED and probes only at controlled cooldowns (40/80/120 ticks).
+- [ ] Mixed WALK/STEP/JUMP/SAFE_DESCEND, slab/stair, STEP_DOWN -0.5 and dynamic terrain mutation acceptance.
+- [ ] Combat, cancellation/unfollow midair, no stale token movement, save/rejoin, unloaded chunk, modded hazards and static C2 navigation regression.
+- [ ] 1/3/5/10 NPC Forge MSPT, planning cost, 20 TPS stability, multiplayer/network tracking and persistent session fairness.
+- [ ] All previously unverified navigation/full Sprint 4 and C-3D quality gate tests remain outstanding unless separately confirmed.
 
-------------------------- HISTORICAL PENDING REGISTER -------------------------
+# C-3D Persistent Mixed Follow (2026-10-21) — NOT YET VERIFIED ON WINDOWS
+- [ ] Run `scripts/test-c2-persistent-3d-c.ps1` on actual Windows JDK17.
+- [ ] `scripts/dev-forge.ps1 -Task build` fully succeeds; this container could not download Gradle 8.8.
+- [ ] Walk→Jump +1→Walk verified grounded, same C1 token (where mixed lease eligible).
+- [ ] Walk→STEP_UP +0.5→Walk with slab/stairs and fallbacks.
+- [ ] Walk→SAFE_DESCEND -1→Walk; no fake landing success.
+- [ ] STEP_DOWN -0.5 real gameplay (previously not verified).
+- [ ] Wall obstacle and dynamically modified landing refuse unsafe mixed stage.
+- [ ] Combat/knockback, cancel/unfollow midair, player offline/dimension change, Save&Quit/rejoin.
+- [ ] Multi-NPC 1/3/5/10 Forge MSPT/latency and C1 ownership isolation.
+- [ ] C2 navigate/cancel regression, unloaded-chunk safety, modded-block collision/hazard behavior.
+- [ ] Overall subjective start/stop delay around obstacles measured and compared with prior build.
+- [ ] Confirm no server/client desync or visual stutter on mixed 3D transitions.
 
 NPCortex Persistent Follow C — Build Fix #1 Option A (2026-10-21)
 =================================================================
@@ -336,3 +364,17 @@ C2-F2 Fix #3 — Vanilla-inspired Follow Adapter A (2026-10-21)
 [NOT VERIFIED — PERFORMANCE] 1/3/5/10 NPC Forge server MSPT, per-actor plan latency, player-target relocation stress test and world sampling overhead. No synthetic benchmark is a substitute.
 [KNOWN LIMIT] B+ is a bounded local steering layer on graph-certified flat segments. Vertical primitives and final receipt nodes remain grid/typed; don't claim fully continuous 3D global MPC or guaranteed zigzag elimination.
 See `docs/c2-bplus-h1-h4-test-report.md` and `docs/c2-bplus-h1-h4-windows-checklist.md`.
+
+
+## C-TN Smooth Follow Hardening C — S1–S4 (2026-10-21)
+[PASS — LOCAL PURE JAVA] 20 suites, 2,591 assertions incl. 31 S1–S4 specific assertions.
+[PASS — LOCAL BACKEND] C2 focused Python tests 16/16.
+[PASS — JAVA17 SYNTAX] Java17 parser for modified/new Follow Java source; NOT equivalent to Forge compilation.
+[BLOCKED — LOCAL FORGE] Gradle wrapper distribution unavailable; Windows `scripts/dev-forge.ps1 -Task build` required (inspect compileJava output).
+[PENDING — WINDOWS GAMEPLAY] Flat 50-block follow and diagonal 25-block follow, count stop/hand-off ticks and compare against prior C-TN baseline; no zero-pause guarantee.
+[PENDING — WINDOWS GAMEPLAY] Jump +1, Step +0.5, Step Down -0.5, Safe Descend -1; verify same C1 physics and landing safety.
+[PENDING — WINDOWS GAMEPLAY] Corner/obstacle inserted mid-motion; ravine lateral detour while player moves 1.5–6 blocks; persistent plan reuse and avoidance of left/right oscillation.
+[PENDING — WINDOWS GAMEPLAY] Unfollow mid-3D, cancel, combat/knockback, player disconnect/death/change dimension, Save&Quit/rejoin (no stale hints or session restart).
+[PENDING — PERFORMANCE] Real MSPT/latency for 1/3/5/10 NPC with multiple moving targets and nearby hazard/uneven terrain; planning-budget fairness verified under load, not inferred from microbenchmark.
+[PENDING — RISK] Concurrent world mutation between speculative hint and C1 revalidation must be rejected fail closed; unloaded chunks and border; mixed modded collision/hazard behaviors.
+[KNOWN LIMITATION] A held future path hint cannot command movement; it may be rejected due to changed target/world/ticket. Actual pauses for unproven terrain, landing or expired motion remain necessary. No arbitrary multi-chunk planner or perfect natural gait claim.

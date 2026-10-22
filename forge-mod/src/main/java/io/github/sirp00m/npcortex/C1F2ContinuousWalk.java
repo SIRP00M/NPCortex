@@ -99,10 +99,8 @@ final class C1F2ContinuousWalk {
     private boolean reached(Point point,double x,double z,double distance) {
         if(distance<=TOLERANCE) return true;
         if(index==points.size()-1 || !Double.isFinite(lastX)) return false;
-        double dx=x-lastX,dz=z-lastZ,travel=dx*dx+dz*dz;
-        if(travel<1e-8 || travel>.49) return false;
-        double t=Math.max(0,Math.min(1,((point.x()-lastX)*dx+(point.z()-lastZ)*dz)/travel));
-        return t>0 && t<1 && Math.hypot(lastX+t*dx-point.x(),lastZ+t*dz-point.z())<=ARRIVAL_SWEEP;
+        return C1F2TrajectoryArrival.crossed(lastX,lastZ,x,z,
+                point.x(),point.z(),ARRIVAL_SWEEP);
     }
     private boolean cornerAhead() {
         if(index+1>=points.size()) return false;
@@ -151,8 +149,9 @@ final class C1F2ContinuousWalk {
         C1VanillaMoveControlAdapter.Drive drive=vanillaDrive.tick(
                 yaw,heading,distance,index==points.size()-1,cornerAhead());
         float nextYaw=drive.yaw();
-        double forward=drive.forward();
         double moved=Double.isFinite(lastX)?Math.hypot(x-lastX,z-lastZ):0;
+        double forward=C1F2TrajectoryArrival.cap(drive.forward(),distance,moved,
+                index==points.size()-1,cornerAhead());
         telemetry.sample(moved,forward,C2F2Locomotion.angularDelta(yaw,nextYaw),index);
         lastX=x;lastZ=z;
         return new Intent(nextYaw,forward,point.x(),point.z());

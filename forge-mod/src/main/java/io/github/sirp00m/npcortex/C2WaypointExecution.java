@@ -22,6 +22,7 @@ final class C2WaypointExecution {
     private int targetIndex;
     private UUID ticket;
     private boolean centering;
+    private boolean mixedChain;
     private int chainSegments=1;
     private boolean finished;
     private final boolean followSmooth;
@@ -100,6 +101,34 @@ final class C2WaypointExecution {
                 throw new IllegalArgumentException("F2 WALK chain contains vertical traversal");
         started(token);
         chainSegments=count;
+    }
+
+    /** C-3D: one mixed physical C1 session, with each stage revalidated
+     * and its landing verified before the next stage can be armed. */
+    void startedMixedChain(UUID token,int count) {
+        if(!followSmooth || done() || waiting() || count<2 || count>6
+                || targetIndex+count>path.size())
+            throw new IllegalArgumentException("Invalid mixed 3D follow chain");
+        boolean vertical=false;
+        for(int i=targetIndex;i<targetIndex+count;i++)
+            vertical|=segmentKinds.get(i-1)!=C2TraversabilityGraph.MoveKind.WALK;
+        if(!vertical) throw new IllegalArgumentException("Mixed chain requires 3D edge");
+        started(token);
+        chainSegments=count;
+        mixedChain=true;
+    }
+
+    /** Verify every directed graph edge in a candidate mixed lease. */
+    boolean mixedChainAllowed(C2TraversabilityGraph graph,int count) {
+        if(!followSmooth || done() || waiting() || graph==null || count<2
+                || count>6 || targetIndex+count>path.size()) return false;
+        boolean vertical=false;
+        for(int i=targetIndex;i<targetIndex+count;i++) {
+            var kind=segmentKinds.get(i-1);
+            vertical|=kind!=C2TraversabilityGraph.MoveKind.WALK;
+            if(!edgeAllowedBetween(graph,path.get(i-1),path.get(i),kind)) return false;
+        }
+        return vertical;
     }
 
     /** Extend a live F2 WALK receipt without changing its C1 token. Each
@@ -188,11 +217,13 @@ final class C2WaypointExecution {
             centering=false;
             return "COMPLETE".equals(phase) && reached ? Update.NEXT : Update.FAILED;
         }
-        String successful = currentKind()==C2TraversabilityGraph.MoveKind.WALK
+        String successful = mixedChain ? "MIXED_COMPLETE"
+                : currentKind()==C2TraversabilityGraph.MoveKind.WALK
                 ? "COMPLETE" : "TRAVERSAL_COMPLETE_"+currentKind().name();
         if (!successful.equals(phase) || !reached) { chainSegments=1; return Update.FAILED; }
         targetIndex+=chainSegments-1;
         chainSegments=1;
+        mixedChain=false;
         if (targetIndex == path.size()-1) { finished=true; return Update.COMPLETE; }
         targetIndex++;
         return Update.NEXT;

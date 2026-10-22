@@ -40,6 +40,19 @@ final class C2FollowRuntime {
         long lastRollingProbe=-1000;
         int persistentAppends;
         int rollingMisses;
+        int mixed3DStarts;
+        int terrainSelections;
+        String lastTerrainDecision="NONE";
+        String lastFailure="NONE";
+        int detourSide;
+        int detourHops;
+        final C2FollowSmoothMetrics smoothMetrics=new C2FollowSmoothMetrics();
+        final C2FollowPreparedContinuation prepared=new C2FollowPreparedContinuation();
+        final C2FollowDetourStability detourStability=new C2FollowDetourStability();
+        final C2FollowTargetProjection targetProjection=new C2FollowTargetProjection();
+        UUID lastPreplanToken;
+        int lastPreplanEndpoint=-1;
+        long lastPreplanTick=-1000;
         Session(MinecraftServer server,C1IdentityData.Entry id,ServerPlayer target) {
             this.server=server;actor=id.actorId();profile=id.profileId();
             npc=id.character();dimension=id.dimension();player=target.getUUID();
@@ -108,6 +121,17 @@ final class C2FollowRuntime {
                     +" avoided="+session.alternatives.avoidedCount()
                     +" persistentAppends="+session.persistentAppends
                     +" rollingMisses="+session.rollingMisses
+                    +" mixed3DStarts="+session.mixed3DStarts
+                    +" terrainSelections="+session.terrainSelections
+                    +" terrainReprobes="+session.policy.terrainReprobes()
+                    +" detourHops="+session.detourHops
+                    +" prepared="+session.prepared.decision()
+                    +session.smoothMetrics.summary()
+                    +" targetMode="+session.targetProjection.mode()
+                    +" targetProjection="+session.targetProjection.source()
+                    +" projectedY="+session.targetProjection.lastY()
+                    +" terrainDecision="+session.lastTerrainDecision
+                    +" lastFailure="+session.lastFailure
                     +" waypoint="+(session.route==null?"none":session.route.currentIndex()+"/"+session.route.totalSegments())
                     +" motion="+(session.route==null?"none":String.valueOf(
                             C1P1MotionRuntime.c2WalkProgress(session.profile,session.route.expectedTicket())))
@@ -136,6 +160,7 @@ final class C2FollowRuntime {
         if(SESSIONS.get(session.actor)!=session) return;
         stopOwned(session);
         session.route=null;
+        session.prepared.clear();
         SESSIONS.remove(session.actor,session);
         C2FollowJournal.get(session.server).record(session.actor,session.session,session.player,status,why);
         LOG.info("NPCortex C2-F1 session={} actor={} terminal={} reason={}",session.session,session.actor,status,why);
@@ -143,6 +168,7 @@ final class C2FollowRuntime {
     private static void pause(Session s,String why) {
         stopOwned(s);
         s.route=null;
+        s.prepared.clear();
         s.segmentTicks=0;
         transition(s,"PAUSED",why);
     }
@@ -157,6 +183,8 @@ final class C2FollowRuntime {
             catch(RuntimeException error) {
                 LOG.warn("NPCortex C2-F1 guarded session failure actor={} session={}",session.actor,session.session,error);
                 close(session,"FAILED","C2-F1 runtime error: "+error.getClass().getSimpleName());
+            } finally {
+                if(SESSIONS.get(session.actor)==session) session.smoothMetrics.sample(session.phase);
             }
         }
     }
@@ -172,8 +200,20 @@ final class C2FollowRuntime {
                 || !player.serverLevel().dimension().equals(avatar.serverLevel().dimension())) {
             pause(s,"Target offline/unavailable or changed dimension");return;
         }
+        // Flight is a target *presentation/mode* signal, not a C1 move goal.
+        // On a mode transition, invalidate speculative hints (which may have
+        // been computed against a different target height) without hijacking
+        // or cancelling an already active owned C1 motion.
+        boolean flightModeChanged=s.targetProjection.observe(
+                player.getAbilities().flying || player.isFallFlying(),player.onGround());
+        if(flightModeChanged) {
+            s.prepared.clear();
+            s.policy.targetRelocated();
+            if(s.route!=null && !s.route.waiting()) s.route=null;
+        }
         double horizontalDistance=Math.hypot(player.getX()-avatar.getX(),player.getZ()-avatar.getZ());
-        double distance=Math.hypot(horizontalDistance,player.getY()-avatar.getY());
+        double distance=s.targetProjection.followingDistance(horizontalDistance,
+                player.getY(),avatar.getY());
         var desired=s.policy.distance(distance);
         if(desired==C2FollowPolicy.DistanceGate.HOLD || !s.policy.following()) {
             pause(s,"Within follow stop distance");return;
@@ -182,7 +222,8 @@ final class C2FollowRuntime {
         // Rolling local goals replace the former >8-block hard stop. Every
         // planning hop stays inside a fresh radius-6 snapshot and requires
         // loaded terrain. No global map, chunk force-load or teleport.
-        if(Math.abs(player.getY()-avatar.getY())>C2NavGrid.VERTICAL_RADIUS+1.0) {
+        if(s.targetProjection.outsideVerticalReach(player.getY(),avatar.getY(),
+                C2NavGrid.VERTICAL_RADIUS+1.0)) {
             pause(s,"Target outside local vertical reach; no teleport or chunk loading");return;
         }
         if(s.route!=null && s.route.waiting()) {
@@ -237,6 +278,14 @@ final class C2FollowRuntime {
                         s.policy.rollingExtended(ticks,player.getX(),player.getZ());
                     } else s.rollingMisses++;
                 }
+                // S2: while C1 owns the current movement, prepare only an
+                // immutable, NON-AUTHORITATIVE next corridor from its approved
+                // endpoint. The hint is NOT executable and can be dropped.
+                // One global terrain-planning batch per tick remains enforced.
+                if(!extended && lastPlanTick!=ticks && eligibleForPreplan(s,avatar,player,progress)) {
+                    lastPlanTick=ticks;
+                    prepareContinuation(s,avatar,player,ticket.token());
+                }
             }
             var node=s.route.receiptTarget();
             boolean reached=C2MoveGeometry.near(avatar.getX(),avatar.getY(),avatar.getZ(),
@@ -251,13 +300,34 @@ final class C2FollowRuntime {
             if(next==C2WaypointExecution.Update.COMPLETE) {
                 s.policy.resetFailureWindow(); // verified physical progress, not merely planned
                 s.alternatives.verifiedProgress();
+                var terminalToken=ticket.token();
+                var physicalEndpoint=s.route.receiptTarget();
                 s.route=null;
+                s.smoothMetrics.terminalHandoff();
                 if(distance<C2FollowPolicy.RESUME_DISTANCE) {
+                    s.prepared.clear();
                     s.policy.holdUntilResumeDistance();
                     transition(s,"HOLD","Verified safe follow ring; wait for player to leave");
                 } else {
-                    s.policy.afterVerifiedRoute(ticks);
-                    transition(s,"FOLLOWING","Player moved past resume distance; tracking");
+                    // Consume ONLY after the original C1 physical receipt was
+                    // VERIFIED by route.observe(). Re-check all world safety
+                    // and the exclusive C1 token on the NEXT server tick.
+                    var preview=s.prepared.consume(terminalToken,physicalEndpoint,
+                            ticks,player.getX(),player.getZ());
+                    if(preview!=null && Mth.floor(avatar.getX())==physicalEndpoint.x()
+                            && Mth.floor(avatar.getZ())==physicalEndpoint.z()
+                            && Math.abs(avatar.getY()-physicalEndpoint.footY())<=.16) {
+                        s.route=C2WaypointExecution.followSmoothed(preview);
+                        s.routeStarted=ticks;
+                        s.segmentTicks=0;
+                        s.policy.planned(ticks,player.getX(),player.getZ());
+                        s.smoothMetrics.preparedHit();
+                        transition(s,"TURNING","Prepared corridor awaiting fresh C1 safety validation");
+                    } else {
+                        s.smoothMetrics.preparedMiss();
+                        s.policy.afterVerifiedRoute(ticks);
+                        transition(s,"FOLLOWING","Player moved past resume distance; tracking");
+                    }
                 }
                 return;
             }
@@ -265,6 +335,7 @@ final class C2FollowRuntime {
             // continue an obsolete route. Never interrupt a live C1 ticket.
             if(s.policy.targetMoved(player.getX(),player.getZ())) {
                 s.route=null;
+                s.prepared.clear();
                 transition(s,"REPLANNING","Player moved; route invalidated at terminal receipt");
                 s.policy.afterVerifiedRoute(ticks);
                 return;
@@ -290,6 +361,7 @@ final class C2FollowRuntime {
         if(s.route!=null) {
             if(s.policy.targetMoved(player.getX(),player.getZ())) {
                 s.route=null;
+                s.prepared.clear();
                 s.policy.defer(ticks);
                 transition(s,"REPLANNING","Moving target invalidated unstarted segment");
                 return;
@@ -305,6 +377,59 @@ final class C2FollowRuntime {
         if(lastPlanTick==ticks) return; // global max one local follow planning batch/tick
         lastPlanTick=ticks;
         plan(s,avatar,player);
+    }
+
+    /** S2 work is speculative and read-only: no C1 ticket operations here. */
+    private static boolean eligibleForPreplan(Session s,C1PlayerAvatar npc,
+            ServerPlayer player,C1P1MotionRuntime.C1F2WalkProgress progress) {
+        if(s.route==null || !s.route.waiting() || s.prepared.pending()
+                || !npc.onGround() || ticks-s.lastPreplanTick<10
+                || !npc.serverLevel().hasChunkAt(npc.blockPosition())
+                || !player.serverLevel().hasChunkAt(player.blockPosition())) return false;
+        int endpoint=s.route.lastCommittedIndex();
+        if(endpoint!=s.route.path().size()-1) return false;
+        var node=s.route.path().get(endpoint);
+        if(Math.hypot(player.getX()-node.x()-.5,player.getZ()-node.z()-.5)
+                <=C2FollowPolicy.RESUME_DISTANCE) return false;
+        // For WALK: approach last 1..2 committed waypoints. For mixed 3D:
+        // only probe after execution is underway and endpoint is in local range.
+        if(progress!=null && (progress.remaining()<1 || progress.remaining()>2)) return false;
+        if(progress==null && (s.segmentTicks<8 ||
+                Math.hypot(npc.getX()-node.x()-.5,npc.getZ()-node.z()-.5)>4.5)) return false;
+        var token=s.route.expectedTicket();
+        return token!=null && (!token.equals(s.lastPreplanToken)
+                || endpoint!=s.lastPreplanEndpoint);
+    }
+
+    private static void prepareContinuation(Session s,C1PlayerAvatar npc,
+            ServerPlayer player,UUID token) {
+        int at=s.route.lastCommittedIndex();
+        var endpoint=s.route.path().get(at);
+        s.lastPreplanToken=token;s.lastPreplanEndpoint=at;
+        s.lastPreplanTick=ticks;
+        try {
+            var graph=C2GraphWorldProbe.captureWithSnapshot(npc,C2NavGrid.MAX_RADIUS).graph();
+            if(!graph.contains(endpoint)) {s.smoothMetrics.preplanAttempt(false);return;}
+            double targetY=s.targetProjection.effectiveY(graph,endpoint,
+                    player.getX(),player.getY(),player.getZ());
+            var chosen=C2TerrainNativeFollowPlanner.select(graph,
+                    new C2AStarPlanner.Target(endpoint.x(),endpoint.supportY(),endpoint.z()),
+                    endpoint.x()+.5,endpoint.footY(),endpoint.z()+.5,
+                    player.getX(),targetY,player.getZ(),
+                    s.alternatives.avoided(),s.alternatives.preferred(),
+                    s.detourSide,s.detourHops<C2TerrainNativeFollowPlanner.MAX_LATERAL_DETOURS);
+            if(!chosen.found()) {s.smoothMetrics.preplanAttempt(false);return;}
+            var nodes=C2F2Locomotion.smooth(graph,chosen.plan().path());
+            boolean prepared=s.prepared.offer(token,endpoint,nodes,ticks,
+                    player.getX(),player.getZ(),chosen.reason());
+            s.smoothMetrics.preplanAttempt(prepared);
+        } catch(IllegalArgumentException invalidHint) {
+            // Speculation is never allowed to terminate an otherwise healthy
+            // C1-owned movement. The regular fresh plan remains the fallback.
+            s.prepared.clear();
+            s.smoothMetrics.preplanAttempt(false);
+            LOG.debug("NPCortex speculative follow hint rejected actor={}",s.actor,invalidHint);
+        }
     }
 
     /** C-S2: one bounded local plan from the *committed endpoint*, never
@@ -324,12 +449,13 @@ final class C2FollowRuntime {
         if(!graph.contains(endpoint)) return false;
         var from=new C2AStarPlanner.Target(endpoint.x(),endpoint.supportY(),endpoint.z());
         double x=endpoint.x()+.5,z=endpoint.z()+.5;
-        var selected=Math.hypot(player.getX()-x,player.getZ()-z)>C2FollowPolicy.ROLLING_DISTANCE
-                ? C2FollowPlanner.selectRolling(graph,capture.snapshot(),from,x,endpoint.footY(),z,
-                    player.getX(),player.getY(),player.getZ(),
-                    s.alternatives.avoided(),null)
-                : C2FollowPlanner.select(graph,capture.snapshot(),from,x,z,
-                    player.getX(),player.getY(),player.getZ(),s.alternatives.avoided(),null);
+        double targetY=s.targetProjection.effectiveY(graph,endpoint,
+                player.getX(),player.getY(),player.getZ());
+        var selected=C2TerrainNativeFollowPlanner.select(graph,from,x,endpoint.footY(),z,
+                player.getX(),targetY,player.getZ(),s.alternatives.avoided(),
+                s.alternatives.preferred(),s.detourSide,
+                s.detourHops<C2TerrainNativeFollowPlanner.MAX_LATERAL_DETOURS);
+        s.lastTerrainDecision="LIVE_"+selected.reason();
         if(!selected.found()) return false;
         var nodes=C2F2Locomotion.smooth(graph,selected.plan().path());
         if(nodes.size()<2 || !nodes.get(0).equals(endpoint)) return false;
@@ -345,15 +471,19 @@ final class C2FollowRuntime {
             extra.add(n);length+=step;
         }
         if(extra.isEmpty()) return false;
-        return C2WaypointBridge.appendPersistentFollowWalk(s.route,npc,s.profile,graph,extra);
+        boolean appended=C2WaypointBridge.appendPersistentFollowWalk(s.route,npc,s.profile,graph,extra);
+        if(appended) trackCorridor(s,selected);
+        return appended;
     }
 
     private static void retry(Session s,String reason) {
+        s.lastFailure=reason;
         // A failed *owned* physical segment must not be selected again as the
         // first choice on the very next fresh-graph replan.
         s.alternatives.failed(s.route);
         stopOwned(s);
         s.route=null;
+        s.prepared.clear();
         if(s.policy.failed(ticks)) transition(s,"REPLANNING",reason);
         else transition(s,"PAUSED_UNREACHABLE","Replan budget exhausted: "+reason);
     }
@@ -362,29 +492,40 @@ final class C2FollowRuntime {
         if(!npc.serverLevel().hasChunkAt(npc.blockPosition()) || !player.serverLevel().hasChunkAt(player.blockPosition())) {
             pause(s,"Unloaded player/NPC chunk; no force-load");return;
         }
-        // Target movement unlocks new alternatives, but NOT a live C1 ticket.
-        // At a fixed target pose, permit only one delayed fresh-graph probe;
-        // actual permanently inaccessible terrain remains safely paused.
+        // Target movement allows a fresh selection. For stationary players,
+        // repeated failures use rate-limited terrain re-probes (2/4/6 s):
+        // no stale path is replayed and no automatic travel is authorized.
         if(s.policy.targetMoved(player.getX(),player.getZ())) {
-            s.alternatives.targetRelocated();
+            s.alternatives.targetRelocated(npc.getX(),npc.getZ(),player.getX(),player.getZ());
             s.policy.targetRelocated();
-        } else if(s.policy.failures()>=C2FollowPolicy.MAX_FAILURES) {
-            if(!s.policy.recoverOnce(ticks)) {
-                transition(s,"PAUSED_UNREACHABLE","Waiting for bounded recovery re-probe or target movement");return;
+            // Preserve the chosen detour side across small player movements.
+            // Clearing it on EVERY 1.5-block retarget made uneven terrain
+            // choose alternating left/right corridors (visible zigzag).
+            if(s.detourStability.shouldReset(player.getX(),player.getZ())) {
+                s.detourHops=0;s.detourSide=0;
+                s.detourStability.clear();
             }
-            s.alternatives.targetRelocated(); // new snapshot can retry after a dynamic obstacle cleared
+        } else if(s.policy.failures()>=C2FollowPolicy.MAX_FAILURES) {
+            if(!s.policy.terrainReprobe(ticks)) {
+                transition(s,"PAUSED_UNREACHABLE","Waiting for bounded terrain re-probe or target movement");return;
+            }
+            // Failed nodes remain a COST preference rather than permanent
+            // exclusions. A fresh graph still validates any chosen corridor.
         }
         C2GraphWorldProbe.Capture capture=C2GraphWorldProbe.captureWithSnapshot(npc,C2NavGrid.MAX_RADIUS);
         var graph=capture.graph();
         var from=new C2AStarPlanner.Target(Mth.floor(npc.getX()),C2S3SupportY.at(npc.getY()),Mth.floor(npc.getZ()));
-        boolean rolling=Math.hypot(player.getX()-npc.getX(),player.getZ()-npc.getZ())
-                > C2FollowPolicy.ROLLING_DISTANCE;
-        var selection=rolling ? C2FollowPlanner.selectRolling(graph,capture.snapshot(),from,
-                npc.getX(),npc.getY(),npc.getZ(),player.getX(),player.getY(),player.getZ(),
-                s.alternatives.avoided(),s.alternatives.preferred())
-                : C2FollowPlanner.select(graph,capture.snapshot(),from,
-                npc.getX(),npc.getZ(),player.getX(),player.getY(),player.getZ(),
-                s.alternatives.avoided(),s.alternatives.preferred());
+        var origin=graph.nodes().stream().filter(node -> node.x()==from.x()
+                && node.supportY()==from.supportY() && node.z()==from.z()).findFirst().orElse(null);
+        if(origin==null) {retry(s,"NO_VERIFIED_ACTOR_SUPPORT_NODE");return;}
+        double targetY=s.targetProjection.effectiveY(graph,origin,
+                player.getX(),player.getY(),player.getZ());
+        var selection=C2TerrainNativeFollowPlanner.select(graph,from,
+                npc.getX(),npc.getY(),npc.getZ(),player.getX(),targetY,player.getZ(),
+                s.alternatives.avoided(),s.alternatives.preferred(),s.detourSide,
+                s.detourHops<C2TerrainNativeFollowPlanner.MAX_LATERAL_DETOURS);
+        s.lastTerrainDecision=selection.reason();
+        s.terrainSelections++;
         C2HierarchicalPlanner.Result best=selection.plan();
         s.policy.markTarget(player.getX(),player.getZ());
         if(best==null) { retry(s,selection.reason());return; }
@@ -395,12 +536,28 @@ final class C2FollowRuntime {
             transition(s,"HOLD","Already in a verified follow-ring node");return;
         }
         s.route=route;
+        trackCorridor(s,selection);
         s.alternatives.planned(route);
         s.routeStarted=ticks;
         s.segmentTicks=0;
         s.policy.planned(ticks,player.getX(),player.getZ());
         String error=beginSmoothSegment(s,npc);
         if(error!=null) retry(s,error);
+    }
+
+    /** A lateral escape may move away from the player temporarily, but at
+     * most six bounded corridors can be planned without real progress or
+     * player relocation. Never count planning as a completed physical move. */
+    private static void trackCorridor(Session s,C2TerrainNativeFollowPlanner.Selection selected) {
+        if(selected.detourSide()!=0) {
+            s.detourSide=selected.detourSide();
+            var target=s.target();
+            if(target!=null) s.detourStability.chosen(target.getX(),target.getZ());
+            s.detourHops=Math.min(C2TerrainNativeFollowPlanner.MAX_LATERAL_DETOURS,s.detourHops+1);
+        } else {
+            s.detourSide=0;s.detourHops=0;
+            s.detourStability.clear();
+        }
     }
 
     /** Follow-only steering: rotate at most 18 degrees per tick while idle.
@@ -415,6 +572,17 @@ final class C2FollowRuntime {
                 to.x()+.5,avatar.getY(),to.z()+.5); }
         catch(IllegalArgumentException error) {return "F2 invalid heading: "+error.getMessage();}
         float current=avatar.getYRot();
+        // C-3D: when an upcoming verified Follow route includes a typed
+        // elevation transition, claim a bounded mixed lease under ONE C1
+        // token instead of tearing down WALK at each 3D waypoint. Revert to
+        // the proven standalone C1 primitives if a mixed lease is refused.
+        if(C2WaypointBridge.beginFollowMixed3DChain(s.route,avatar,s.server,s.npc,s.profile)) {
+            s.mixed3DStarts++;
+            s.segmentTicks=0;
+            transition(s,"MOVING","C-3D integrated WALK/STEP/JUMP/DESCEND chain generation="
+                    +s.policy.generation());
+            return null;
+        }
         // Flat WALK uses one C1-owned continuous steering session across a
         // bounded chain; yaw changes WHILE moving, no stop-and-pre-turn.
         if(s.route.currentKind()==C2TraversabilityGraph.MoveKind.WALK) {

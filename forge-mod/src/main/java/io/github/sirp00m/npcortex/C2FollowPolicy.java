@@ -25,6 +25,10 @@ final class C2FollowPolicy {
     private int generation;
     private long recoveryAt;
     private boolean recoveryUsed;
+    // Follow-only periodic terrain refresh. Legacy one-shot recoverOnce stays
+    // unchanged for old policy clients; terrain-native use is rate-limited.
+    private int terrainReprobes;
+    private long terrainRetryAt;
     private double lastTargetX, lastTargetZ;
     private boolean hasTarget;
     DistanceGate distance(double horizontalDistance) {
@@ -57,7 +61,10 @@ final class C2FollowPolicy {
     boolean failed(long tick) {
         failures++;
         defer(tick);
-        if(failures==MAX_FAILURES) recoveryAt=tick+RECOVERY_REPROBE_TICKS;
+        if(failures==MAX_FAILURES) {
+            recoveryAt=tick+RECOVERY_REPROBE_TICKS;
+            terrainRetryAt=tick+Math.min(RECOVERY_REPROBE_TICKS,40+40*terrainReprobes);
+        }
         return failures<MAX_FAILURES;
     }
     /** One delayed fresh-world retry for a stationary target. Bounded: no
@@ -68,8 +75,22 @@ final class C2FollowPolicy {
         failures=0;
         return true;
     }
+    /** Terrain-native stationary-target recovery. Retry a NEW world snapshot
+     * on an increasing 2/4/6-second delay, never a stale stored path.
+     * At most one expensive Follow plan per server tick still applies; this
+     * does NOT authorize C1 motion and never clears failure hints by itself.
+     * Cannot spin every tick or become permanently dormant after one retry.
+     */
+    boolean terrainReprobe(long tick) {
+        if(failures<MAX_FAILURES || tick<terrainRetryAt) return false;
+        terrainReprobes=Math.min(3,terrainReprobes+1);
+        failures=0;recoveryUsed=false;
+        return true;
+    }
+    int terrainReprobes() {return terrainReprobes;}
     void targetRelocated() {
         failures=0;recoveryUsed=false;recoveryAt=0;
+        terrainReprobes=0;terrainRetryAt=0;
     }
     int generation() { return generation; }
     int failures() { return failures; }
@@ -83,7 +104,7 @@ final class C2FollowPolicy {
         nextPlanTick=tick+PERSISTENT_PROBE_TICKS;
     }
     /** Call only after a verified physical route terminal, never on a planned path. */
-    void resetFailureWindow() { failures=0;recoveryUsed=false;recoveryAt=0; }
+    void resetFailureWindow() { targetRelocated(); }
     boolean following() { return following; }
     void holdUntilResumeDistance() { following=false; }
     /** Full termination never permits an automatic resurrection of movement. */

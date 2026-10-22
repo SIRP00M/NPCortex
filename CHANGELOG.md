@@ -1,10 +1,86 @@
 # Changelog
 
-NPCortex has **one consolidated development changelog**. Entries here describe source milestones and limited testing evidence; they are **not independent GitHub releases or tags**. The active Forge source version in this archive is **`0.2.0-alpha.2`**; Python distribution metadata is **`0.2.0a2`** (PEP 440). Earlier version identifiers and dated results are intentionally retained as history.
+NPCortex maintains **one consolidated development changelog**. Historical milestones below describe implementation candidates and bounded evidence, not independent tagged releases. The current packaged Forge source version is **`0.2.1-alpha.1`**, Python package metadata is **`0.2.1a1`** (PEP 440), and Python runtime version is `0.2.1-alpha.1`. Prior version numbers remain unchanged in the historical record.
 
-> **Development-only packaging, 2026-10-21.** This ZIP is derived from the uploaded **C-S1–C-S4 Persistent Follow C + BuildFix1 Option A** repository; it includes earlier C2 navigation and Follow milestones since the last packaged `v0.2.0-alpha.1` C2-P1-A snapshot. The package operation updates only version metadata and documentation; implementation code is unchanged. The public `Development` and `main` branches are **not modified** by this packaging step.
+> **Development packaging — 2026-10-22.** `v0.2.1-alpha.1` continues from packaged `v0.2.0-alpha.2` with the uploaded Airborne Follow Target Projection Fix repository as the code baseline. This packaging operation modifies **only four version metadata files, README, CHANGELOG, and PENDING_TESTS**, and packages milestone patch notes while retaining the previous `alpha.2` patch notes. No Java/Python runtime code, unit tests, Gradle dependencies, gameplay protocols or GitHub branches are modified.
 
-> **Evidence policy:** A pure-Java self-test, mock API compilation, owner-reported earlier Minecraft gameplay, and a full Windows Forge build of this *exact patched ZIP* are different gates. **The latest Follow BuildFix1 still requires Windows JDK 17 Forge rebuilding and Minecraft acceptance.** Older pending cases remain open unless independently verified by the maintainer.
+> **Versioning decision:** `v0.2.1-alpha.1` begins a separate **Follow Stability / Airborne Target Projection** development milestone after the `v0.2.0-alpha.2` Navigation & Persistent Follow milestone. Incrementing the patch component here denotes a project-local pre-1.0 milestone, **not a stable release, public tag, or completion of outstanding Quality Gates**. The earlier candidate label was superseded without creating a separate tagged release.
+
+> **Evidence boundary:** The maintainer explicitly confirmed the previously observed airborne-flight-triggered zigzag is gone **in the tested Minecraft scenario**. The original candidate report predates that observation and calls Windows gameplay pending. Neither limited gameplay confirmation nor dependency-free Java tests establishes every Forge Build, terrain, cancellation, multiplayer or 1/3/5/10 NPC performance gate.
+
+## Unreleased — Development milestone `v0.2.1-alpha.1`: Ground-projected Airborne Follow and terrain-native stability (2026-10-22)
+
+### Changes in uploaded source since `v0.2.0-alpha.2`
+
+- **Airborne Follow Target Projection:** distinguish confirmed Creative/elytra flight from ordinary jumping with debounced state transitions (2 ticks to enter, 4 to exit); project airborne player target onto reachable, loaded local ground support for Follow scoring; use horizontal XZ-only stop-distance when the player is genuinely flying. If a safe local support cannot be found, use a neutral reference height **without inventing a path**.
+- Add target-projection diagnostics in `/npcortex c2 followstatus`: `targetMode`, `targetProjection`, `projectedY`. Invalidate speculative plans and unstarted routes on flight-mode transitions while retaining C1's exclusive ownership of active motions.
+- **Stable Trajectory Follow B:** damp lateral overcorrection, permit physically verified intermediate-waypoint crossing and reduce unnecessary near-stop wobble without changing final C1/C2 receipt tolerances.
+- **Terrain-Native / Smooth Follow Hardening C:** bounded local detour stabilization, adaptive corridor continuity, preparatory continuation hints and latency/hand-off telemetry; speculative route suggestions do not move the NPC before confirmation.
+- **Persistent 3D Follow C:** bounded lease of mixed WALK / STEP_UP / STEP_DOWN / JUMP_UP / SAFE_DESCEND stages, preserving one C1 motion owner where each edge and subsequent physical receipt is verified; C2 Navigate remains separately controlled.
+- This is an increment to the existing C1/C2 player-physics framework, **not flying NPC locomotion, autonomous tree harvesting, a global terrain map or guaranteed smoothness**.
+
+### Versioning, documentation and integrity
+
+- Bump four authoritative version declarations to Forge `0.2.1-alpha.1` and Python distribution `0.2.1a1`.
+- Repair stale source README against the packaged `alpha.2` Development README and update with all newer C2 features, gameplay limits and Windows commands.
+- Keep the complete prior consolidated C0 → C1 → C2 `alpha.1` / `alpha.2` chronological history; include all newly uploaded implementation milestone notes immediately below.
+- Add [`v0.2.1-alpha.1` Patch Notes](docs/patch-notes/v0.2.1-alpha.1.md), preserve [`v0.2.0-alpha.2` Patch Notes](docs/patch-notes/v0.2.0-alpha.2.md), and carry forward the comprehensive [PENDING_TESTS.txt](PENDING_TESTS.txt) with specific maintainer gameplay confirmation.
+
+### Evidence and remaining gates
+
+- **Owner-reported Minecraft PASS:** previously observed flying-target-related zigzag disappeared with the Airborne Follow Target Projection Fix. This is not a 14-case full FLY checklist PASS.
+- **Owner-reported earlier terrain recovery:** terrain-native follow can temporarily pause while finding a safe route, then resume without manual intervention in tested terrain. Other terrain/cancel/performance scenarios remain pending.
+- **Fresh tests on this repackaged ZIP:** 22/22 isolated pure-Java self-test suites, **2,658 assertions PASS**, all Exit Code 0 with JDK 21 and `javac --release 17`; focused Python C2 tests **16/16 PASS, Exit Code 0**. These do not compile Forge-bound Java classes or certify Minecraft gameplay. The uploaded candidate report independently documented the same suite counts.
+- Forge `compileJava`/build on Windows JDK17, exact alpha.3 client visuals, FLY-01–FLY-14 completion, STEP_DOWN and mixed terrain, cancellation/combat, save/rejoin, loaded/unsafe terrain behavior, mod compatibility, and 1/3/5/10 NPC Forge MSPT **remain open where not individually confirmed**. The ZIP integrity, version metadata consistency and 30 relative Markdown links across the README/CHANGELOG/current and previous patch notes were also checked in this packaging session.
+
+## Detailed C2 implementation notes added since the previous packaged version
+
+## 2026-10-22 — Airborne Follow Target Projection (Creative flight-Y oscillation; candidate)
+
+- **Baseline:** Stable Trajectory Follow B full repository; user confirmed zigzag is noticeably associated with flying Player targets. Scoped Follow-only change, no GitHub operations.
+- **Audit:** Stop-distance and vertical reach used the player's world Y even during flight; terrain-native planning also received aerial Y in normal plans, live extensions and predictive hints. This caused inconsistent stopping and goal-height scoring for a grounded NPC following an airborne player.
+- **Implementation:** Added pure Java `C2FollowTargetProjection`, with 2-tick flight entry and 4-tick landing/exit debounce (actual Creative flying/elytra, not ordinary jumps). Airborne stop-distance uses XZ and ignores the unattainable aerial vertical-difference pause. Every terrain-native Follow plan uses ground-height projection from currently verified **reachable** local directed graph nodes near player XZ, or an actor-footY neutral fallback outside scan/over unsupported terrain. No fabricated support, no force-load, no unapproved C1 movement.
+- Clear speculative hints and unstarted routes on target flight/ground transitions. Existing active C1 token retains ownership and normal cancellation/combat/landing verification; generic C2 Navigate and C1 physics untouched.
+- Added `targetMode`, `targetProjection`, `projectedY` to read-only Follow status, new regression suite + Windows runner, test report and gameplay checklist.
+- **Local verification:** 22/22 Pure Java regression suites (2,658 assertions) PASS using `javac --release 17` on JDK21; focused backend C2 16/16 PASS. Forge compilation, flight gameplay and 1/3/5/10 NPC MSPT **PENDING** (Gradle distribution unavailable here). This does not certify all zigzag resolved.
+
+## 2026-10-21 — C2 Follow Stable Trajectory B (implementation candidate)
+
+- Scoped correction of flat Follow steering wobble: lateral deadband/damping along verified segments; certified waypoint remains the aim near segment end.
+- Conservative arrival braking and physical intermediate waypoint crossing; final C1/C2 receipt tolerances unchanged.
+- Freshly verified follow target preferences retained across small player moves only while preferred target remains ahead and inside the local scan window.
+- Added `C1F2TrajectoryArrival` and `C2StableTrajectoryFollowBSelfTest`; added PowerShell regression script, test report and Windows acceptance checklist.
+- Tested: 21/21 pure Java suites, 2,614 assertions PASS; Backend C2 16/16 PASS. Forge compile and gameplay **PENDING** due to missing Gradle 8.8 distribution in this environment.
+- No GitHub operations and no changes to C1 owned physics, combat, collision/hazards, cancellation or 3D traverse receipts.
+
+## 2026-10-21 — C-TN Smooth Follow Hardening C (S1–S4, IMPLEMENTATION CANDIDATE)
+
+- S1 — Diagnostic-only `C2FollowSmoothMetrics` tracks movement vs unnecessary wait/intentional HOLD in server ticks, max consecutive wait, terminal handoffs, preplan attempts/hits/misses. Exposed by `/npcortex c2 followstatus <npc>`; no motion/physics permission derives from telemetry.
+- S2 — Add bounded, immutable non-authoritative `C2FollowPreparedContinuation` route hints while the CURRENT owned C1 ticket moves and an approved endpoint is inside the local snapshot. A hint is keyed by exact C1 token, endpoint, moving-player position and age. It is single-use and invalidated on cancellation/failure/target relocation, token change, mismatch or timeout. Only physically VERIFIED C1 completion can promote it to an unstarted route; next server tick still reruns existing C1 graph, swept-collision, hazard and 3D landing safety. Never execute from prediction. Retains one global follow plan batch per tick and one preplan attempt per token+endpoint, with 10-tick minimum spacing.
+- S3 — Detour-side stability across small target movements: retains selected left/right detour for player drift below 6 blocks from the chosen detour anchor; resets after large relocation or a successful normal corridor. Does not bypass terrain checks, failure backoff or bounded replanning.
+- S4 — New `C2SmoothFollowHardeningCSelfTest` (31 pure Java assertions) and Windows script `scripts/test-c2-smooth-follow-hardening-c.ps1` running 20 pure Java suites. Existing navigation (C2 navigate), C1 physics, authoritative C1 ownership, Mixed 3D, cancellation/combat and world collision code remain unchanged.
+- Focused run: 20/20 pure Java suites / 2,591 assertions PASS; backend C2 tests 16/16 PASS; Java17 parser PASS (5 units). Pure local graph planning microbenchmark ~1.86ms/plan for a fixed 169-node/1200-edge synthetic fixture (NOT Minecraft MSPT, NOT multi-NPC load).
+- NOT VERIFIED: Windows Java17 Gradle Forge build and actual Minecraft smoothness/transition, cancellation/combat/lifecycle/3D regression, 1/3/5/10 NPC performance. Local Gradle wrapper cannot fetch distribution. No GitHub changes.
+
+## 2026-10-21 — C-TN Persistent Terrain-Native Follow Controller (Candidate)
+
+- Replaced Follow-only shortlist-of-4 geometrically ranked destinations with bounded single-pass reachable directed 3D graph route selection; real edge cost/risk, heading-change penalty, stable target preference, and support-aware corridor choice. Does not change normal C2 Navigate or C1 movement physics.
+- Added bounded lateral-detour fallback (maximum six corridor selections, keeps detour side when reasonable) when a safe route must initially move sideways around a ravine. All edges must still pass fresh world/C1 validation; no infinite global planner or direct-to-player collision bypass.
+- Added repeated but rate-limited fresh terrain recovery windows (40/80/120 server ticks), avoiding permanent one-shot stationary target wait and per-tick heavy probing.
+- Added Follow telemetry `terrainDecision`, `terrainReprobes`, `detourHops`, `terrainSelections`, and `lastFailure`.
+- Added 36 new Pure Java contract assertions, 19/19 suites 2,560 assertions passing locally, and Windows build/gameplay/test report. **Forge compilation, physical movement, 1/3/5/10 MSPT and full quality gate remain PENDING.** No GitHub operations.
+
+## 2026-10-21 — Persistent Follow C-3D: Integrated Mixed 3D Locomotion (CANDIDATE; WINDOWS BUILD/GAMEPLAY PENDING)
+
+- **Baseline:** C-S1–S4 Persistent Follow C Build Fix #1 A, user-reported smoother flat Follow and observed `persistentAppends` up to 33. User selected C to improve pauses at obstacles/elevation transitions.
+- **C-3D:** Added an opt-in Follow-only bounded mixed lease for verified WALK/STEP_UP/STEP_DOWN/JUMP_UP/SAFE_DESCEND segments, at most six stages with one C1 owner/token and a per-stage fresh graph, loaded chunk, collision, risk, support, headroom and landing verification. Each vertical stage retains the original C1S2 `verify()` receipt; cannot report success solely based on planning. Falls back to the previous standalone typed C1 primitives if mixed proof cannot be obtained. Static `c2 navigate` unchanged.
+- **Safety:** Preserve real `Player.travel()` / `jumpFromGround()`, combat priority, operator cancellation exact `CANCELLED` terminal, no Save/Quit replay, bounded budgets, fail-closed unknown terrain and no GitHub changes. New read-only `mixedStage` in C1 motion status and `mixed3DStarts` in F1 followstatus.
+- **Verification:** Pure Java 18/18 suites, **2,524 assertions PASS** (including 34 new), 5 Forge-side source Java syntax parse PASS, focused backend C2 16/16 PASS. **Forge compile remains blocked** by Gradle 8.8 DNS resolution in this environment, Windows gameplay/full quality gate PENDING. Do NOT infer performance, modded terrain or 3D gameplay PASS.
+- **Artifacts:** Dedicated `scripts/test-c2-persistent-3d-c.ps1`, `docs/c2-persistent-3d-c-test-report.md`, `docs/c2-persistent-3d-c-windows-checklist.md`; outstanding work in existing `PENDING_TESTS.txt`. Single `CHANGELOG.md` retained.
+
+---
+
+## Previous packaged Development history — retained verbatim below
 
 ## Unreleased — Development `v0.2.0-alpha.2`: Navigation, Player-like Follow and Persistent Motion (2026-10-21)
 

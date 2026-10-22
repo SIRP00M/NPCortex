@@ -50,11 +50,14 @@ final class C1P1MotionRuntime {
 
     private static final class Session {
         final C1PlayerAvatar avatar;
-        final C1P1MotionPlan plan;  // null for single jump or gravity settling
+        C1P1MotionPlan plan;  // mutable ONLY for same-token C-3D Follow stage handoffs
         final UUID token = UUID.randomUUID();
         C2S4RecoveryPolicy.MotionOrigin origin = C2S4RecoveryPolicy.MotionOrigin.OPERATOR_COMMAND;
         C1S2TraversalPlan traversal;
         C1F2ContinuousWalk continuous;
+        C1Persistent3DChain mixed; // single C1 owner/token, bounded, Follow only
+        boolean mixedTurning;
+        float mixedDesiredYaw;
         int ticks;
         int settleTicks;
         boolean jumping;
@@ -301,12 +304,116 @@ final class C1P1MotionRuntime {
         return "F2 continuous WALK started token="+session.token;
     }
 
+    /** C-3D: one bounded, typed Follow lease, never a new physics owner.
+     * Every stage is revalidated at start/grounded handoff. No C0 command,
+     * no force loading, and no interpolation of unverified air movement. */
+    static String moveC2Persistent3D(MinecraftServer server,String name,
+            List<C1Persistent3DChain.Stage> stages) {
+        if(server==null || !server.isSameThread()) return "C-3D server thread required";
+        C1PlayerAvatar avatar=resolve(server,name);
+        if(avatar==null || avatar.isRemoved() || ACTIVE.containsKey(avatar.getUUID())
+                || !C1P1CLifecycleRuntime.mayRestore(server,avatar.getUUID()))
+            return "C-3D actor busy/unavailable";
+        refreshGroundContact(avatar);
+        if(!avatar.onGround()) return "C-3D actor not grounded";
+        final C1Persistent3DChain chain;
+        try {chain=new C1Persistent3DChain(stages);}
+        catch(IllegalArgumentException error) {return "C-3D mixed route rejected: "+error.getMessage();}
+        Session session=new Session(avatar,null);
+        session.mixed=chain;
+        session.origin=C2S4RecoveryPolicy.MotionOrigin.C2_COMMAND;
+        if(!armMixedStage(session)) return "C-3D first stage failed live terrain validation";
+        preparePhysics(avatar);
+        ACTIVE.put(avatar.getUUID(),session);
+        LAST_RESULT.put(avatar.getUUID(),"C-3D MIXED_FOLLOW");
+        return "C-3D mixed Follow started token="+session.token+" stages="+chain.count();
+    }
+
+    /** Re-probe at each actual landing, after previous stage is physically
+     * verified. No target prediction is evidence of a valid directed edge. */
+    private static boolean armMixedStage(Session session) {
+        C1PlayerAvatar avatar=session.avatar;
+        var stage=session.mixed.current();
+        var from=stage.from();var to=stage.to();
+        if(!avatar.onGround() || Mth.floor(avatar.getX())!=from.x()
+                || Mth.floor(avatar.getZ())!=from.z()
+                || Math.abs(avatar.getY()-from.footY())>.16) return false;
+        if(!avatar.serverLevel().hasChunkAt(new BlockPos(to.x(),to.supportY(),to.z()))
+                || !avatar.serverLevel().getWorldBorder().isWithinBounds(new BlockPos(to.x(),to.supportY(),to.z())))
+            return false;
+        var graph=C2GraphWorldProbe.captureWithSnapshot(avatar,C2NavGrid.MAX_RADIUS).graph();
+        C2WaypointExecution witness;
+        try {witness=C2WaypointExecution.followSmoothed(List.of(from,to));}
+        catch(IllegalArgumentException invalid) {return false;}
+        if(!witness.edgeAllowed(graph)) return false;
+        double tx=to.x()+.5,tz=to.z()+.5,ty=to.footY();
+        double dist=Math.hypot(tx-avatar.getX(),tz-avatar.getZ());
+        if(!Double.isFinite(dist) || dist<.03) return false;
+        if(stage.kind()==C2TraversabilityGraph.MoveKind.WALK) {
+            if(Math.abs(ty-avatar.getY())>.02 || dist>4.5
+                    || !C2WaypointBridge.sweptFollowCorridorClear(avatar,
+                            avatar.getX(),avatar.getZ(),tx,ty,tz)) return false;
+            C1F2ContinuousWalk candidate;
+            try {candidate=new C1F2ContinuousWalk(avatar.getX(),avatar.getY(),avatar.getZ(),
+                    List.of(new C1F2ContinuousWalk.Point(tx,ty,tz)));}
+            catch(IllegalArgumentException invalid) {return false;}
+            session.plan=null;
+            session.traversal=null;
+            session.continuous=candidate;
+            session.jumping=false;
+            session.mixedTurning=false;
+            session.completion="";
+            return true;
+        }
+        if(dist<C1S2TraversalPlan.MIN_DISTANCE || dist>C1S2TraversalPlan.MAX_DISTANCE
+                || !loadedTraversalNeighborhood(avatar,BlockPos.containing(tx,ty,tz)))
+            return false;
+        // Typed 3D preflight uses the SAME Vanilla AABB/standing surface
+        // conditions as C1S2 traversal, not a direct or interpolated teleport.
+        var kind=C1S2TraversalPlan.Kind.valueOf(stage.kind().name());
+        if(Math.abs(ty-(avatar.getY()+kind.height))>C1S2TraversalPlan.HEIGHT_TOLERANCE) return false;
+        var landing=C2NavigationSensor.landingAt(avatar,to.x(),to.supportY(),to.z());
+        if(landing==null || landing.risk()==C2TerrainObservation.Risk.HAZARD
+                || landing.risk()==C2TerrainObservation.Risk.UNKNOWN
+                || Math.abs(landing.cell().footY()-ty)>C1S2TraversalPlan.HEIGHT_TOLERANCE
+                || (!C2NavGrid.plannable(landing.cell().condition())
+                    && !(landing.cell().condition()==C2NavGrid.Condition.PARTIAL_SUPPORT
+                         && landing.supportedFraction()>=.5))) return false;
+        net.minecraft.world.phys.AABB landed=avatar.getBoundingBox().move(
+                tx-avatar.getX(),ty-avatar.getY(),tz-avatar.getZ());
+        if(!avatar.serverLevel().noCollision(avatar,landed)
+                || (kind.jump && !avatar.serverLevel().noCollision(avatar,
+                        avatar.getBoundingBox().move(0,.5,0)))) return false;
+        C2MoveGeometry.Plan heading;
+        try {heading=C2MoveGeometry.plan(avatar.getX(),avatar.getY(),avatar.getZ(),
+                tx,avatar.getY(),tz);}
+        catch(IllegalArgumentException invalid) {return false;}
+        C1P1MotionPlan drive;
+        C1S2TraversalPlan traverse;
+        try {
+            drive=new C1P1MotionPlan(C1P1MotionPlan.Direction.FORWARD,dist,heading.yaw(),
+                    avatar.getX(),avatar.getZ(),true);
+            traverse=new C1S2TraversalPlan(kind,avatar.getX(),avatar.getY(),avatar.getZ(),tx,tz,dist);
+        } catch(IllegalArgumentException invalid) {return false;}
+        session.mixedDesiredYaw=heading.yaw();
+        session.mixedTurning=!C2F2Locomotion.aligned(avatar.getYRot(),heading.yaw());
+        if(!session.mixedTurning) avatar.setYRot(heading.yaw());
+        session.continuous=null;
+        session.plan=drive;
+        session.traversal=traverse;
+        session.jumping=kind.jump;
+        session.leftGround=false;
+        session.completion="";
+        if(kind.jump && !session.mixedTurning) avatar.jumpFromGround();
+        return true;
+    }
+
     /** F2 Fix #2 — read-only, token-fenced diagnostics for current Follow
      * owner. No motion mutation, backend access or chunk loading. */
     static C1F2WalkProgress c2WalkProgress(UUID profile, UUID token) {
         Session session=ACTIVE.get(profile);
         if(session==null || token==null || !session.token.equals(token)
-                || session.continuous==null || session.combatTicksRemaining>0
+                || session.mixed!=null || session.continuous==null || session.combatTicksRemaining>0
                 || session.origin!=C2S4RecoveryPolicy.MotionOrigin.C2_COMMAND) return null;
         return new C1F2WalkProgress(session.continuous.consumed(),
                 session.continuous.remaining(),session.continuous.queued(),
@@ -321,7 +428,7 @@ final class C1P1MotionRuntime {
             List<C1F2ContinuousWalk.Point> targets) {
         Session session=ACTIVE.get(profile);
         return session!=null && token!=null && session.token.equals(token)
-                && session.continuous!=null && session.continuous.moving()
+                && session.mixed==null && session.continuous!=null && session.continuous.moving()
                 && session.combatTicksRemaining==0
                 && session.origin==C2S4RecoveryPolicy.MotionOrigin.C2_COMMAND
                 && session.continuous.extend(targets);
@@ -489,7 +596,11 @@ final class C1P1MotionRuntime {
                 : session.plan != null && session.plan.moving()
                     ? "MOVING remaining=" + String.format(java.util.Locale.ROOT, "%.2f", session.plan.remaining())
                     : session.jumping ? "JUMPING/SETTLING" : "SETTLING";
-        return name + " motion=" + state + " pos=" + fmt(avatar.getX()) + "," + fmt(avatar.getY()) + "," + fmt(avatar.getZ())
+        return name + " motion=" + state
+                + (session!=null && session.mixed!=null
+                    ? " mixedStage="+(session.mixed.consumed()+1)+"/"+session.mixed.count()
+                        + " kind="+session.mixed.current().kind() : "")
+                + " pos=" + fmt(avatar.getX()) + "," + fmt(avatar.getY()) + "," + fmt(avatar.getZ())
                 + " grounded=" + avatar.onGround() + " horizontalCollision=" + avatar.horizontalCollision
                 + " velocity=" + fmt(avatar.getDeltaMovement().length())
                 + " locomotion=" + presentationPhase(avatar.getUUID());
@@ -580,14 +691,36 @@ final class C1P1MotionRuntime {
                 continue;
             }
             session.ticks++;
+            if(session.mixed!=null && !session.mixed.tick()) {
+                if(session.continuous!=null) session.continuous.cancel();
+                if(session.plan!=null) session.plan.cancel();
+                session.completion="MIXED_TIMEOUT";
+            }
+            // C-3D: bounded in-place yaw alignment inside the SAME C1 token.
+            // Do not snap 180 degrees or begin a vertical primitive while
+            // the avatar is still facing the wrong direction. Before actually
+            // moving/jumping, re-probe the live terrain AGAIN after turning.
+            if(session.mixedTurning && session.combatTicksRemaining==0) {
+                float next=C2F2Locomotion.approach(avatar.getYRot(),session.mixedDesiredYaw);
+                avatar.setYRot(next);
+                if(C2F2Locomotion.aligned(next,session.mixedDesiredYaw)) {
+                    if(!armMixedStage(session)) {
+                        session.mixedTurning=false;
+                        if(session.plan!=null) session.plan.cancel();
+                        session.completion="MIXED_UNSAFE_TURN";
+                    }
+                }
+            }
             Vec3 previousPosition = avatar.position();
             float poseTargetYaw = avatar.getYRot();
             boolean poseCorner = false;
             // Exactly one motion owner per END-tick: combat > commanded > settle.
             // Never execute a commanded travel() in the same tick as an impulse.
             C1PlayerMotionPhase phase = C1PlayerMotionPhase.choose(
-                    session.combatTicksRemaining, (session.plan != null && session.plan.moving())
-                            || (session.continuous != null && session.continuous.moving()));
+                    session.combatTicksRemaining, !session.mixedTurning
+                            && !"MIXED_UNSAFE_TURN".equals(session.completion)
+                            && ((session.plan != null && session.plan.moving())
+                            || (session.continuous != null && session.continuous.moving())));
             if (phase == C1PlayerMotionPhase.COMBAT) {
                 // Connection-independent Vanilla combat phase. Always ask
                 // Player.travel to consume Vanilla's real knockback first.
@@ -754,6 +887,38 @@ final class C1P1MotionRuntime {
             if (session.combatTicksRemaining > 0) {
                 // Never finish, clear horizontal speed, or resume command input
                 // while the Vanilla impulse is still moving the actor.
+            } else if (session.mixed!=null) {
+                // Operator unfollow/cancel must retain the EXACT terminal
+                // CANCELLED contract. Never replan a cancelled mixed lease.
+                if("CANCELLED".equals(session.completion)) {
+                    if(avatar.onGround()) finishIter(server,session,"CANCELLED",it);
+                    continue;
+                }
+                // Same C1 owner/token across 3D modes. Each grounded physical
+                // receipt is checked before arming the next verified stage.
+                boolean terminalWalk=session.continuous!=null && !session.continuous.moving();
+                boolean terminal3D=session.traversal!=null && session.plan!=null
+                        && session.plan.terminal() && avatar.onGround();
+                if((terminalWalk || terminal3D) && avatar.onGround()) {
+                    String verdict=terminalWalk ? session.continuous.terminal()
+                            : session.traversal.verify(avatar.getX(),avatar.getY(),avatar.getZ(),
+                                    true,session.plan.phase.name());
+                    if(terminal3D && verdict.startsWith("TRAVERSAL_COMPLETE_")
+                            && !landingStillSafe(avatar,session.traversal))
+                        verdict="TRAVERSAL_LANDING_CHANGED_OR_UNSAFE";
+                    boolean verified=terminalWalk ? "COMPLETE".equals(verdict)
+                            : verdict.equals("TRAVERSAL_COMPLETE_"+session.mixed.current().kind());
+                    if(!verified) finishIter(server,session,"MIXED_"+verdict,it);
+                    else if(!session.mixed.advance()) finishIter(server,session,"MIXED_COMPLETE",it);
+                    else if(!armMixedStage(session)) finishIter(server,session,"MIXED_UNSAFE_NEXT_STAGE",it);
+                    // No second travel() this tick. Next stage resumes on the
+                    // next normal C1 END-tick, retaining the same token.
+                } else if(session.mixed.stageAge()>=C1S2TraversalPlan.MAX_SESSION_TICKS) {
+                    if(session.plan!=null) session.plan.cancel();
+                    if(session.continuous!=null) session.continuous.cancel();
+                    if(avatar.onGround()) finishIter(server,session,"MIXED_STAGE_TIMEOUT",it);
+                } else if(session.ticks>C1Persistent3DChain.MAX_TOTAL_TICKS && avatar.onGround())
+                    finishIter(server,session,"MIXED_TIMEOUT",it);
             } else if (session.traversal != null && session.plan != null
                     && session.plan.terminal() && avatar.onGround()) {
                 String verdict = "CANCELLED".equals(session.completion) ? "CANCELLED"

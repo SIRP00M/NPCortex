@@ -156,6 +156,46 @@ final class C2WaypointBridge {
         return null;
     }
 
+    /** C-3D: one bounded C1 token for mixed horizontal WALK and typed 3D
+     * primitives. Every route edge is proven against a fresh directed graph;
+     * C1 independently re-probes each edge and landing before execution. If
+     * a stage cannot be armed safely, leave route and C1 ownership untouched
+     * so Follow can use its original standalone traversal fallback. */
+    static boolean beginFollowMixed3DChain(C2WaypointExecution route,C1PlayerAvatar avatar,
+            net.minecraft.server.MinecraftServer server,String name,java.util.UUID profile) {
+        if(route==null || avatar==null || route.waiting() || route.done()
+                || !avatar.onGround() || C1P1MotionRuntime.c2Ticket(profile).active()) return false;
+        int first=route.currentIndex();
+        java.util.ArrayList<C1Persistent3DChain.Stage> stages=new java.util.ArrayList<>();
+        java.util.List<C2TraversabilityGraph.Node> nodes=route.path();
+        // A vertical primitive may be joined to preceding/following flat legs,
+        // but never exceed the existing traversal/corridor segment budgets.
+        for(int i=first;i<nodes.size() && stages.size()<C1Persistent3DChain.MAX_STAGES;i++) {
+            var from=nodes.get(i-1);var to=nodes.get(i);
+            var kind=C2TraversabilityGraph.kind(to.footY()-from.footY());
+            if(kind==null) break;
+            stages.add(new C1Persistent3DChain.Stage(from,to,kind));
+        }
+        if(stages.size()<2 || stages.stream().noneMatch(step->step.kind()!=C2TraversabilityGraph.MoveKind.WALK))
+            return false;
+        // The first source coordinate must be the avatar's physical support;
+        // do not bootstrap from a stale graph cell or a hypothetical endpoint.
+        var origin=stages.get(0).from();
+        if(Mth.floor(avatar.getX())!=origin.x() || Mth.floor(avatar.getZ())!=origin.z()
+                || Math.abs(avatar.getY()-origin.footY())>.16) return false;
+        var captured=C2GraphWorldProbe.captureWithSnapshot(avatar,C2NavGrid.MAX_RADIUS);
+        if(!route.mixedChainAllowed(captured.graph(),stages.size())) return false;
+        String started=C1P1MotionRuntime.moveC2Persistent3D(server,name,stages);
+        if(!started.startsWith("C-3D mixed Follow started")) return false;
+        var ticket=C1P1MotionRuntime.c2Ticket(profile);
+        if(!ticket.active() || ticket.token()==null || ticket.combatActive()
+                || ticket.origin()!=C2S4RecoveryPolicy.MotionOrigin.C2_COMMAND) {
+            C1P1MotionRuntime.stop(server,name);return false;
+        }
+        route.startedMixedChain(ticket.token(),stages.size());
+        return true;
+    }
+
     /** F2 Fix #2: opportunistic, bounded LOOK-AHEAD HANDOFF within an already
      * claimed Follow route. The route is still WAITING for the SAME C1 token;
      * we must validate every additional edge against a fresh local graph and

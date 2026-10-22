@@ -29,7 +29,7 @@ final class C2HierarchicalPlanner {
 
     enum Status { PATH_FOUND, NO_PATH, INVALID_START, OUT_OF_SCAN, UNSAFE_TARGET,
                   BUDGET_EXCEEDED, INCONSISTENT_GRAPH }
-    enum Source { HIERARCHICAL, B2_REFERENCE_FALLBACK, FOLLOW_TURN_AWARE, NONE }
+    enum Source { HIERARCHICAL, B2_REFERENCE_FALLBACK, FOLLOW_TURN_AWARE, FOLLOW_TERRAIN_NATIVE, NONE }
     record Result(Status status, Source source, List<C2TraversabilityGraph.Node> path,
                   double cost, int expandedNodes, int visitedNodes, int budget,
                   int regionCount, int portalCount) {
