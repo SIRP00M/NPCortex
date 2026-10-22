@@ -1,12 +1,34 @@
 # Changelog
 
-NPCortex maintains **one consolidated development changelog**. Historical milestones below describe implementation candidates and bounded evidence, not independent tagged releases. The current packaged Forge source version is **`0.2.1-alpha.1`**, Python package metadata is **`0.2.1a1`** (PEP 440), and Python runtime version is `0.2.1-alpha.1`. Prior version numbers remain unchanged in the historical record.
+NPCortex maintains **one consolidated development changelog** on GitHub `main`. Sprint notes below are chronological implementation milestones and scope-limited verification evidence, **not** separate stable releases/tags. Current local candidate: Forge **`0.2.2-alpha.1`**, Python distribution **`0.2.2a1`** (PEP 440), Python module **`0.2.2-alpha.1`**. Older version numbers are retained intentionally.
 
-> **Development packaging — 2026-10-22.** `v0.2.1-alpha.1` continues from packaged `v0.2.0-alpha.2` with the uploaded Airborne Follow Target Projection Fix repository as the code baseline. This packaging operation modifies **only four version metadata files, README, CHANGELOG, and PENDING_TESTS**, and packages milestone patch notes while retaining the previous `alpha.2` patch notes. No Java/Python runtime code, unit tests, Gradle dependencies, gameplay protocols or GitHub branches are modified.
+> **Versioning:** `v0.2.2-alpha.1` starts the **C+ C-F0 Core Contracts, Ownership & Unified API** milestone after `v0.2.1-alpha.1` (Follow Stability). `alpha.N` denotes iterations of the same milestone. Packaging updates only metadata/docs in the supplied C-F0 source; it does not commit, push, tag or change branches.
 
-> **Versioning decision:** `v0.2.1-alpha.1` begins a separate **Follow Stability / Airborne Target Projection** development milestone after the `v0.2.0-alpha.2` Navigation & Persistent Follow milestone. Incrementing the patch component here denotes a project-local pre-1.0 milestone, **not a stable release, public tag, or completion of outstanding Quality Gates**. The earlier candidate label was superseded without creating a separate tagged release.
+> **Evidence boundary:** C-F0 designs, standalone validators and tests are **not** a live action engine. The owner previously reported passing the scoped C-F0 Windows gameplay/build checklist, but original C-F0 test reports were written before that feedback and must not be retroactively presented as logged evidence. C-F1–F6, real command routing, multi-process verification and 1/3/5/10 NPC profiling remain separate unapproved or unverified work.
 
-> **Evidence boundary:** The maintainer explicitly confirmed the previously observed airborne-flight-triggered zigzag is gone **in the tested Minecraft scenario**. The original candidate report predates that observation and calls Windows gameplay pending. Neither limited gameplay confirmation nor dependency-free Java tests establishes every Forge Build, terrain, cancellation, multiplayer or 1/3/5/10 NPC performance gate.
+## Unreleased — Milestone `v0.2.2-alpha.1`: C+ C-F0 Core Contracts, Ownership & Unified API (2026-10-22)
+
+**Compared against GitHub `main` HEAD `248128c` (`v0.2.1-alpha.1`), not the old C0 or `legacy-main` baseline.**
+
+### Added in this milestone
+
+- Added **standalone, Java-17-targeted C+ contract classes** (`forge-mod/.../npcortex/cplus/`): canonical IDs and action envelopes, target/result typing, guarded lifecycle transitions with authoritative verification receipts, role/ownership boundaries, deterministic resource acquisition and FIFO queue-ticket definitions, and proposed user-facing command mappings.
+- Added **standalone Python `cplus_contracts.py`** validator and lifecycle guards with dedicated backend contract tests. Not called by the active C0/C2 service, and does not execute world actions.
+- Added C-F0-A through F0-G architecture documentation: responsibility/conflict matrix, v1 protocol and state machine, proposed unified `/npcortex` public commands and backwards-compatible legacy command semantics, windows checklist/test report, independent Java self-test and PowerShell runner.
+- Restored prior version-specific Patch Notes (`v0.2.0-alpha.2`, `v0.2.1-alpha.1`) omitted from the uploaded candidate ZIP, and added [`v0.2.2-alpha.1` Patch Notes](docs/patch-notes/v0.2.2-alpha.1.md).
+
+### Version / documentation changes in this packaging only
+
+- Aligned Forge Gradle version + `mods.toml` + Python distribution + Python runtime to **`0.2.2-alpha.1` / `0.2.2a1`**.
+- Rebased `ReadMe.md` and `PENDING_TESTS.txt` on the previous packaged `main` milestone; replaced the incoming stale C2-P1-A README. Preserved the consolidated C0–C2/C1/Follow history, historical test reports and separately reviewed owner-reported Windows smoke tests.
+- Updated README to point to `main` rather than the former `Development` branch. No prior source Java/Python gameplay runtime file, existing tests, Forge command tree, SQLite schema, dependency, or migrations were modified during packaging.
+
+### Tests, claims and limitations
+
+- **Current packaging rerun:** 71 isolated Java assertions (JDK 21 with `javac --release 17`), 15 Python C-F0 tests and 16 focused Python C2 tests all passed with Exit Code 0. Historical C-F0 report additionally records 22 earlier Follow Java suites. See [`docs/cplus-cf0-test-report.md`](docs/cplus-cf0-test-report.md); neither isolated Java/Python testing nor the historical report is a Forge Build result.
+- **Maintainer-reported Windows acceptance:** spawn/identity, grounded Follow, flying-target Follow without the observed zigzag regression, unfollow/cancel, 3D navigation, inventory replay, Save/Rejoin and Forge Build + contract tests passed in the scenarios tested. Reported acceptance is separate from local-source inspection; do not infer 1/3/5/10 MSPT, multiplayer, crash-injection, live C+ commands or every hazardous-terrain fixture.
+- **No live C+ engine yet:** all unified routes (including `/npcortex spawn`, `/npcortex stop`, `/npcortex debug ...`) remain **proposals**, not registered commands. No new C+ gameplay world writes, FIFO runtime scheduler, verified real-world action receipt pipeline, persistence migration or cross-process wire integration.
+- C-F1–C-F6 remain separate future scope, requiring a fresh audit, choices and explicit user approval; update `PENDING_TESTS.txt` as real evidence arrives.
 
 ## Unreleased — Development milestone `v0.2.1-alpha.1`: Ground-projected Airborne Follow and terrain-native stability (2026-10-22)
 

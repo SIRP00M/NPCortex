@@ -1,15 +1,15 @@
 # NPCortex
 
 **An open-source, modular, local-AI NPC framework for Minecraft Java 1.20.1 (Forge).**  
-*Character-driven companions powered by local Qwen, with an experimental true Player-based NPC, terrain-native navigation, persistent 3D Follow, and airborne-target-aware ground following.*
+*Local-Qwen companions with a true Player-based NPC, verified terrain navigation, grounded Follow, and a modular C+ action-contract foundation.*
 
-[Development branch](https://github.com/SIRP00M/NPCortex/tree/Development) · [Changelog](CHANGELOG.md) · [Patch Notes](docs/patch-notes/v0.2.1-alpha.1.md) · [Previous Patch Notes](docs/patch-notes/v0.2.0-alpha.2.md) · [Outstanding tests](PENDING_TESTS.txt) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+[GitHub main](https://github.com/SIRP00M/NPCortex) · [Changelog](CHANGELOG.md) · [Patch Notes](docs/patch-notes/v0.2.2-alpha.1.md) · [Follow Stability notes](docs/patch-notes/v0.2.1-alpha.1.md) · [Navigation notes](docs/patch-notes/v0.2.0-alpha.2.md) · [Outstanding tests](PENDING_TESTS.txt) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development source candidate: `v0.2.1-alpha.1` (2026-10-22).** Based on the uploaded **Airborne Follow Target Projection Fix** Full Repository ZIP, building on `v0.2.0-alpha.2` (Navigation & Persistent Follow). This is an untagged Development snapshot, **not a stable release**. This packaging step does not change Java/Python runtime logic or update any GitHub branch. The maintainer reported that the previously observed **Creative-flight-triggered Follow zigzag disappeared** during real Minecraft testing of this fix; that is a **scenario-limited gameplay PASS**, not a complete Forge Quality Gate, multiplayer, or 1/3/5/10 NPC performance certification.
+> **Development source candidate: `v0.2.2-alpha.1` (2026-10-22).** C+ C-F0 Core Contracts, Ownership and Unified API **contracts only**, based on the uploaded C-F0 Full Repository. Compared with the last GitHub `main` milestone (`v0.2.1-alpha.1`, commit `248128c`), the update adds isolated Java/Python contract validators, architecture documents and tests. It does **not** register new commands, run a new action engine, migrate journals or alter C1/C2 gameplay. This is an untagged alpha development milestone, not a stable release. The ZIP is prepared locally; GitHub has not been modified by this packaging step.
 
 ## Development milestone versioning
 
-The `Development` branch uses pre-1.0 versions to track **meaningful development milestones**. The prior `v0.2.0-alpha.2` milestone introduced Navigation & Persistent Follow; `v0.2.1-alpha.1` starts the separate **Follow Stability / Airborne Target Projection** milestone. An `alpha.N` increment within a milestone may be used for candidate fixes or verification iterations. These labels are **not stable releases** and do not mean all Quality Gates have passed or that `main` has been updated.
+The active development line now resides on GitHub **`main`** (`legacy-main` preserves the earlier architecture). Versions are numbered by meaningful milestones: `v0.2.0-alpha.2` introduced Navigation & Persistent Follow; `v0.2.1-alpha.1` introduced Follow Stability; **`v0.2.2-alpha.1` introduces the C+ C-F0 shared Action Contract / Unified Public API design**. `alpha.N` is reserved for candidate iteration within the same milestone. Pre-release milestones are not stable releases and are not evidence of a full Quality Gate.
 
 ## Current capabilities and maturity
 
@@ -22,11 +22,23 @@ The `Development` branch uses pre-1.0 versions to track **meaningful development
 | C2-P1-C/D | Transactional waypoints, obstacle rerouting, cancellation/reconciliation and bounded dynamic replanning | User-reported obstacle detour and main Sprint 4 recovery behavior; complete cancellation/crash/unloaded tests remain open |
 | Terrain 3D Sprints 1–4 | Block-shape support, step/jump/descend motion tickets, verified 3D navigation and replanning recovery | Prior owner-confirmed automatic JUMP_UP / SAFE_DESCEND; **STEP_DOWN −0.5 and mixed/edge fixtures remain unverified** |
 | C2-F1/F2 | Follow Player by player identity; rolling goals, smoother yaw, path shortcuts, collision-parity, hazard-aware cost, local 360° steering and locomotion presentation | Basic F1 Follow and visible movement improvement owner-reported. Latest Follow revisions **not automatically gameplay accepted** |
-| B+ + C-S1–C-S4 | Fresh-graph safe Follow corridor continuation across rolling route windows, bounded persistent C1 ticket, turn-in-place preflight fix, safety diagnostics | Earlier BuildFix1 report required Windows recompilation; **the latest alpha.3 package is not newly Forge-build-certified by this packaging step** |
+| B+ + C-S1–C-S4 | Fresh-graph safe Follow corridor continuation across rolling route windows, bounded persistent C1 ticket, turn-in-place preflight fix, safety diagnostics | Earlier BuildFix1 report required Windows recompilation; **standalone contract tests do not recertify the earlier follow-specific Forge gameplay matrix** |
 | C-3D + C-TN + Smooth Hardening C | Bounded mixed-stage C1 follow lease, terrain-native detour stability, predictive continuation and follow telemetry | Owner observed terrain recovery working after a brief safe pause in a tested fixture; full mixed 3D / hazardous-terrain / cancel / performance gates remain open |
 | Stable Trajectory B + Airborne Follow Target Projection | Bounded lateral damping, intermediate-waypoint crossing, flying-state debounce, projected reachable ground-height target, horizontal stop distance for actual flying targets | **Owner-reported Minecraft PASS for elimination of flight-related zigzag in the tested scenario.** Other flight, elevation, combat, hazard, offline/rejoin and 1/3/5/10 NPC cases remain unverified |
+| C+ C-F0 — contracts and ownership | **New:** isolated v1 Java/Python action envelope, identity and target validation, proof-guarded state transitions, deterministic resource/FIFO-ticket contracts, C0/C1/C2/C+ ownership rules, proposed public commands and legacy routing map | **Contract-only.** No active action engine, scheduler, registered unified Brigadier commands, real FIFO locks, persistence migration, new skill execution or gameplay interaction; [contract details](docs/architecture/ACTION_CONTRACTS.md) |
 
 **Architecture boundaries:** C1 owns real movement, collisions, knockback and physics; C2 owns verified plans and receipts. Follow never turns the NPC into a `PathfinderMob`, does not teleport to catch up, force-load chunks, claim a global path planner, or override combat/cancel priority. The `C2FollowJournal` is an audit journal and **does not automatically replay movement after restart**. Airborne target projection adjusts **Follow goal selection**, not the NPC's ability to fly; C1 remains a ground-bound player-physics controller.
+
+## New C+ C-F0 — contract foundation (no live new commands)
+
+C-F0 lays out the contracts needed to add a **general-purpose action engine later** while keeping **C1 (player physics/inventory), C2 (navigation/follow) and C+ (action coordination)** as separate internal modules. The backend has strict `cplus_contracts.py` envelope/transition validators; Forge has independent pure-Java `cplus` identity, action, lifecycle, ownership, resource and *proposed* public route definitions. These are **not wired to the live backend/Forge command tree**.
+
+- **Contract identity:** versioned action envelope with world/dimension/actor/goal/task/action/attempt IDs, typed target and expected result; proof required before a terminal completed action.
+- **Ownership and cancellation:** responsibilities and resource ordering defined without transferring C1 physics or C2 navigation authority; uncertain world mutations must not be blindly retried.
+- **Unified API proposal only:** future `/npcortex spawn`, `/npcortex follow`, `/npcortex stop`, `/npcortex status` and operator `/npcortex debug ...`; **these commands are not available yet.** Keep existing `/npcortex c1 ...` and `/npcortex c2 ...` commands and exact argument semantics.
+- **Future work requires separate approval:** C-F1 durable journal/reconciliation; C-F2 perception/permission adapter; C-F3 actual router/action runtime; C-F4–F6 adapters, performance and end-to-end acceptance.
+
+See [architecture](docs/architecture/ACTION_ENGINE.md), [action contracts](docs/architecture/ACTION_CONTRACTS.md), [unified command design](docs/architecture/UNIFIED_COMMAND_API.md), [F0 Windows checklist](docs/cplus-cf0-windows-checklist.md) and [source report](docs/cplus-cf0-test-report.md).
 
 ## How the movement works
 
@@ -103,9 +115,18 @@ Coordinates above are **examples**, not guaranteed safe target locations. Check 
 /npcortex c2 unfollow yui
 ```
 
-Replace `YourMinecraftName` with the actual connected player name. The `followstatus` output can include `persistentAppends` and `rollingMisses`; the former should advance only when a certified continuation is actually appended. For long flat, turning, wall, hazard, stair/slab, combat and 1/3/5/10 NPC cases, follow the [C-S1–S4 Windows acceptance checklist](docs/c2-persistent-follow-session-c-windows-checklist.md). For Creative/elytra flights, compare `targetMode`, `targetProjection`, and `projectedY` against the [Airborne Windows checklist](docs/c2-airborne-target-projection-windows-checklist.md). A fresh Forge build of **this exact ZIP** is still an independent acceptance item.
+Replace `YourMinecraftName` with the actual connected player name. The `followstatus` output can include `persistentAppends` and `rollingMisses`; the former should advance only when a certified continuation is actually appended. For long flat, turning, wall, hazard, stair/slab, combat and 1/3/5/10 NPC cases, follow the [C-S1–S4 Windows acceptance checklist](docs/c2-persistent-follow-session-c-windows-checklist.md). For Creative/elytra flights, compare `targetMode`, `targetProjection`, and `projectedY` against the [Airborne Windows checklist](docs/c2-airborne-target-projection-windows-checklist.md). Real Windows Forge/build and game regression evidence must be tracked separately from this package's local test runs.
 
 ## Automated regression entry points
+
+For C-F0 contracts on **Windows Temurin JDK 17** (does not register or execute new in-game C+ actions):
+
+```powershell
+.\scripts\test-cplus-f0-contracts.ps1
+.\scripts\dev-forge.ps1 -Task build
+```
+
+
 
 ```powershell
 # Java dependency-free regression; requires an actual JDK 17 when run on Windows
@@ -122,16 +143,17 @@ Replace `YourMinecraftName` with the actual connected player name. The `followst
 python -m unittest discover -s backend/tests -p 'test_c2_*.py' -q
 ```
 
-**Validation and evidence:** Fresh tests on this ZIP passed **22/22 pure-Java suites (2,658 assertions)** and **16/16 focused Python C2 tests**, each with Exit Code 0. Java was compiled with JDK 21 `javac --release 17`, which does **not** verify Windows JDK17 Forge compilation. The maintainer separately reported flight-associated zigzag disappearing in real Minecraft, limited to that scenario. See the current [Changelog](CHANGELOG.md) and the full [PENDING_TESTS.txt](PENDING_TESTS.txt).
+**Validation and evidence:** This packaged ZIP passed **71/71 isolated Java assertions** (JDK 21, `--release 17`), **15/15 C-F0 Python tests** and **16/16 focused C2 Python tests**, with Exit Code 0 for each test command. These are not Windows Forge build or gameplay results. The earlier C2 implementation remains unchanged in this incoming source. Historical C2 Java results (**22 suites, 2,658 assertions**) and Python C2 (**16 tests**) came from the prior `v0.2.1-alpha.1` packaging session; they are not represented as a Forge build of this ZIP. The maintainer separately confirmed Creative-flight zigzag resolution in a tested Minecraft scenario. Owner-reported C-F0 Windows gameplay/build acceptance is recorded as such in [PENDING_TESTS.txt](PENDING_TESTS.txt), not inferred from the local test runner. See [C-F0 report](docs/cplus-cf0-test-report.md) and [Changelog](CHANGELOG.md).
 
 ## Repository layout
 
 ```text
-NPCortex-Development/
+NPCortex/
 ├── ReadMe.md                 # Developer entry point
 ├── CHANGELOG.md              # Single consolidated chronological history
 ├── PENDING_TESTS.txt         # Open acceptance and regression gates
-├── backend/                  # Python local Qwen/actor/agent backend + tests
+├── backend/                  # Python backend; includes standalone C+ schema validators
+├── docs/architecture/        # C+ action/ownership/public command contracts
 ├── forge-mod/                # Forge custom ServerPlayer NPC / C1-C2 code + tests
 ├── character-packs/          # Character definitions
 ├── docs/                     # Detailed architecture / Windows checklists / patch notes
