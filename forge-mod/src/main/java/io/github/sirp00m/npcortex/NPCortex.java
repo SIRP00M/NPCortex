@@ -23,6 +23,9 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStarted);
         MinecraftForge.EVENT_BUS.addListener(C1VanillaLifecycleCoordinator::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(CPlusF1DiagnosticRuntime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(CPlusEPreviewRuntime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(CPlusECoordinatorRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogin);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStartTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStopTracking);
@@ -39,6 +42,7 @@ public final class NPCortex {
                         // Enable cheats in a local test world to use it.
                         .requires(source -> source.hasPermission(2))
                         .then(C2Commands.build())
+                        .then(CPlusF1DiagnosticRuntime.debug())
                         .then(Commands.literal("c1")
                                 .then(C1P1CLifecycleCommands.build())
                                 .then(C1P1CLifecycleCommands.damage())

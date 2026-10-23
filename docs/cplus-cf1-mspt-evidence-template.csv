@@ -1,0 +1,11 @@
+world,actor_count,mode,server_mspt_20s,server_mspt_40s,server_mspt_60s,peak_mspt,tps,diagnostic_audit_state,notes
+CF1_DISPOSABLE,0,idle,,,,,,,
+CF1_DISPOSABLE,0,manual_probe_sync,,,,,,,
+CF1_DISPOSABLE,1,idle,,,,,,,
+CF1_DISPOSABLE,1,manual_probe_sync,,,,,,,
+CF1_DISPOSABLE,3,idle,,,,,,,
+CF1_DISPOSABLE,3,manual_probe_sync,,,,,,,
+CF1_DISPOSABLE,5,idle,,,,,,,
+CF1_DISPOSABLE,5,manual_probe_sync,,,,,,,
+CF1_DISPOSABLE,10,idle,,,,,,,
+CF1_DISPOSABLE,10,manual_probe_sync,,,,,,,

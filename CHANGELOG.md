@@ -1,10 +1,131 @@
 # Changelog
 
-NPCortex maintains **one consolidated development changelog** on GitHub `main`. Sprint notes below are chronological implementation milestones and scope-limited verification evidence, **not** separate stable releases/tags. Current local candidate: Forge **`0.2.2-alpha.1`**, Python distribution **`0.2.2a1`** (PEP 440), Python module **`0.2.2-alpha.1`**. Older version numbers are retained intentionally.
+NPCortex maintains **one consolidated development changelog** for GitHub [`main`](https://github.com/SIRP00M/NPCortex), including historical C1/C2/C0 and C+ implementation milestones. Sprint labels describe development, not independent stable releases. **This candidate is `v0.2.3-alpha.1`** (Forge) / `0.2.3a1` (Python package). Earlier versions are intentionally preserved as historical records.
 
-> **Versioning:** `v0.2.2-alpha.1` starts the **C+ C-F0 Core Contracts, Ownership & Unified API** milestone after `v0.2.1-alpha.1` (Follow Stability). `alpha.N` denotes iterations of the same milestone. Packaging updates only metadata/docs in the supplied C-F0 source; it does not commit, push, tag or change branches.
+> This is a **source candidate**, not a tagged stable release or confirmation of full Quality Gates. GitHub was not modified by this packaging process. The `READ_ONLY_VERIFIED` task-graph result refers to read-only evidence, **never completed world mutation**.
 
-> **Evidence boundary:** C-F0 designs, standalone validators and tests are **not** a live action engine. The owner previously reported passing the scoped C-F0 Windows gameplay/build checklist, but original C-F0 test reports were written before that feedback and must not be retroactively presented as logged evidence. C-F1–F6, real command routing, multi-process verification and 1/3/5/10 NPC profiling remain separate unapproved or unverified work.
+## Unreleased — `v0.2.3-alpha.1` source update: read-only task coordinator and typed movement preview (2026-10-23)
+
+**GitHub base:** `main` commit `0618d95` (`v0.2.2-alpha.1`). This is an **expanded candidate within the same `v0.2.3-alpha.1` milestone**, superseding the E-P0-only package in the previous local archive; it is not a separate `alpha.2` release or GitHub tag.
+
+### Added since the earlier `v0.2.3-alpha.1` E-P0-only candidate
+
+- **E1 operator-driven read-only task coordinator:** durable FIFO admission, queue inspection, cancellation and guardrails for in-game requests from the server-side Forge identity; no automatically started task or movement.
+- **E2 read-only dispatch/verification:** backend SQLite attempt/lease/receipt records, bounded single-resource `READ_CELL` reservations, backend restart fencing and fail-closed HOLD handling. Requires explicit operator dispatch and verification with fresh C-F2 observations. `READ_ONLY_VERIFIED` does not establish permission to break/place/use blocks.
+- **E3-D G1 typed `move_to` preview:** `/npcortex debug cplus taskmovepreview <npc> <x> <y> <z>` on the Forge server checks live C1 actor identity/dimension, motion ownership, Follow/C2 state, uncertain journal, ground contact and loaded/local target. It samples C-F2 world observation and calls the authenticated `/v1/cplus/e3/preview` backend route. The Python validator requires bound IDs, exact typed fields, bounded coordinates, finite tolerance and a fresh, consistent snapshot. SQLite stores deduplicated `PREVIEW_ONLY` intent separately from task FIFO/leases. Returns `DRY_RUN`, `can_execute=false`, `motion_started=false` and `world_effects=false` without navigating or modifying the world.
+- New focused tests, scripts and Windows checklists for E1/E2/E3-D G1. Existing C1/C2 source and runtime ownership boundaries are preserved as supplied.
+
+### Version and documentation (this packaging step only)
+
+- Corrected the supplied source's stale Forge/Python version metadata (`0.1.1-alpha`) to **Forge `0.2.3-alpha.1`** and **Python package `0.2.3a1`**, keeping the established milestone number unchanged.
+- Continued consolidated historical `CHANGELOG.md` from the previous `v0.2.3-alpha.1` ZIP; refreshed README, `PENDING_TESTS.txt` and the same milestone's Patch Notes. Restored all earlier version-specific Patch Notes in `docs/patch-notes/`.
+- **No Gameplay/Python runtime/Forge Java/test source edited by packaging.** The incoming ZIP's implementations are retained byte-for-byte; no GitHub commit/push/tag performed.
+
+### Tests, evidence and safety boundary
+
+- Source candidate's E3 report records **83 focused Python tests passed**, but it also records **full backend suite timeout** and **Windows Forge build + in-game E3 G1 acceptance pending**. Packaging verification results should be considered separately below, not a substitute for Windows tests.
+- **This packaging rerun:** 90/90 focused Python E3/E2/E1/E-P0/C-F0/C-F1/C-F2/local-auth tests PASS with Exit Code 0; isolated Java C-F2 read-only authorization policy PASS 16 checks under JDK 21 using `javac --release 17`. Exact-version ZIP CRC and 44 internal links checked. **Forge Gradle compilation and Windows Minecraft gameplay not run here.**
+- Pending: JDK 17 Forge compilation, exact command registration and Java↔Python response parity, preview no-motion/no-queue in an actual world, Follow/C2 busy and unloaded/out-of-range rejections, E2 cancel/restart resource-fencing in gameplay, full backend suite termination/exit, 1/3/5/10 NPC MSPT and dedicated/modded compatibility.
+- **Not implemented:** E3-D G2 guarded real navigation; E3-D G3 terminal verification/cancel/recovery; E3-E automatic movement DAG; E4/E5 world mutation, mining or autonomous Qwen world-action dispatch. No G1 preview is movement authority.
+
+## Unreleased — Milestone `v0.2.3-alpha.1`: Durable read-only task preview (C-F1 / C-F2 / C-F3 E-P0; 2026-10-23)
+
+**Compared against GitHub `main` HEAD `0618d95`** (`feat: add foundation for NPC task system`, `v0.2.2-alpha.1`). This is an **untagged alpha development source candidate**, not a public release. The packaging step changes only Forge/Python version metadata and docs; the incoming GWI source is preserved byte-for-byte.
+
+### Highlights newly present since `v0.2.2-alpha.1`
+
+- **Reliable diagnostic history (C-F1):** durable journal and explicit operator-driven sync/audit, local authentication and fail-closed recovery checks. These receipts confirm diagnostic transport, **not** Minecraft world mutations, and uncertain operations are never silently replayed.
+- **Trusted read-only world observation (C-F2):** bounded, loaded-chunk-only 3×3×3 sampling of actual NPC surroundings, item drops and entities; strict snapshot identity, permissions and unknown/unloaded handling. Modification permissions remain `UNKNOWN`/`DENY` until separately established.
+- **Durable read-only task graph (C-F3 Option E, E-P0):** operator `/npcortex debug cplus epreview <npc>` captures a C-F2 snapshot, sends it over an authenticated loopback bridge and writes a bounded, FIFO-ordered three-node dependency graph to SQLite. The backend can report `READ_ONLY_VERIFIED` for observations and permission checks, but **does not break/place blocks, move the NPC, grant mutation permission or run autonomous tasks**.
+- Source includes focused Java/Python tests, architecture notes, operator-facing PowerShell runner and Windows gameplay checklists. **E-P1–E-P5 are planned gates, not implemented here.**
+
+### Version and history packaging
+
+- Align Gradle/Forge `mods.toml`/Python `__version__` with **`0.2.3-alpha.1`**, Python distribution with **`0.2.3a1`**.
+- Refresh root `ReadMe.md`, update `PENDING_TESTS.txt`, add this milestone's Patch Notes and restore prior version-specific Patch Notes from packaged `main` history.
+- Preserve earlier GitHub `main` changelog from `v0.2.2-alpha.1` onward, and insert original incoming C-F1/C-F2 historical notes below. No runtime code or test code modified in this version/documentation step.
+
+### Local packaging verification (2026-10-23)
+
+- ZIP integrity, version consistency and internal Markdown links passed.
+- Focused Python tests: **57/57 PASS** (E-P0: 10, C-F2: 16, C-F1 bridge: 9, C-F0: 15, Local Auth: 7), all with reported successful unittest process termination.
+- Full Python backend run printed **Ran 284 tests ... OK**, but orchestration timed out and did not capture a reliable exit code; **full-suite process exit remains unverified**.
+- C-F2 Java read-only policy self-test: **16 checks PASS**, OpenJDK 21 `javac --release 17` (not Forge compilation).
+- No Windows Forge or Minecraft E-P0 test performed in this packaging session.
+
+### Evidence boundary
+
+- The incoming source contains **user-reported scenario-limited** Windows C-F1 H1–H5 acceptance and synthetic diagnostic sync; C-F2 and E-P0 exact-candidate Windows Forge/Minecraft outcomes are not established by this packaging.
+- Python/standalone Java tests in this package do not prove Forge Build or real-world GWI action execution. Native 1/3/5/10 NPC MSPT, dedicated server, crash/power-loss and third-party claim-mod permission checks remain pending.
+
+
+## Detailed C-F1 / C-F2 source milestone history (carried forward from supplied C-F3 candidate)
+
+## Unreleased — GWI C+ C-F2 D: Trusted Perception + Permissions (P1–P5 Candidate)
+
+- Added read-only, opt-in v2 observation from live authoritative C1 ServerPlayer (`/npcortex debug cplus world <name>`), loaded-only 27-cell local block inspection with properties, bounded nearby drops/entities and explicit unknown/coverage.
+- Added Java read-only permission decision contract, strict Python v2 validator, world/dimension/actor/session/tick/observation identity and bounded payload fail-closed policies. Observed/unknown, stale/fresh and permission UNKNOWN remain distinct.
+- Preserved legacy C0/C2 snapshot and skill advertisements; no world-mutation executor, Saga, Qwen change or new unauthenticated v2 HTTP endpoint.
+- Added focused Java/Python tests, PowerShell runner, Windows Gameplay Checklist, architecture and Test Report. Forge gameplay/full backend suite/true MSPT remain pending, not reported as PASS. No GitHub changes.
+
+## 2026-10-22 — GWI C+ C-F1 D+ Final Quality Gate Cleanup (Test/Documentation Candidate)
+
+- Fixed Windows Python 3.13 `test-cplus-f1-auto-local-auth.ps1` quoting failure by calling a standalone isolated Python bootstrap script instead of forwarding nested quotes via PowerShell `python -c`. No manual token setup required.
+- Added 3 Python regression tests for script invocation, bootstrap/no-secret-in-logs and invalid-credential fail-closed. Extended existing standalone Java recovery test from 18 to **36 checks**, covering corrupt cursor/hash/sequence and orphan `.tmp` evidence preservation in temporary directories.
+- Added combined `scripts/test-cplus-f1-final-gates.ps1` and Windows checklist with real 1/3/5/10 NPC MSPT observation template and disposable-world fault-injection instructions.
+- Preserved **ALL production runtime source**, Forge commands, C1 Physics, C2 Follow/Nav, Inventory, SQLite schema and Auto Local Auth behavior byte-for-byte from H1–H5 baseline. No World Mutation, Saga, automatic action replay or GitHub operations.
+- Previous operator-confirmed Windows H1–H5 Gameplay A–D and Forge Build remain valid for the original runtime; repaired Windows PowerShell runner, copied-world cursor fault, real MSPT and unexpected power-loss still require separate verification on new candidate. See `docs/cplus-cf1-final-quality-gate-test-report.md`.
+
+## 2026-10-22 — GWI C+ C-F1 D+ Recovery Hardening H1–H5 (Implementation Candidate)
+
+- Separated C-F1 durable ledger IO (bounded worker, queue 32) from manual HTTP/cursor transport (bounded worker, queue 8); slow backend no longer blocks synthetic journal probe/inspect; bounded shutdown and explicit hold on incomplete transport.
+- Added immutable ledger delivery snapshot; manual sync still bounded 8 events, no background resend or world action replay.
+- Added durable local `syncstatus` reading cursor off-thread, world-wide scope documented; new operator-only `/npcortex debug cplus audit <npc>` checks remote world ID, journal sequence/hash, cursor; READY/PENDING/IN_DOUBT/HOLD are **transport/recovery diagnostics**, NOT real-world verification.
+- Preserved orphaned cursor `.tmp` on failure and fail-closed, rather than silently deleting evidence. Kept existing ledger hash/sequence/epoch checks, Automatic Local Auth and SQLite schema unchanged.
+- Added Java worker-stall/cursor/reconcile tests, backend process-termination/SQLite-fault/restart tests, synthetic 1/3/5/10 actor isolation, Windows runner/checklist/architecture/test report.
+- Preserved C1 Physics, C2 Follow/Navigation, Inventory Ledger and existing commands; **no World Mutation, automatic action replay, Saga, GitHub operations**.
+- Pending Windows Forge Build/Gameplay/MSPT, full backend suite, physical power-loss and real world-action crash recovery; see `PENDING_TESTS.txt`.
+
+## C-F1 D+ — Automatic Local Authentication (Candidate, 2026-10-22)
+
+- Automatically generate a private 256-bit C-F1 diagnostic bridge secret at Python backend startup; Forge reads the same per-user file. No clipboard/PowerShell token setup required for local single-player.
+- Preserve explicit `NPCORTEX_CPLUS_F1_TOKEN` and optional absolute secret-file override; reject missing/malformed/insecure secrets without silently rotating.
+- Keep the C-F1 bridge loopback-only and diagnostic-only; no C1/C2 changes, new mutation actions, SQLite schema migration, replay or GitHub operations.
+- Add Python and Java regression tests, parity runner and Windows command checklist. Windows Forge, ACL and gameplay validation remain pending.
+
+## Unreleased — C-F1 D+ D1–D5 Transaction Bridge + Read-Only Recovery (Candidate)
+
+- Added cross-language durable ledger frame protocol with SHA-256 hash-chain parity (Java Modified UTF v1), per-world sequence, actor epoch and event identity validation.
+- Added additive SQLite inbox/checkpoint/receipt outbox, localhost-authenticated C+ HTTP routes, idempotent after-commit delivery ACK + independent receipt confirmation. Existing v4 / C2 / Inventory schema unchanged.
+- Added bounded operator-triggered `/npcortex debug cplus sync|syncstatus <name>` on pre-existing async worker (8 records per call) with durable local delivery cursor, no automatic world-effect replay. Backend remains authority for **delivery receipt only**, never world-success verification.
+- Added read-only recovery status classification and strict conflict handling for gaps/stale epochs/wrong actor/duplicate identifiers/malformed hashes/unsafe stages. No game-world observation or Saga execution.
+- Added Java/Python parity, SQLite/HTTP/IO-offline regression tests, Windows runner and dedicated architecture/checklist/report. No GitHub changes.
+- **Pending:** Windows Forge build/gameplay, true process-kill/power loss, disk full, end-to-end real world mutation, true 1/3/5/10 NPC MSPT. See `PENDING_TESTS.txt`.
+
+## Unreleased — C-F1 D+ Fix #1: Windows-Safe SQLite Test Hardening (Candidate)
+
+- **Scope-only Windows/Python 3.13 test fix:** corrected three test fixture `with sqlite3.connect(...)` usages in `backend/tests/test_cplus_f1_dplus.py` to reuse existing `sqlite_test_connection()` which commits/rolls back **and explicitly closes**.
+- Added two SQLite lifecycle regression tests for successful commit/close and exception rollback/close before temporary-directory deletion; existing C-F1 synthetic/projection assertions unchanged.
+- Added focused PowerShell runner and Windows checklist/test report. On Linux CPython 3.13.5: C-F1 15/15, C-F0 15/15, C2 16/16 and persistence 6/6 PASS with `ResourceWarning` elevated to error; unchanged pure-Java suites pass.
+- No production SQLite/schema, Forge gameplay, C1/C2, Journal or GitHub changes. **Windows Python 3.13 verification and Forge/gameplay checks remain pending.**
+
+## Unreleased — C-F1 D+ Live Diagnostic Bridge (Candidate; synthetic only)
+
+- Added operator-only `/npcortex debug cplus inspect|probe <name>` to exercise the C-F1 journal asynchronously in a live Forge world without moving NPCs or changing blocks/inventory.
+- Added a bounded single-thread worker for durable journal fsync ACKs, restart fencing, world-bound log identity, fail-closed error handling and shutdown lock cleanup.
+- Added independent pure-Java worker/restart/corruption regressions and Windows in-game acceptance checklist.
+- No automatic world-effect recovery, C1/C2 ownership changes, or active Saga Engine. Forge Windows acceptance remains pending.
+
+## C+ C-F1 D+ — Staged Crash Recovery & E-ready Contracts (2026-10-22)
+
+- Added pure-Java `CPlusDurableLedger` synthetic prototype: bounded append-only checksum/hash-chained records, fsync-confirmed intent, actor epoch fencing and fail-closed log corruption handling. NOT active in Minecraft runtime.
+- Added D+ effect-aware recovery guards, partial/unknown/external-consumption outcome contract and future E-compatible event/parent/task identity.
+- Added standalone Backend SQLite v4-additive event projection and outbox contract, idempotent ACK checks and Python effect policies. No live HTTP endpoints/migration.
+- Added C-F1 synthetic Java and Python regression tests and Windows runner.
+- Preserved all original C1/C2/Follow, Inventory, backend legacy execution and commands; no world mutation or GitHub operations.
+- **Still pending:** live IO/transport/reconciliation integration, Forge build, real crash windows, real world effects, Windows gameplay and MSPT. This is a staged foundation candidate, not C-F1 final acceptance.
+
+## Previously packaged milestone history (`v0.2.2-alpha.1` and earlier)
 
 ## Unreleased — Milestone `v0.2.2-alpha.1`: C+ C-F0 Core Contracts, Ownership & Unified API (2026-10-22)
 

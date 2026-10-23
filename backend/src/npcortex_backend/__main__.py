@@ -1,4 +1,5 @@
 from .config import Settings
+from .cplus_local_auth import initialize_secret
 from .ollama import OllamaProvider
 from .service import ChatService
 from .session import SessionStore
@@ -8,6 +9,13 @@ from .world_store import WorldStore
 
 def main():
     settings = Settings.from_environment()
+    # Bootstrap before serving HTTP. This only enables local C-F1 diagnostics.
+    # A missing/invalid secret must never disable unrelated chat or Qwen APIs.
+    try:
+        source = initialize_secret()
+        print(f"C-F1 local diagnostic credential: {source} (secret never printed)", flush=True)
+    except (OSError, ValueError) as exc:
+        print(f"C-F1 local diagnostic authentication unavailable: {exc}", flush=True)
     service = ChatService(
         packs_dir=settings.packs_dir,
         model=settings.model,

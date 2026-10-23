@@ -2,6 +2,15 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+import os
+import hmac
+import ipaddress
+from .cplus_f1_bridge import DurableBridge, BridgeConflict
+from .cplus_e_graph import ReadOnlyGraph, GraphConflict
+from .cplus_e_coordinator import ExtendedCoordinator
+from .cplus_e2_dispatcher import ReadOnlyDispatcher
+from .cplus_e3_preview import MovePreviewStore
+from .cplus_local_auth import read_secret
 import re
 import sqlite3
 import time
@@ -36,6 +45,28 @@ AGENT_RESULT = re.compile(r"^/v1/agent/actions/([^/]+)/result$")
 
 
 def make_handler(service):
+    # Construct only if the bridge is configured; legacy HTTP routes remain unchanged.
+    bridge_holder = {}
+    def cplus_bridge():
+        if 'instance' not in bridge_holder:
+            bridge_holder['instance'] = DurableBridge(service._require_world_store().db_path)
+        return bridge_holder['instance']
+
+    def cplus_e_graph():
+        if "e" not in bridge_holder:
+            bridge_holder["e"] = ReadOnlyGraph(service._require_world_store().db_path)
+        return bridge_holder["e"]
+
+    def cplus_e_coordinator():
+        if "e1" not in bridge_holder:
+            bridge_holder["e1"] = ReadOnlyDispatcher(service._require_world_store().db_path)
+        return bridge_holder["e1"]
+
+    def cplus_e3_preview():
+        if "e3_g1" not in bridge_holder:
+            bridge_holder["e3_g1"] = MovePreviewStore(service._require_world_store().db_path)
+        return bridge_holder["e3_g1"]
+
     class Handler(BaseHTTPRequestHandler):
         def _json(self, status: int, payload: dict):
             raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -143,7 +174,11 @@ def make_handler(service):
         def do_POST(self):
             known_route = (self.path in (
                 "/v1/chat", "/v1/worlds", "/v1/actors", "/v1/actor-chat",
-                "/v1/dialogues", "/v1/social-runs", "/v1/agent/goals")
+                "/v1/dialogues", "/v1/social-runs", "/v1/agent/goals",
+                "/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
+                "/v1/cplus/e/preview", "/v1/cplus/e/status",
+                "/v1/cplus/e1/submit", "/v1/cplus/e1/status", "/v1/cplus/e1/queue", "/v1/cplus/e1/cancel",
+                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview")
                 or DIALOGUE_TURNS.fullmatch(self.path)
                 or DIALOGUE_CLOSE.fullmatch(self.path)
                 or SOCIAL_STEP.fullmatch(self.path)
@@ -182,7 +217,8 @@ def make_handler(service):
             except ValueError:
                 self.close_connection = True
                 return self._error(400, "invalid_request", "Invalid Content-Length")
-            if length < 1 or length > MAX_BODY:
+            max_body = 24000 if self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview") else MAX_BODY
+            if length < 1 or length > max_body:
                 self._discard_rejected_body(length)
                 return self._error(413, "request_too_large", "Request size must be 1–8192 bytes")
             self.connection.settimeout(10)
@@ -193,6 +229,86 @@ def make_handler(service):
             if not isinstance(data, dict):
                 return self._error(400, "invalid_request", "Expected JSON object")
             try:
+                if self.path in ("/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
+                "/v1/cplus/e/preview", "/v1/cplus/e/status",
+                "/v1/cplus/e1/submit", "/v1/cplus/e1/status", "/v1/cplus/e1/queue", "/v1/cplus/e1/cancel",
+                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview"):
+                    # Diagnostic-only, opt-in, local-only, shared secret required.
+                    secret = read_secret()
+                    supplied = self.headers.get("X-NPCortex-CPlus-Token", "")
+                    try:
+                        local = ipaddress.ip_address(self.client_address[0]).is_loopback
+                    except ValueError:
+                        local = False
+                    if not local or len(secret) < 24 or len(supplied) > 512 or not hmac.compare_digest(secret, supplied):
+                        return self._error(403, "forbidden", "C+ local diagnostic bridge not authorized")
+                    if self.path == "/v1/cplus/e3/preview":
+                        try:
+                            return self._json(200, cplus_e3_preview().preview(data))
+                        except GraphConflict as exc:
+                            return self._error(409, "e3_g1_preview_conflict", str(exc))
+                    if self.path.startswith("/v1/cplus/e1/") or self.path.startswith("/v1/cplus/e2/"):
+                        try:
+                            coord = cplus_e_coordinator()
+                            if self.path == "/v1/cplus/e2/dispatch":
+                                if set(data) != {"snapshot"}:
+                                    return self._error(400,"invalid_request","server read-only snapshot required")
+                                return self._json(200,coord.dispatch(data["snapshot"]))
+                            if self.path == "/v1/cplus/e2/verify":
+                                if set(data) != {"task_id","lease_id","generation","snapshot"}:
+                                    return self._error(400,"invalid_request","fenced read-only verification required")
+                                return self._json(200,coord.verify(data["task_id"],data["lease_id"],
+                                    data["generation"],data["snapshot"]))
+                            if self.path == "/v1/cplus/e1/submit":
+                                if set(data) != {"request_id", "requester_id", "snapshot", "plan"}:
+                                    return self._error(400,"invalid_request","typed E1 submission required")
+                                return self._json(200,coord.submit_task(data["request_id"],
+                                    data["requester_id"],data["snapshot"],data["plan"]))
+                            if self.path == "/v1/cplus/e1/status":
+                                if set(data) != {"task_id"}:
+                                    return self._error(400,"invalid_request","task_id required")
+                                return self._json(200,coord.task_status(data["task_id"]))
+                            if self.path == "/v1/cplus/e1/queue":
+                                if set(data) != {"world_id", "actor_id"}:
+                                    return self._error(400,"invalid_request","world_id and actor_id required")
+                                return self._json(200,coord.task_queue(data["world_id"],data["actor_id"]))
+                            if self.path == "/v1/cplus/e1/cancel":
+                                if set(data) != {"task_id", "requester_id"}:
+                                    return self._error(400,"invalid_request","requester_id required")
+                                return self._json(200,coord.cancel_task(data["task_id"],data["requester_id"]))
+                        except GraphConflict as exc:
+                            return self._error(409,"e1_conflict",str(exc))
+                    if self.path in ("/v1/cplus/e/preview", "/v1/cplus/e/status"):
+                        try:
+                            if self.path == "/v1/cplus/e/status":
+                                if set(data) != {"task_id"}:
+                                    return self._error(400, "invalid_request", "task_id required")
+                                return self._json(200, cplus_e_graph().status(data["task_id"]))
+                            if set(data) != {"request_id", "snapshot"}:
+                                return self._error(400, "invalid_request", "request_id and snapshot required")
+                            queued = cplus_e_graph().submit(data["request_id"], data["snapshot"])
+                            return self._json(200, cplus_e_graph().advance(queued["task_id"]))
+                        except GraphConflict as exc:
+                            return self._error(409, "e_preview_conflict", str(exc))
+                    if self.path == "/v1/cplus/f1/events":
+                        try:
+                            return self._json(200, cplus_bridge().receive(data))
+                        except BridgeConflict as ex:
+                            return self._json(409, {"code": "bridge_conflict", "error": str(ex),
+                                                    "expected_sequence": ex.expected})
+                    if self.path == "/v1/cplus/f1/confirm":
+                        try:
+                            return self._json(200, cplus_bridge().confirm(data))
+                        except BridgeConflict as ex:
+                            return self._error(409, "bridge_conflict", str(ex))
+                    if set(data) != {"world_id"}:
+                        return self._error(400, "invalid_request", "Expected world_id only")
+                    try:
+                        if self.path == "/v1/cplus/f1/recovery":
+                            return self._json(200, cplus_bridge().recovery(data["world_id"]))
+                        return self._json(200, cplus_bridge().status(data["world_id"]))
+                    except BridgeConflict as ex:
+                        return self._error(400, "invalid_request", str(ex))
                 if self.path == "/v1/agent/goals":
                     required = {"world_id", "dimension_id", "actor_id", "objective", "success_criteria"}
                     if not required.issubset(data) or not set(data).issubset(required | {"max_decisions", "goal_id"}):
@@ -300,7 +416,7 @@ def serve(service, host="127.0.0.1", port=8765):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     with make_http_server(service, host, port) as httpd:
         print(f"NPCortex backend listening at http://{host}:{port}", flush=True)
-        print("Local prototype: no authentication; do not expose publicly.", flush=True)
+        print("Local prototype: legacy chat routes are unauthenticated; do not expose publicly. C-F1 diagnostic bridge requires a local credential.", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
