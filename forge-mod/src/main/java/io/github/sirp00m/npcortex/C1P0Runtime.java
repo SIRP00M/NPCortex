@@ -88,10 +88,12 @@ final class C1P0Runtime {
                         C1RotationState.legacy(commander.getYRot()), true);
         // Add the avatar first, then persist the ACTIVE intent. If spawn fails,
         // the durable record cannot become a phantom "active" actor.
+        UUID spawnedProfile = prior == null ? null : prior.profileId();
         try {
             if (prior == null) {
                 // Persisted profile name is generated exactly once by ensure().
                 C1IdentityData.Entry saved = store.ensure(name, dimension, x, y, z, commander.getYRot());
+                spawnedProfile = saved.profileId();
                 spawnExisting(server, saved);
                 return "Spawn attempted: " + saved.character() + " / " + saved.profileId()
                         + " (verify rendering on client)";
@@ -104,7 +106,9 @@ final class C1P0Runtime {
             LOG.error("NPCortex C1-P0 spawn failed for {}", name, ex);
             // For new records, the identity remains stable for retry but should
             // NOT be restored without manual intervention after failure.
-            store.deactivate(name);
+            // Deactivate only the record whose profile this attempt spawned.
+            C1IdentityData.Entry current = store.find(name);
+            if (current != null && current.profileId().equals(spawnedProfile)) store.deactivate(name);
             return "Spawn FAILED: " + ex.getClass().getSimpleName() + ": " + ex.getMessage();
         }
     }
@@ -143,6 +147,8 @@ final class C1P0Runtime {
                 viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(entry.profileId())));
             }
             if (!avatar.isRemoved()) avatar.discard();
+            // afterSpawn may fail after LIVE.put; drop only this attempt's own entry, never a replacement.
+            if (LIVE.get(entry.profileId()) == avatar) LIVE.remove(entry.profileId());
             throw ex;
         }
     }

@@ -26,7 +26,7 @@ final class C2CancellationRecovery {
     private C2CancellationRecovery() {}
 
     static void begin(C2AgentRuntime.Run run, String reason) {
-        // The caller released the exclusive active run and requested C1 stop.
+        // The caller released the exclusive active run; any C1 motion stop is the caller's, and conditional.
         C2ActionJournal.get(run.server).record(run.actor,run.goal,run.action,
                 "CANCEL_PENDING",reason.substring(0,Math.min(reason.length(),180)));
         RETRY_AT.remove(run.actor);

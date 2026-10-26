@@ -34,6 +34,15 @@ public final class ChatBridge {
         return URI.create(raw + path);
     }
 
+    /** Sends the shared local secret when one exists; the backend only checks it when NPCORTEX_REQUIRE_TOKEN is on. Never logged. */
+    private static HttpRequest.Builder withLocalToken(HttpRequest.Builder builder) {
+        try {
+            return builder.header("X-NPCortex-CPlus-Token", io.github.sirp00m.npcortex.cplus.CPlusLocalAuth.readToken());
+        } catch (java.io.IOException | RuntimeException ignored) {
+            return builder;
+        }
+    }
+
     private static JsonObject payload(HttpResponse<String> response) {
         try {
             JsonElement parsed = JsonParser.parseString(response.body());
@@ -95,7 +104,7 @@ public final class ChatBridge {
             body.addProperty("character_id", characterId);
             body.addProperty("player_id", playerId);
             body.addProperty("message", message);
-            HttpRequest request = HttpRequest.newBuilder(endpoint("/v1/chat"))
+            HttpRequest request = withLocalToken(HttpRequest.newBuilder(endpoint("/v1/chat")))
                     .header("Content-Type", "application/json")
                     .timeout(Duration.ofSeconds(95))
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
@@ -124,7 +133,7 @@ public final class ChatBridge {
             if (encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 8192) {
                 throw new IllegalArgumentException("C2 request is too large");
             }
-            HttpRequest request = HttpRequest.newBuilder(endpoint(path))
+            HttpRequest request = withLocalToken(HttpRequest.newBuilder(endpoint(path)))
                     .header("Content-Type", "application/json")
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .POST(HttpRequest.BodyPublishers.ofString(encoded))

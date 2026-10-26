@@ -4,9 +4,17 @@
 
 NPCortex brings together custom player-based NPCs, local **Ollama + Qwen** dialogue, terrain-aware movement, Follow Player, and an experimental system for recording and coordinating NPC tasks. It is built for developers and modders who want to expand NPC behavior without depending on a paid cloud AI API.
 
-[Changelog](CHANGELOG.md) · [Latest patch notes](docs/patch-notes/v0.2.4-alpha.1.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+[Changelog](CHANGELOG.md) · [Latest patch notes](docs/patch-notes/v0.2.4-alpha.2.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development preview: `v0.2.4-alpha.1`.** This is source code for testing and collaboration, **not a stable release**. M04's read-only safety checks are **not** permission to mine, collect items or run autonomous world-changing tasks. Please test on disposable/copy worlds.
+> **Development preview: `v0.2.4-alpha.2`.** This is source code for testing and collaboration, **not a stable release**. M04's read-only safety checks are **not** permission to mine, collect items or run autonomous world-changing tasks. Please test on disposable/copy worlds.
+
+## Latest update — security and lifecycle reliability
+
+This update introduces **optional token protection for legacy backend routes** (`NPCORTEX_REQUIRE_TOKEN=1`). It is **off by default** to preserve existing local chat/API clients; `/health` remains available without a token. When enabled, legacy API requests require the shared local credential used by the C+ bridge. The Forge chat and C2 clients now attach that credential when available.
+
+It also tightens cleanup after a failed player-avatar spawn so an unrelated/replacement NPC is not deactivated accidentally, and removes a redundant movement-stop call from the server-shutdown path after the lifecycle coordinator has already cleared C1 motion. These are targeted hardening changes, **not a guarantee of comprehensive shutdown or multiplayer correctness**.
+
+The backend remains intended for **loopback-only use**. Enabling optional legacy authentication does not make it safe to expose publicly. If you enable it, legacy PowerShell or other external API clients need the same local credential; older scripts that do not send it may receive HTTP 403. See the [patch notes](docs/patch-notes/v0.2.4-alpha.2.md).
 
 ## What works today
 

@@ -1,6 +1,24 @@
 # Changelog
 
-NPCortex follows **development-milestone pre-release versioning**. Entries describe source milestones, not stable releases or confirmed full Quality Gates. Older milestones remain available in the [GitHub commit history](https://github.com/SIRP00M/NPCortex/commits/main).
+NPCortex follows **development-milestone pre-release versioning**. The current source preview is **`v0.2.4-alpha.2`** (Forge) / **`0.2.4a2`** (Python distribution). Entries describe source milestones, not stable releases or confirmed full Quality Gates. Older milestones remain available in the [GitHub commit history](https://github.com/SIRP00M/NPCortex/commits/main).
+
+## Unreleased — `v0.2.4-alpha.2` · Optional API authentication and lifecycle fixes (2026-10-26)
+
+**Compared against GitHub `main` commit `9de4ef4` (`v0.2.4-alpha.1`).** This is a targeted follow-up in the **same** `0.2.4` milestone, not a new stable release.
+
+### Added / changed
+
+- **Optional local token for legacy HTTP APIs:** `NPCORTEX_REQUIRE_TOKEN=1` requires the existing shared C+ loopback credential on legacy GET/POST API routes. It defaults **OFF** for backward compatibility, and `/health` stays unauthenticated. Unauthorized requests fail with HTTP 403. The existing C+ routes continue to require their credential.
+- **Forge client compatibility:** the existing chat and C2 backend clients attempt to send the shared token with requests; they omit it if the local credential is unavailable. Token values must not be logged or committed.
+- **Spawn-failure identity safety:** a failed avatar spawn removes its `LIVE` entry only if the entry still refers to the attempted avatar; persisted active state is deactivated only when the attempted profile identity still matches.
+- **Shutdown cleanup:** remove a redundant C1 motion-stop call from C2 shutdown processing after the earlier lifecycle cleanup; retain pending-cancellation reconciliation. This does not prove all shutdown paths safe.
+- Added `backend/tests/test_legacy_token.py` covering disabled/enabled auth, invalid credentials and legacy endpoints.
+
+### Compatibility, verification and limits
+
+- When enabled, non-Forge legacy clients and older Windows smoke scripts must send `X-NPCortex-CPlus-Token`; otherwise they can receive 403. Do not enable the flag in existing client workflows without checking this compatibility change.
+- The G4 Windows single-player passes documented in the previous milestone remain **historical user-reported evidence**. No dedicated-server shutdown, F3 spawn-failure fault injection, Java client-to-flag-enabled backend gameplay, multiplayer, or M04 mining/pickup acceptance is inferred from these source changes.
+- This packaging pass changed version metadata and documentation only in addition to retaining the supplied five implementation-file edits and one new test; no other runtime logic was modified. No GitHub operation was performed.
 
 ## Unreleased — `v0.2.4-alpha.1` · Guarded movement, recovery and M04 safety foundation (2026-10-26)
 

@@ -717,7 +717,8 @@ final class C2AgentRuntime {
             // On a normal Save/Quit, no old movement may execute on rejoin.
             // If the C0 action exists, fence it with the SAME durable
             // CANCEL_PENDING reconciliation as operator cancellation.
-            if (run.moved && run.avatar()!=null) C1P1MotionRuntime.stop(server,run.name);
+            // No C1 motion stop here: the coordinator already ran C1P0Runtime.onServerStopping,
+            // which cleared C1 motion sessions and LIVE, so run.avatar() is null on this path.
             run.replanning.stop();
             if (run.action!=null && ACTIVE.release(run.actor,run)) {
                 C2CancellationRecovery.begin(run,"S4 server shutdown; reconcile C0 before new movement");

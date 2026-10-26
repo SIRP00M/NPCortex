@@ -59,6 +59,11 @@ def _host_header_allowed(raw):
     return bool(host) and is_loopback_host(host)
 
 
+def token_required():
+    """Phase 1 of legacy-route auth: opt-in via NPCORTEX_REQUIRE_TOKEN; default stays off for compatibility."""
+    return os.environ.get("NPCORTEX_REQUIRE_TOKEN", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _is_json_content_type(raw):
     return (raw or "").split(";", 1)[0].strip().lower() == "application/json"
 
@@ -178,6 +183,25 @@ def make_handler(service):
             LOG.exception("Unhandled backend error")
             return self._error(500, "internal_error", "Internal server error")
 
+        def _token_ok(self):
+            """Loopback client plus the shared local secret (same credential and header as the C+ bridge)."""
+            secret = read_secret()
+            supplied = self.headers.get("X-NPCortex-CPlus-Token", "")
+            try:
+                local = ipaddress.ip_address(self.client_address[0]).is_loopback
+            except ValueError:
+                local = False
+            # Compare bytes: str compare_digest raises TypeError on non-ASCII header text.
+            return bool(local and len(secret) >= 24 and len(supplied) <= 512
+                        and hmac.compare_digest(secret.encode("utf-8"), supplied.encode("utf-8", "replace")))
+
+        def _legacy_auth_ok(self):
+            if not token_required() or self._token_ok():
+                return True
+            self.close_connection = True
+            self._error(403, "forbidden", "Local token required (NPCORTEX_REQUIRE_TOKEN is enabled)")
+            return False
+
         def _host_ok(self):
             if _host_header_allowed(self.headers.get("Host")):
                 return True
@@ -190,6 +214,8 @@ def make_handler(service):
                 return
             if self.path == "/health":
                 return self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
+            if not self._legacy_auth_ok():
+                return
             try:
                 agent_goal = AGENT_GOAL_GET.fullmatch(self.path)
                 if agent_goal:
@@ -276,6 +302,8 @@ def make_handler(service):
                 return self._error(400, "invalid_request", "Invalid JSON or incomplete request body")
             if not isinstance(data, dict):
                 return self._error(400, "invalid_request", "Expected JSON object")
+            if not self.path.startswith("/v1/cplus/") and not self._legacy_auth_ok():
+                return
             try:
                 if self.path in ("/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
                 "/v1/cplus/e/preview", "/v1/cplus/e/status",
@@ -284,13 +312,7 @@ def make_handler(service):
                 "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
                 "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack"):
                     # Diagnostic-only, opt-in, local-only, shared secret required.
-                    secret = read_secret()
-                    supplied = self.headers.get("X-NPCortex-CPlus-Token", "")
-                    try:
-                        local = ipaddress.ip_address(self.client_address[0]).is_loopback
-                    except ValueError:
-                        local = False
-                    if not local or len(secret) < 24 or len(supplied) > 512 or not hmac.compare_digest(secret, supplied):
+                    if not self._token_ok():
                         return self._error(403, "forbidden", "C+ local diagnostic bridge not authorized")
                     if self.path in ("/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
                 "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack"):
@@ -489,7 +511,10 @@ def serve(service, host="127.0.0.1", port=8765):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     with make_http_server(service, host, port) as httpd:
         print(f"NPCortex backend listening at http://{host}:{port}", flush=True)
-        print("Local prototype: legacy chat routes are unauthenticated; do not expose publicly. C-F1 diagnostic bridge requires a local credential.", flush=True)
+        if token_required():
+            print("Legacy routes require the local token (NPCORTEX_REQUIRE_TOKEN enabled); /health stays open.", flush=True)
+        else:
+            print("Local prototype: legacy chat routes are unauthenticated (set NPCORTEX_REQUIRE_TOKEN=1 to require the local token). C-F1 diagnostic bridge requires a local credential.", flush=True)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
