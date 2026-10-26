@@ -14,11 +14,7 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -35,8 +31,6 @@ import java.util.concurrent.TimeUnit;
  * server thread. Authenticated HTTP runs in a bounded background executor.
  */
 final class CPlusECoordinatorRuntime {
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2)).build();
     private static final Map<MinecraftServer,ExecutorService> WORKERS = new IdentityHashMap<>();
     private record ReadTicket(String taskId,String leaseId,int generation,String worldId,String actorId,String attemptId) {}
     // Volatile operator-side context. Deliberately lost on game restart: old
@@ -344,17 +338,7 @@ final class CPlusECoordinatorRuntime {
         message(src,"E request submitted asynchronously (read-only, no world mutation)");return 1;
     }
     private static String send(URI uri,String token,String json){
-        try {
-            HttpRequest request=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(5))
-                    .header("Content-Type","application/json")
-                    .header("X-NPCortex-CPlus-Token",token)
-                    .POST(HttpRequest.BodyPublishers.ofString(json,StandardCharsets.UTF_8)).build();
-            HttpResponse<String> response=HTTP.send(request,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if(response.statusCode()!=200 || response.body().length()>24000)
-                throw new IOException("backend rejected E coordinator request");
-            return response.body();
-        }catch(IOException ex){throw new IllegalStateException("E coordinator transport failed",ex);}
-        catch(InterruptedException ex){Thread.currentThread().interrupt();throw new IllegalStateException("interrupted",ex);}
+        return io.github.sirp00m.npcortex.cplus.CPlusTransport.exchange(uri,token,json,5,24000);
     }
     static void onServerStopping(ServerStoppingEvent event){
         ExecutorService executor=WORKERS.remove(event.getServer());

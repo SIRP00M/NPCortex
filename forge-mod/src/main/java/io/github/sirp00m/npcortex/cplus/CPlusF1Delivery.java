@@ -2,14 +2,10 @@ package io.github.sirp00m.npcortex.cplus;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.time.Duration;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -26,8 +22,6 @@ public final class CPlusF1Delivery {
     private CPlusF1Delivery() {}
     public record Outcome(String state, long acknowledgedSequence, int newlyAcknowledged,
                           long remainingEvents, String reason) {}
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2)).build();
     private static final Pattern CURSOR = Pattern.compile("([0-9]{1,19}) ([0-9a-f]{64})\\n");
     /** Immutable worker-thread journal snapshot; no world mutation or live ledger access. */
     public record Source(List<CPlusDurableLedger.LedgerRecord> records) {
@@ -63,7 +57,7 @@ public final class CPlusF1Delivery {
         URI uri = URI.create(raw);
         String host=uri.getHost();
         if (!"http".equalsIgnoreCase(uri.getScheme()) || host==null
-                || !(host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("[::1") || host.equals("::1"))
+                || !(host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("[::1]") || host.equals("::1"))
                 || uri.getRawUserInfo()!=null || uri.getRawPath()!=null && !uri.getRawPath().isEmpty()
                 || uri.getRawQuery()!=null || uri.getRawFragment()!=null)
             throw new IllegalArgumentException("C-F1 transport requires a loopback HTTP origin with no path");
@@ -120,17 +114,8 @@ public final class CPlusF1Delivery {
         String body="{\"world_id\":\""+e.worldId()+"\",\"sequence\":"+e.sequence()
                 +",\"event_id\":\""+e.eventId()+"\",\"receipt_id\":\""
                 +CPlusF1Wire.expectedReceipt(item)+"\"}";
-        HttpRequest req=HttpRequest.newBuilder(base.resolve("/v1/cplus/f1/confirm"))
-                .header("Content-Type","application/json")
-                .header("X-NPCortex-CPlus-Token",token)
-                .timeout(Duration.ofSeconds(3))
-                .POST(HttpRequest.BodyPublishers.ofString(body,StandardCharsets.UTF_8)).build();
-        HttpResponse<String> resp;
-        try {resp=HTTP.send(req,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));}
-        catch(InterruptedException e1){Thread.currentThread().interrupt();throw new IOException("ACK confirmation interrupted",e1);}
-        if(resp.statusCode()!=200 || resp.body().length()>1024
-                || !"CONFIRMED".equals(responseField(resp.body(),"status"))
-                || responseSequence(resp.body())!=e.sequence())
+        String response=CPlusTransport.post(base.resolve("/v1/cplus/f1/confirm"),token,body,3,1024);
+        if (!"CONFIRMED".equals(responseField(response,"status")) || responseSequence(response)!=e.sequence())
             throw new IOException("backend did not durably confirm receipt; retry confirmation later");
     }
     /** Compatibility helper for existing pure Java tests, never used by the live network worker. */
@@ -166,17 +151,7 @@ public final class CPlusF1Delivery {
             String body=CPlusF1Wire.json(item);
             if (body.getBytes(StandardCharsets.UTF_8).length>4096)
                 throw new IOException("C-F1 wire payload exceeds budget");
-            HttpRequest request=HttpRequest.newBuilder(base.resolve("/v1/cplus/f1/events"))
-                    .header("Content-Type","application/json")
-                    .header("X-NPCortex-CPlus-Token",token)
-                    .timeout(Duration.ofSeconds(3))
-                    .POST(HttpRequest.BodyPublishers.ofString(body,StandardCharsets.UTF_8)).build();
-            HttpResponse<String> resp;
-            try { resp=HTTP.send(request,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)); }
-            catch(InterruptedException e) {Thread.currentThread().interrupt();throw new IOException("C-F1 delivery interrupted; retry remains safe",e);}
-            catch(IOException e) {throw new IOException("backend offline or ACK lost; keep pending",e);}
-            String ack=resp.body();
-            if (resp.statusCode()!=200 || ack.length()>1024) throw new IOException("backend delivery rejected HTTP "+resp.statusCode()+"; HOLD");
+            String ack=CPlusTransport.post(base.resolve("/v1/cplus/f1/events"),token,body,3,1024);
             if (!"ACKED".equals(responseField(ack,"status"))
                     || !event.eventId().toString().equals(responseField(ack,"event_id"))
                     || event.sequence()!=responseSequence(ack)
@@ -198,20 +173,11 @@ public final class CPlusF1Delivery {
         if (!"READY".equals(local.state()))
             return new RecoveryAudit("HOLD",source.lastSequence(),-1,-1,local.reason());
         String body="{\"world_id\":\""+source.worldId()+"\"}";
-        HttpRequest request=HttpRequest.newBuilder(base.resolve("/v1/cplus/f1/status"))
-                .header("Content-Type","application/json")
-                .header("X-NPCortex-CPlus-Token",token)
-                .timeout(Duration.ofSeconds(3))
-                .POST(HttpRequest.BodyPublishers.ofString(body,StandardCharsets.UTF_8)).build();
-        HttpResponse<String> response;
-        try {response=HTTP.send(request,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));}
-        catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException("recovery audit interrupted",e);}
-        if(response.statusCode()!=200 || response.body().length()>4096)
-            throw new IOException("backend recovery status unavailable, HOLD");
-        if(!source.worldId().toString().equals(responseField(response.body(),"world_id")))
+        String response=CPlusTransport.post(base.resolve("/v1/cplus/f1/status"),token,body,3,4096);
+        if(!source.worldId().toString().equals(responseField(response,"world_id")))
             return new RecoveryAudit("HOLD",source.lastSequence(),local.checkpoint(),-1,"backend world identity mismatch");
-        long remote=responseSequence(response.body());
-        String hash=responseField(response.body(),"record_hash");
+        long remote=responseSequence(response);
+        String hash=responseField(response,"record_hash");
         if(!HEX.matcher(hash).matches() || !source.matches(remote,hash))
             return new RecoveryAudit("HOLD",source.lastSequence(),local.checkpoint(),remote,"backend checkpoint/chain mismatch");
         if(remote<local.checkpoint())

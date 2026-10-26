@@ -78,5 +78,6 @@ final class C1VanillaLifecycleCoordinator {
         C1P0Runtime.onServerStopping(event);
         C1P1CLifecycleRuntime.onServerStopping(event);
         C2AgentRuntime.beforeServerStop(event.getServer());
+        CPlusE3G3Runtime.onServerStopping(event);
     }
 }

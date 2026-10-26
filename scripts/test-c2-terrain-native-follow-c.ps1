@@ -16,7 +16,7 @@ try {
         'C2BPlusCorridor','C2F2SafeShortcut','C2RegionGraph','C2HierarchicalPlanner','C2WaypointExecution',
         'C2ReplanningPolicy','C2S4RecoveryPolicy','C2FollowPolicy','C2FollowPlanner',
         'C2FollowAlternatives','C2TerrainNativeFollowPlanner','C2F2Locomotion','C1F2ContinuousWalk',
-        'C1F2MotionTelemetry','C1F2AdaptiveSteering','C1VanillaMoveControlAdapter',
+        'C1F2MotionTelemetry','C1F2AdaptiveSteering','C1VanillaMoveControlAdapter','C1F2TrajectoryArrival',
         'C1Persistent3DChain',
         'C1LocomotionPresentation','C1ClientRotationBlend','C1F2PreflightPolicy')
     $suites=@('C2TurnAwareSafeSmoothingBSelfTest','C2GeneralizedTraversalCSelfTest',

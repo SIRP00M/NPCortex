@@ -26,6 +26,13 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(CPlusF1DiagnosticRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusEPreviewRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusECoordinatorRuntime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(CPlusE3G2Runtime::onServerStopping);
+        // TEMP Test-5 acceptance harness only.
+        MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(CPlusM03Runtime::tick); // TEMP M03
+        MinecraftForge.EVENT_BUS.addListener(CPlusM03Runtime::stopping); // TEMP M03
+
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogin);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStartTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStopTracking);
@@ -43,6 +50,7 @@ public final class NPCortex {
                         .requires(source -> source.hasPermission(2))
                         .then(C2Commands.build())
                         .then(CPlusF1DiagnosticRuntime.debug())
+                        .then(CPlusM04Runtime.commands())
                         .then(Commands.literal("c1")
                                 .then(C1P1CLifecycleCommands.build())
                                 .then(C1P1CLifecycleCommands.damage())
@@ -56,6 +64,7 @@ public final class NPCortex {
                         .then(C1P1InventoryCommands.ledger())
                         .then(C1P1InventoryCommands.give())
                         .then(C1P1InventoryCommands.equip())
+                        .then(C1P1InventoryCommands.unequip())
                         .then(C1P1InventoryCommands.clear())
                         .then(C1P1InventoryCommands.copyHand())
                         .then(Commands.literal("spawn")

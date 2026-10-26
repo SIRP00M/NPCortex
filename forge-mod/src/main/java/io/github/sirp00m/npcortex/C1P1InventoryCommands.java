@@ -60,6 +60,16 @@ final class C1P1InventoryCommands {
                         .then(Commands.argument("slot", IntegerArgumentType.integer(0, 35)).then(position)));
     }
 
+    static LiteralArgumentBuilder<CommandSourceStack> unequip() {
+        var destination = Commands.argument("destination", IntegerArgumentType.integer(0, 35))
+                .executes(ctx -> unequip(ctx, UUID.randomUUID()))
+                .then(Commands.argument("tx", StringArgumentType.word())
+                        .executes(ctx -> unequip(ctx, transaction(ctx))));
+        return Commands.literal("unequip")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument("equipment", StringArgumentType.word()).then(destination)));
+    }
+
     static LiteralArgumentBuilder<CommandSourceStack> copyHand() {
         var slot = Commands.argument("slot", IntegerArgumentType.integer(0, 40))
                 .executes(ctx -> copyHand(ctx, UUID.randomUUID()))
@@ -102,6 +112,13 @@ final class C1P1InventoryCommands {
         if (tx == null) return reply(ctx, "INVALID transaction UUID");
         return reply(ctx, C1P1InventoryRuntime.equip(ctx.getSource().getServer(), name(ctx),
                 IntegerArgumentType.getInteger(ctx, "slot"), StringArgumentType.getString(ctx, "position"), tx));
+    }
+
+    private static int unequip(CommandContext<CommandSourceStack> ctx, UUID tx) {
+        if (tx == null) return reply(ctx, "INVALID transaction UUID");
+        return reply(ctx, C1P1InventoryRuntime.unequip(ctx.getSource().getServer(), name(ctx),
+                StringArgumentType.getString(ctx, "equipment"),
+                IntegerArgumentType.getInteger(ctx, "destination"), tx));
     }
 
     private static int copyHand(CommandContext<CommandSourceStack> ctx, UUID tx) throws CommandSyntaxException {

@@ -29,6 +29,15 @@ final class C2AgentRuntime {
     private static long serverTicks;
     private static long lastPlannerTick = -1;
 
+    // G3 current-process-only C0+C1+C2 terminal witness. Never rebuild from
+    // SavedData text after restart; old HOLD remains fenced for manual audit.
+    record TerminalWitness(UUID actor, UUID goal, UUID action, UUID world, String dimension,
+            double x, double y, double z, String c1Phase, boolean c0Verified) {}
+    private static final java.util.Map<UUID,TerminalWitness> VERIFIED_WITNESSES = new java.util.HashMap<>();
+    static TerminalWitness terminalWitness(UUID actor,UUID goal) {
+        TerminalWitness witness=VERIFIED_WITNESSES.get(actor);
+        return witness!=null && witness.goal().equals(goal) ? witness : null;
+    }
     static final class Run {
         final MinecraftServer server;
         final String name;
@@ -73,9 +82,32 @@ final class C2AgentRuntime {
 
     /** Exposed only to journal recovery to avoid reconciling an active C0 owner. */
     static boolean hasActiveActor(UUID actor) { return ACTIVE.containsKey(actor); }
+    static boolean hasActiveGoal(UUID actor, UUID goal) {
+        Run current=ACTIVE.get(actor);
+        return current!=null && current.goal.equals(goal);
+    }
 
     static String start(MinecraftServer server, String name, double x, double y, double z) {
         return start(server,name,x,y,z,C2MoveGeometry.DEFAULT_TOLERANCE);
+    }
+
+    // G2 typed admission: never infer success from a human-readable message.
+    // The existing navigate() is the single authoritative planner/owner; this
+    // wrapper observes its *new* C2 scheduler-owned run on the server thread.
+    record NavigationAdmission(boolean accepted, UUID goalId, String detail) {}
+    static NavigationAdmission guardedNavigate(MinecraftServer server,String name,int x,double feetY,int z) {
+        C1IdentityData.Entry id=C1IdentityData.get(server).find(name);
+        UUID before=null;
+        if(id!=null) {
+            Run existing=ACTIVE.get(id.actorId());
+            if(existing!=null)before=existing.goal;
+        }
+        String result=navigate(server,name,x,feetY,z);
+        Run live=id==null?null:ACTIVE.get(id.actorId());
+        boolean accepted=live!=null && !live.goal.equals(before)
+                && live.route!=null && live.world.equals(C1IdentityData.get(server).worldId())
+                && live.name.equals(name);
+        return new NavigationAdmission(accepted,accepted?live.goal:null,result);
     }
 
     static String navigate(MinecraftServer server,String name,int x,double feetY,int z) {
@@ -148,6 +180,7 @@ final class C2AgentRuntime {
         if (C1P1MotionRuntime.c2Receipt(id.profileId()).active()) return "C1 movement busy";
         Run run = new Run(server,id,ids.worldId(),x,y,z,tolerance,route);
         if (!ACTIVE.claim(run.actor,run)) return "C2 scheduler rejected request";
+        VERIFIED_WITNESSES.remove(run.actor); // never use evidence from an older goal
         EVENTS.publish(C2Events.Kind.REQUESTED,run.actor,run.goal,null,"move_to");
         write(run, "REQUESTED", "Waiting for C0 identity registration");
         JsonObject world = new JsonObject();
@@ -188,7 +221,19 @@ final class C2AgentRuntime {
         return "C2 journal reset (does NOT resolve any pending C0 backend action). Inspect old goal before retry.";
     }
 
+    /** G3: cancel ONLY this C2 goal; never fall through to Follow/unfollow. */
+    static boolean cancelGuardedGoal(MinecraftServer server,String name,UUID expectedGoal) {
+        if(!server.isSameThread() || expectedGoal==null)return false;
+        C1IdentityData.Entry id=C1IdentityData.get(server).find(name);
+        if(id==null)return false;
+        Run current=ACTIVE.get(id.actorId());
+        if(current==null || !current.goal.equals(expectedGoal))return false;
+        cancel(server,name);
+        return true; // backend release still requires C0 terminal reconciliation
+    }
+
     static String cancel(MinecraftServer server, String name) {
+        ServerThread.require(server, "C2 cancel");
         C1IdentityData.Entry id = C1IdentityData.get(server).find(name);
         if (id == null) return "Unknown NPC: " + name;
         Run run = ACTIVE.get(id.actorId());
@@ -624,6 +669,19 @@ final class C2AgentRuntime {
     private static void finish(Run run,boolean success,String detail) {
         if (!ACTIVE.release(run.actor,run)) return;
         run.replanning.stop();
+        if (success && run.action!=null && run.isAlive()) {
+            C1P1MotionRuntime.MotionReceipt receipt=C1P1MotionRuntime.c2Receipt(run.profile);
+            C1PlayerAvatar avatar=run.avatar();
+            // Evidence is issued ONLY from the verified C0 response path AND
+            // completed C1 movement, after C2 releases its active run.
+            if (avatar!=null && !receipt.active() && "COMPLETE".equals(receipt.phase())
+                    && C2MoveGeometry.near(avatar.getX(),avatar.getY(),avatar.getZ(),
+                            run.tx,run.ty,run.tz,run.tolerance)) {
+                VERIFIED_WITNESSES.put(run.actor,new TerminalWitness(run.actor,run.goal,
+                        run.action,run.world,run.dimension,avatar.getX(),avatar.getY(),
+                        avatar.getZ(),receipt.phase(),true));
+            }
+        }
         write(run,success?"COMPLETED":"FAILED",detail);
         EVENTS.publish(success?C2Events.Kind.VERIFIED:C2Events.Kind.REJECTED,
                 run.actor,run.goal,run.action,detail);
@@ -634,6 +692,7 @@ final class C2AgentRuntime {
     private static void fail(Run run,String detail) { finish(run,false,detail); }
 
     private static void interrupt(Run run,String detail) {
+        ServerThread.require(run.server, "C2 interrupt");
         if (!ACTIVE.release(run.actor,run)) return;
         run.replanning.stop();
         if (run.action!=null) {
@@ -652,6 +711,7 @@ final class C2AgentRuntime {
     }
 
     static void beforeServerStop(MinecraftServer server) {
+        ServerThread.require(server, "C2 server stop");
         for (Run run : java.util.List.copyOf(ACTIVE.values())) {
             if (run.server!=server) continue;
             // On a normal Save/Quit, no old movement may execute on rejoin.
@@ -667,6 +727,7 @@ final class C2AgentRuntime {
         }
         C2CancellationRecovery.beforeStop();
         serverTicks=0;
+        VERIFIED_WITNESSES.clear();
         lastPlannerTick=-1;
         EVENTS.clear();
     }

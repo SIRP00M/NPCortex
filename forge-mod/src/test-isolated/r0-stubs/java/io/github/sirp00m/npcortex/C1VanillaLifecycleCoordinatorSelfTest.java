@@ -58,9 +58,9 @@ public final class C1VanillaLifecycleCoordinatorSelfTest {
         reset(); C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
         eq("motionDetach", events());
         reset(); C1VanillaLifecycleCoordinator.onServerTick(new TickEvent.ServerTickEvent());
-        eq("networkTick,motionTick,deathTick", events());
+        eq("networkTick,motionTick,deathTick,c2Tick,followTick", events());
         reset(); C1VanillaLifecycleCoordinator.onServerStopping(new ServerStoppingEvent());
-        eq("networkStop,deathStop", events());
+        eq("followStop,networkStop,deathStop,c2Stop,g3Stop", events());
         System.out.println("PASS R0 Coordinator Test Doubles: " + assertions + " assertions");
     }
 }
@@ -98,4 +98,15 @@ class C1P1CLifecycleRuntime {
 }
 class C1P1InventoryRuntime {
     static void restore(MinecraftServer s, C1PlayerAvatar a) { C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("inventoryRestore"); }
+}
+class C2AgentRuntime {
+    static void onServerTick(TickEvent.ServerTickEvent e){C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("c2Tick");}
+    static void beforeServerStop(MinecraftServer s){C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("c2Stop");}
+}
+class C2FollowRuntime {
+    static void onServerTick(TickEvent.ServerTickEvent e){C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("followTick");}
+    static void beforeServerStop(MinecraftServer s){C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("followStop");}
+}
+class CPlusE3G3Runtime {
+    static void onServerStopping(ServerStoppingEvent e){C1VanillaLifecycleCoordinatorSelfTest.EVENTS.add("g3Stop");}
 }

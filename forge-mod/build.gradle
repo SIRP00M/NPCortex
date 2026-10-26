@@ -34,3 +34,46 @@ dependencies {
 }
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// E3-D G2 Fix #1: run real Java reserve/report identity checks independently
+// of launching Minecraft. Does not perform any world mutation.
+tasks.register('verifyG2Identity', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusE3G2IdentitySelfTest'
+}
+
+// Integrated First World Action — G3-1 dry-run only. Does NOT execute movement,
+// grant permissions, or persist/ack a C+ terminal movement state.
+tasks.register('verifyG3TerminalContract', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusE3G3TerminalContractSelfTest'
+    args = [rootProject.file('../docs/contracts/e3_g3_terminal_candidate_v1.json').absolutePath]
+}
+
+// Option E: actual shared transport and outbox tests (no Minecraft world).
+tasks.register('verifyTransportE', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusTransportSelfTest'
+}
+tasks.register('verifyTransportOutbox', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusOutboxSelfTest'
+}
+
+// TEMP M03 acceptance tests; explicit invocation, no production scheduler.
+tasks.register('verifyM03', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusM03SelfTest'
+}
+
+// M04 D-Lite pure contract only; does not execute any world mutation.
+tasks.register('verifyM04Contract', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.CPlusM04ContractSelfTest'
+}

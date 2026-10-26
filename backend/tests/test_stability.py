@@ -213,7 +213,7 @@ class HttpTest(unittest.TestCase):
             data = {"character_id": "yui", "player_id": "http-player", "message": "hello"}
         if raw is None and method == "POST":
             raw = json.dumps(data).encode("utf-8")
-        req = Request(self.base + path, data=raw, headers=headers or {}, method=method)
+        req = Request(self.base + path, data=raw, headers={"Content-Type": "application/json", **(headers or {})}, method=method)
         try:
             with urlopen(req, timeout=3) as response:
                 return response.status, json.load(response)

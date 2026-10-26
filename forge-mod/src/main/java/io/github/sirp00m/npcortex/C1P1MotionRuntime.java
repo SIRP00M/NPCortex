@@ -254,6 +254,7 @@ final class C1P1MotionRuntime {
 
     private static String moveInternal(MinecraftServer server, String name, String directionText,
                                        double distance, boolean c2Precision) {
+        ServerThread.require(server, "C1 move");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         C1P1MotionPlan.Direction direction;
@@ -523,6 +524,7 @@ final class C1P1MotionRuntime {
     }
 
     static String turn(MinecraftServer server, String name, float yaw) {
+        ServerThread.require(server, "C1 turn");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         if (!Float.isFinite(yaw) || yaw < -180 || yaw > 180) return "Yaw must be -180..180 degrees";
@@ -539,6 +541,7 @@ final class C1P1MotionRuntime {
     }
 
     static String jump(MinecraftServer server, String name) {
+        ServerThread.require(server, "C1 jump");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         refreshGroundContact(avatar);
@@ -555,6 +558,7 @@ final class C1P1MotionRuntime {
     }
 
     static String settle(MinecraftServer server, String name) {
+        ServerThread.require(server, "C1 settle");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         if (ACTIVE.containsKey(avatar.getUUID())) return "Movement busy; stop first";
@@ -567,6 +571,7 @@ final class C1P1MotionRuntime {
     }
 
     static String stop(MinecraftServer server, String name) {
+        ServerThread.require(server, "C1 stop");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
         Session session = ACTIVE.get(avatar.getUUID());
@@ -675,6 +680,7 @@ final class C1P1MotionRuntime {
     static void onTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || ACTIVE.isEmpty()) return;
         MinecraftServer server = event.getServer();
+        ServerThread.require(server, "C1 motion tick");
         // Do not call damage/death code while iterating ACTIVE: a fatal fall can
         // invoke beforeDespawn(), which removes sessions from this map.
         List<FallStep> fallChecks = new ArrayList<>();
@@ -1024,6 +1030,7 @@ final class C1P1MotionRuntime {
 
     static void beforeDespawn(MinecraftServer server, C1PlayerAvatar avatar) {
         if (avatar == null) return;
+        ServerThread.require(server, "C1 despawn cleanup");
         ACTIVE.remove(avatar.getUUID());
         LAST_RESULT.remove(avatar.getUUID());
         LAST_SESSION_TOKEN.remove(avatar.getUUID());

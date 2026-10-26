@@ -1,11 +1,23 @@
 """Validated environment-based configuration; no secrets are committed."""
 from dataclasses import dataclass
+import ipaddress
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
 DEFAULT_PACKS_DIR = Path(__file__).resolve().parents[3] / "character-packs"
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "npcortex.sqlite3"
+
+
+def is_loopback_host(host: str) -> bool:
+    """True only for "localhost" or a loopback IP literal; never resolves names."""
+    host = host.strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
 
 
 def _integer_env(key: str, default: int, minimum: int, maximum: int) -> int:
@@ -56,6 +68,9 @@ class Settings:
         packs_dir = Path(os.getenv("NPCORTEX_PACKS_DIR", str(DEFAULT_PACKS_DIR))).expanduser().resolve()
         if not host or any(char.isspace() for char in host):
             raise ValueError("NPCORTEX_HOST must be a hostname or IP address without whitespace")
+        # Legacy routes are unauthenticated; non-loopback binding stays blocked until token auth (G3) exists.
+        if not is_loopback_host(host):
+            raise ValueError("NPCORTEX_HOST must be a loopback address (localhost, 127.0.0.0/8 or ::1); LAN binding is not supported")
         if not 1 <= len(model) <= 128 or any(char.isspace() for char in model):
             raise ValueError("NPCORTEX_MODEL must be 1–128 non-whitespace characters")
         if not packs_dir.is_dir():

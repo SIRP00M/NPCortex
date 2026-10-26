@@ -66,6 +66,7 @@ final class C1P0Runtime {
     }
 
     static String spawn(MinecraftServer server, ServerPlayer commander, String name) {
+        ServerThread.require(server, "C1 spawn");
         if (!C1IdentityData.validName(name)) return "Invalid name: use 1-16 ASCII letters, digits or underscore.";
         C1IdentityData store = C1IdentityData.get(server);
         C1IdentityData.Entry prior = store.find(name);
@@ -147,6 +148,7 @@ final class C1P0Runtime {
     }
 
     static String despawn(MinecraftServer server, String name) {
+        ServerThread.require(server, "C1 despawn");
         C1IdentityData identities = C1IdentityData.get(server);
         C1IdentityData.Entry entry = identities.find(name);
         if (entry == null) return "No saved C1-P0 actor named " + name;
@@ -163,6 +165,7 @@ final class C1P0Runtime {
 
     /** Remove the current avatar without deactivating persistent identity (death/dimension). */
     static void detachForLifecycle(MinecraftServer server, UUID profileId) {
+        ServerThread.require(server, "C1 lifecycle detach");
         C1PlayerAvatar avatar = LIVE.remove(profileId);
         C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
         for (Map<UUID, C1P0SyncState> viewers : TRACKED.values()) viewers.remove(profileId);
@@ -265,6 +268,7 @@ final class C1P0Runtime {
     }
 
     static void onDeathReady(ServerPlayer viewer, C1P0Network.DeathReady msg) {
+        ServerThread.require(viewer.getServer(), "C1 death-ready packet");
         C1P0SyncState state = validatedSession(viewer, msg.npcId(), msg.entityId(), msg.token());
         if (state == null || state.phase != C1P0SyncState.Phase.PRESENT
                 || !C1P1CLifecycleRuntime.isPresenting(msg.npcId())) return;
@@ -286,6 +290,7 @@ final class C1P0Runtime {
     }
 
     static void onRotationApplied(ServerPlayer viewer, C1P0Network.RotationApplied message) {
+        ServerThread.require(viewer.getServer(), "C1 rotation-ack packet");
         C1P0SyncState state = validatedSession(viewer, message.npcId(), message.entityId(), message.token());
         if (state != null && state.rotationApplied(message.revision())) {
             LOG.debug("NPCortex C1-P1 ROTATION_APPLIED viewer={} npc={} revision={}",
@@ -356,6 +361,7 @@ final class C1P0Runtime {
     static void onStartTracking(PlayerEvent.StartTracking event) {
         if (!(event.getEntity() instanceof ServerPlayer viewer) || viewer instanceof C1PlayerAvatar) return;
         if (!(event.getTarget() instanceof C1PlayerAvatar avatar)) return;
+        ServerThread.require(viewer.getServer(), "C1 track start");
         if (viewer.connection == null) return;
         viewer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(avatar)));
         beginHandshake(viewer, avatar);
@@ -384,6 +390,7 @@ final class C1P0Runtime {
     }
 
     static void onProfileReady(ServerPlayer viewer, C1P0Network.ProfileReady packet) {
+        ServerThread.require(viewer.getServer(), "C1 profile-ready packet");
         C1P0SyncState state = validatedSession(viewer, packet.npcId(), packet.entityId(), packet.token());
         if (state == null || !state.profileReady()) return;
         state.lastActivityTick = viewer.getServer().getTickCount();
@@ -395,6 +402,7 @@ final class C1P0Runtime {
     }
 
     static void onClientObservation(ServerPlayer viewer, C1P0Network.Observation packet) {
+        ServerThread.require(viewer.getServer(), "C1 observation packet");
         C1P0SyncState state = validatedSession(viewer, packet.npcId(), packet.entityId(), packet.token());
         if (state == null || state.phase != C1P0SyncState.Phase.VERIFYING) return;
         state.lastActivityTick = viewer.getServer().getTickCount();
@@ -434,6 +442,7 @@ final class C1P0Runtime {
 
     static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.getServer().getTickCount() % 40 != 0) return;
+        ServerThread.require(event.getServer(), "C1 sync tick");
         long tick = event.getServer().getTickCount();
         for (Map.Entry<UUID, Map<UUID, C1P0SyncState>> viewer : TRACKED.entrySet()) {
             for (C1P0SyncState session : viewer.getValue().values()) {
@@ -448,6 +457,7 @@ final class C1P0Runtime {
     static void onStopTracking(PlayerEvent.StopTracking event) {
         if (!(event.getEntity() instanceof ServerPlayer viewer) || viewer instanceof C1PlayerAvatar) return;
         if (!(event.getTarget() instanceof C1PlayerAvatar avatar)) return;
+        ServerThread.require(viewer.getServer(), "C1 track stop");
         Map<UUID, C1P0SyncState> viewerSessions = TRACKED.get(viewer.getUUID());
         if (viewerSessions != null) viewerSessions.remove(avatar.getUUID());
         LOG.info("NPCortex C1-P0 TRACK_STOP viewer={} npc={}", viewer.getGameProfile().getName(), avatar.getUUID());
@@ -455,6 +465,7 @@ final class C1P0Runtime {
 
     static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer viewer && !(viewer instanceof C1PlayerAvatar)) {
+            ServerThread.require(viewer.getServer(), "C1 viewer logout");
             TRACKED.remove(viewer.getUUID());
         }
     }
@@ -464,6 +475,7 @@ final class C1P0Runtime {
     // re-entering view distance fail to create a client-side RemotePlayer.
     static void onViewerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer viewer && !(viewer instanceof C1PlayerAvatar)) {
+            ServerThread.require(viewer.getServer(), "C1 viewer dimension/respawn");
             TRACKED.remove(viewer.getUUID());
             sendProfilesForDimension(viewer);
         }
@@ -471,6 +483,7 @@ final class C1P0Runtime {
 
     static void onViewerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer viewer && !(viewer instanceof C1PlayerAvatar)) {
+            ServerThread.require(viewer.getServer(), "C1 viewer dimension/respawn");
             TRACKED.remove(viewer.getUUID());
             sendProfilesForDimension(viewer);
         }

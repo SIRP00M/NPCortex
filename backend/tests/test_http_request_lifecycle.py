@@ -33,7 +33,7 @@ class HTTPRequestLifecycleTests(unittest.TestCase):
         cls.thread.join(timeout=3)
 
     def post(self, path, payload, headers=None):
-        req = Request(self.base + path, data=payload, method="POST", headers=headers or {})
+        req = Request(self.base + path, data=payload, method="POST", headers={"Content-Type": "application/json", **(headers or {})})
         try:
             with urlopen(req, timeout=4) as response:
                 return response.status, json.load(response)

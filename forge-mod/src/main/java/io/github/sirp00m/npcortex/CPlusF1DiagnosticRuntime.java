@@ -26,6 +26,7 @@ final class CPlusF1DiagnosticRuntime {
 
     static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> debug() {
         var cplus = Commands.literal("cplus");
+        cplus.then(CPlusM03Runtime.commands()); // TEMP M03
         cplus.then(Commands.literal("inspect")
                 .then(Commands.argument("name", StringArgumentType.word())
                         .executes(ctx -> inspect(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));
@@ -71,6 +72,28 @@ final class CPlusF1DiagnosticRuntime {
                 .then(Commands.argument("name",StringArgumentType.word())
                         .executes(ctx -> CPlusECoordinatorRuntime.verify(ctx.getSource(),
                                 StringArgumentType.getString(ctx,"name")))));
+        cplus.then(Commands.literal("tasktransportrecover")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusTransportRecovery.recover(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
+        // G3 Big Sprint: explicit operator-initiated terminal/cancellation lifecycle.
+        cplus.then(Commands.literal("taskmovefinalize")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusE3G3Runtime.finalizeMove(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
+        cplus.then(Commands.literal("taskmovecancel")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusE3G3Runtime.cancelMove(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
+        cplus.then(Commands.literal("taskmovereconcile")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusE3G3Runtime.reconcileCancel(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
+        // G3-1: read-only diagnostic. C2 journal alone is NOT C+ terminal evidence.
+        cplus.then(Commands.literal("taskmovejournal")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusE3G3Diagnostic.inspect(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
         // E3-D G1: operator-only preview. No C2 navigation is invoked.
         cplus.then(Commands.literal("taskmovepreview")
                 .then(Commands.argument("name",StringArgumentType.word())
@@ -82,6 +105,32 @@ final class CPlusF1DiagnosticRuntime {
                                                         IntegerArgumentType.getInteger(ctx,"x"),
                                                         IntegerArgumentType.getInteger(ctx,"y"),
                                                         IntegerArgumentType.getInteger(ctx,"z"))))))));
+        // E3-D G2 operator-only, one target, durable attempt fenced, C2 owns motion.
+        cplus.then(Commands.literal("taskmove")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .then(Commands.argument("x",IntegerArgumentType.integer())
+                                .then(Commands.argument("y",IntegerArgumentType.integer())
+                                        .then(Commands.argument("z",IntegerArgumentType.integer())
+                                                .executes(ctx -> CPlusE3G2Runtime.move(ctx.getSource(),
+                                                        StringArgumentType.getString(ctx,"name"),
+                                                        IntegerArgumentType.getInteger(ctx,"x"),
+                                                        IntegerArgumentType.getInteger(ctx,"y"),
+                                                        IntegerArgumentType.getInteger(ctx,"z"))))))));
+        // TEMP Test-5 operator-only datapack bridge. Remove with scripts/remove-test5-harness.ps1.
+        cplus.then(Commands.literal("autotest5")
+                .then(Commands.literal("start")
+                        .then(Commands.argument("name",StringArgumentType.word())
+                                .executes(ctx -> CPlusTest5Runtime.start(ctx.getSource(),
+                                        StringArgumentType.getString(ctx,"name")))))
+                .then(Commands.literal("status")
+                        .executes(ctx -> CPlusTest5Runtime.status(ctx.getSource())))
+                .then(Commands.literal("abort")
+                        .executes(ctx -> CPlusTest5Runtime.abort(ctx.getSource()))));
+
+        cplus.then(Commands.literal("taskmovestatus")
+                .then(Commands.argument("name",StringArgumentType.word())
+                        .executes(ctx -> CPlusE3G2Runtime.status(ctx.getSource(),
+                                StringArgumentType.getString(ctx,"name")))));
         cplus.then(Commands.literal("probe")
                 .then(Commands.argument("name", StringArgumentType.word())
                         .executes(ctx -> probe(ctx.getSource(), StringArgumentType.getString(ctx, "name")))));

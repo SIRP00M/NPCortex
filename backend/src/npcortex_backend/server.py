@@ -10,11 +10,14 @@ from .cplus_e_graph import ReadOnlyGraph, GraphConflict
 from .cplus_e_coordinator import ExtendedCoordinator
 from .cplus_e2_dispatcher import ReadOnlyDispatcher
 from .cplus_e3_preview import MovePreviewStore
+from .cplus_e3_g2_motion import GuardedMotionStore
 from .cplus_local_auth import read_secret
 import re
 import sqlite3
 import time
+import threading
 from .characters import CharacterError
+from .config import is_loopback_host
 from .identity import IdentityError, PLAYER_PATTERN
 from .ollama import ModelError
 from .agent_runtime import PlannerDecisionError
@@ -44,28 +47,55 @@ AGENT_CANCEL = re.compile(r"^/v1/agent/goals/([^/]+)/cancel$")
 AGENT_RESULT = re.compile(r"^/v1/agent/actions/([^/]+)/result$")
 
 
+def _host_header_allowed(raw):
+    """Reject DNS-rebinding requests: browsers cannot forge Host, so it must name loopback."""
+    if not raw or len(raw) > 255:
+        return False
+    if raw.startswith("["):
+        end = raw.find("]")
+        host = raw[1:end] if end > 0 else ""
+    else:
+        host = raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
+    return bool(host) and is_loopback_host(host)
+
+
+def _is_json_content_type(raw):
+    return (raw or "").split(";", 1)[0].strip().lower() == "application/json"
+
+
 def make_handler(service):
     # Construct only if the bridge is configured; legacy HTTP routes remain unchanged.
     bridge_holder = {}
+    initialization_lock = threading.RLock()
     def cplus_bridge():
-        if 'instance' not in bridge_holder:
-            bridge_holder['instance'] = DurableBridge(service._require_world_store().db_path)
-        return bridge_holder['instance']
+        with initialization_lock:
+            if 'instance' not in bridge_holder:
+                bridge_holder['instance'] = DurableBridge(service._require_world_store().db_path)
+            return bridge_holder['instance']
 
     def cplus_e_graph():
-        if "e" not in bridge_holder:
-            bridge_holder["e"] = ReadOnlyGraph(service._require_world_store().db_path)
-        return bridge_holder["e"]
+        with initialization_lock:
+            if "e" not in bridge_holder:
+                bridge_holder["e"] = ReadOnlyGraph(service._require_world_store().db_path)
+            return bridge_holder["e"]
 
     def cplus_e_coordinator():
-        if "e1" not in bridge_holder:
-            bridge_holder["e1"] = ReadOnlyDispatcher(service._require_world_store().db_path)
-        return bridge_holder["e1"]
+        with initialization_lock:
+            if "e1" not in bridge_holder:
+                bridge_holder["e1"] = ReadOnlyDispatcher(service._require_world_store().db_path)
+            return bridge_holder["e1"]
 
     def cplus_e3_preview():
-        if "e3_g1" not in bridge_holder:
-            bridge_holder["e3_g1"] = MovePreviewStore(service._require_world_store().db_path)
-        return bridge_holder["e3_g1"]
+        with initialization_lock:
+            if "e3_g1" not in bridge_holder:
+                bridge_holder["e3_g1"] = MovePreviewStore(service._require_world_store().db_path)
+            return bridge_holder["e3_g1"]
+
+    def cplus_e3_motion():
+        with initialization_lock:
+            if "e3_g2" not in bridge_holder:
+                bridge_holder["e3_g2"] = GuardedMotionStore(service._require_world_store().db_path)
+            return bridge_holder["e3_g2"]
 
     class Handler(BaseHTTPRequestHandler):
         def _json(self, status: int, payload: dict):
@@ -148,7 +178,16 @@ def make_handler(service):
             LOG.exception("Unhandled backend error")
             return self._error(500, "internal_error", "Internal server error")
 
+        def _host_ok(self):
+            if _host_header_allowed(self.headers.get("Host")):
+                return True
+            self.close_connection = True
+            self._error(403, "forbidden_host", "Host header must name a loopback address")
+            return False
+
         def do_GET(self):
+            if not self._host_ok():
+                return
             if self.path == "/health":
                 return self._json(200, {"status": "ok", "service": "npcortex-backend", "model": service.model})
             try:
@@ -172,13 +211,17 @@ def make_handler(service):
             return self._error(404, "not_found", "Not found")
 
         def do_POST(self):
+            if not self._host_ok():
+                return
             known_route = (self.path in (
                 "/v1/chat", "/v1/worlds", "/v1/actors", "/v1/actor-chat",
                 "/v1/dialogues", "/v1/social-runs", "/v1/agent/goals",
                 "/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
                 "/v1/cplus/e/preview", "/v1/cplus/e/status",
                 "/v1/cplus/e1/submit", "/v1/cplus/e1/status", "/v1/cplus/e1/queue", "/v1/cplus/e1/cancel",
-                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview")
+                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
+                "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
+                "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack")
                 or DIALOGUE_TURNS.fullmatch(self.path)
                 or DIALOGUE_CLOSE.fullmatch(self.path)
                 or SOCIAL_STEP.fullmatch(self.path)
@@ -217,10 +260,15 @@ def make_handler(service):
             except ValueError:
                 self.close_connection = True
                 return self._error(400, "invalid_request", "Invalid Content-Length")
-            max_body = 24000 if self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview") else MAX_BODY
+            max_body = 24000 if self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
+                "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
+                "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack") else MAX_BODY
             if length < 1 or length > max_body:
                 self._discard_rejected_body(length)
-                return self._error(413, "request_too_large", "Request size must be 1–8192 bytes")
+                return self._error(413, "request_too_large", f"Request size must be 1–{max_body} bytes")
+            if not _is_json_content_type(self.headers.get("Content-Type")):
+                self._discard_rejected_body(length)
+                return self._error(415, "unsupported_media_type", "Content-Type must be application/json")
             self.connection.settimeout(10)
             try:
                 data = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -232,7 +280,9 @@ def make_handler(service):
                 if self.path in ("/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
                 "/v1/cplus/e/preview", "/v1/cplus/e/status",
                 "/v1/cplus/e1/submit", "/v1/cplus/e1/status", "/v1/cplus/e1/queue", "/v1/cplus/e1/cancel",
-                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview"):
+                "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
+                "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
+                "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack"):
                     # Diagnostic-only, opt-in, local-only, shared secret required.
                     secret = read_secret()
                     supplied = self.headers.get("X-NPCortex-CPlus-Token", "")
@@ -242,6 +292,27 @@ def make_handler(service):
                         local = False
                     if not local or len(secret) < 24 or len(supplied) > 512 or not hmac.compare_digest(secret, supplied):
                         return self._error(403, "forbidden", "C+ local diagnostic bridge not authorized")
+                    if self.path in ("/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
+                "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack"):
+                        try:
+                            motion=cplus_e3_motion()
+                            if self.path == "/v1/cplus/e3/abandon":
+                                return self._json(200,motion.abandon(data))
+                            if self.path == "/v1/cplus/e3/reserve":
+                                return self._json(200,motion.reserve(data))
+                            if self.path == "/v1/cplus/e3/report":
+                                return self._json(200,motion.report(data))
+                            if self.path == "/v1/cplus/e3/finalize":
+                                return self._json(200,motion.finalize(data))
+                            if self.path == "/v1/cplus/e3/cancel-begin":
+                                return self._json(200,motion.cancel_begin(data))
+                            if self.path == "/v1/cplus/e3/cancel-ack":
+                                return self._json(200,motion.cancel_ack(data))
+                            if set(data)!={"world_id","actor_id"}:
+                                return self._error(400,"invalid_request","world/actor IDs required")
+                            return self._json(200,motion.status(data["world_id"],data["actor_id"]))
+                        except GraphConflict as exc:
+                            return self._error(409,"e3_g2_conflict",str(exc))
                     if self.path == "/v1/cplus/e3/preview":
                         try:
                             return self._json(200, cplus_e3_preview().preview(data))
@@ -407,6 +478,8 @@ def make_handler(service):
 
 def make_http_server(service, host="127.0.0.1", port=0):
     """Same threaded server configuration for production and HTTP tests."""
+    if not is_loopback_host(host):
+        raise ValueError("Backend must bind a loopback address; LAN binding is not supported without authentication")
     httpd = ThreadingHTTPServer((host, port), make_handler(service))
     httpd.daemon_threads = True
     return httpd

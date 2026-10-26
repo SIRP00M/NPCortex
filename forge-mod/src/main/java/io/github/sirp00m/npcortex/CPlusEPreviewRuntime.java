@@ -11,11 +11,7 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -32,8 +28,6 @@ import java.util.concurrent.TimeUnit;
  * No motion ownership, world mutation, inventory, or Saga execution is exposed here.
  */
 final class CPlusEPreviewRuntime {
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2)).build();
     private static final Map<MinecraftServer,ExecutorService> WORKERS = new IdentityHashMap<>();
     private CPlusEPreviewRuntime() {}
 
@@ -96,22 +90,7 @@ final class CPlusEPreviewRuntime {
     }
 
     private static String send(URI uri,String token,String json) {
-        try {
-            HttpRequest request=HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofSeconds(4))
-                    .header("Content-Type","application/json")
-                    .header("X-NPCortex-CPlus-Token",token)
-                    .POST(HttpRequest.BodyPublishers.ofString(json,StandardCharsets.UTF_8)).build();
-            HttpResponse<String> response=HTTP.send(request,HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode()!=200 || response.body().length()>4096)
-                throw new IOException("E preview backend rejected request");
-            return response.body();
-        } catch (IOException error) {
-            throw new IllegalStateException("E preview transport unavailable",error);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("E preview interrupted",interrupted);
-        }
+        return io.github.sirp00m.npcortex.cplus.CPlusTransport.exchange(uri,token,json,4,4096);
     }
 
     static void onServerStopping(ServerStoppingEvent event) {

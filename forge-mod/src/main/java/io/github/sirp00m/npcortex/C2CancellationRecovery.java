@@ -34,6 +34,7 @@ final class C2CancellationRecovery {
     }
 
     static void onServerTick(MinecraftServer server) {
+        ServerThread.require(server, "C2 cancellation reconcile");
         ticks++;
         C2ActionJournal journal=C2ActionJournal.get(server);
         for (C2ActionJournal.Row row : journal.entries()) {

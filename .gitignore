@@ -23,3 +23,21 @@ logs/
 # models should never be committed
 *.gguf
 *.safetensors
+
+# Local AI engineering assistants / code graph output (not part of public source)
+.claude/
+CLAUDE.md
+graphify-out/
+
+# Candidate/acceptance metadata and operator working state
+PENDING_TESTS.txt
+CANDIDATE_MANIFEST.json
+M04_MANIFEST.json
+M04_OPTION_D_MANIFEST.json
+M04_AUTO_ACCEPT_MANIFEST.json
+NPCortex-Automated-Reports/
+docs/m03-final/runs/
+docs/m03-final/focused-*/
+*.sqlite3-wal
+*.sqlite3-shm
+*.log.gz

@@ -58,17 +58,30 @@ final class C1P1InventoryRuntime {
         Inventory inventory = avatar.getInventory();
         ListTag before = inventory.save(new ListTag());
         int selected = inventory.selected;
+        final String outcome;
+        // Roll back only before the authoritative SavedData commit. A viewer
+        // packet failure is NOT an inventory transaction failure: rolling back
+        // live inventory after a committed snapshot/receipt corrupts custody.
         try {
-            String outcome = mutation.apply(inventory);
+            outcome = mutation.apply(inventory);
             if (outcome == null || outcome.isBlank()) throw new IllegalArgumentException("empty mutation result");
             data.commit(avatar.getUUID(), inventory, id, fingerprint, outcome);
-            syncForActiveViewers(avatar);
-            return "APPLIED_PENDING_WORLD_SAVE tx=" + id + " revision=" + data.find(avatar.getUUID()).journal.revision() + " " + outcome;
         } catch (RuntimeException error) {
             inventory.load(before);
             inventory.selected = selected;
             return "NOT_COMMITTED tx=" + id + " " + error.getClass().getSimpleName() + ": " + error.getMessage();
         }
+        long revision = data.find(avatar.getUUID()).journal.revision();
+        try {
+            syncForActiveViewers(avatar);
+        } catch (RuntimeException presentationFailure) {
+            // The receipt and saved snapshot remain authoritative. Rejoin or
+            // explicit client tracking repair can resynchronize presentation.
+            return "APPLIED_PENDING_WORLD_SAVE_VIEWER_SYNC_FAILED tx=" + id
+                    + " revision=" + revision + " " + outcome
+                    + " (no inventory rollback; retry viewer sync only)";
+        }
+        return "APPLIED_PENDING_WORLD_SAVE tx=" + id + " revision=" + revision + " " + outcome;
     }
 
     static String give(MinecraftServer server, String name, ResourceLocation id, int count, UUID transaction) {
@@ -140,6 +153,38 @@ final class C1P1InventoryRuntime {
             inventory.setItem(destination, incoming);
             inventory.setItem(sourceSlot, swapped);
             return "equipped " + position + " from slot=" + sourceSlot + " to=" + destination;
+        });
+    }
+
+    /** Move the exact equipped stack to a free storage slot; never discard it.
+     *  This is a C1 transaction, NOT permission to run world mutation. */
+    static String unequip(MinecraftServer server, String name, String equipmentName,
+                          int destinationSlot, UUID transaction) {
+        if (destinationSlot < 0 || destinationSlot > 35)
+            return "Destination must be a main-inventory slot 0..35";
+        String position = equipmentName.toLowerCase(Locale.ROOT);
+        if (!List.of("mainhand", "offhand", "feet", "legs", "chest", "head").contains(position))
+            return "Equipment must be mainhand/offhand/feet/legs/chest/head";
+        return transact(server, name, transaction,
+                "unequip|" + position + "|" + destinationSlot, inventory -> {
+            int equippedSlot = switch (position) {
+                case "mainhand" -> inventory.selected;
+                case "offhand" -> 40;
+                case "feet" -> 36;
+                case "legs" -> 37;
+                case "chest" -> 38;
+                case "head" -> 39;
+                default -> throw new IllegalArgumentException("invalid equipment slot");
+            };
+            if (equippedSlot == destinationSlot)
+                throw new IllegalArgumentException("Destination is the equipped hand slot");
+            if (!inventory.getItem(destinationSlot).isEmpty())
+                throw new IllegalArgumentException("Destination storage slot must be empty");
+            ItemStack equipped = inventory.getItem(equippedSlot).copy();
+            if (equipped.isEmpty()) return "already empty " + position + " (no item transfer)";
+            inventory.setItem(destinationSlot, equipped);
+            inventory.setItem(equippedSlot, ItemStack.EMPTY);
+            return "unequipped " + position + " into empty storage slot=" + destinationSlot;
         });
     }
 

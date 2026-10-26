@@ -11,4 +11,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run backend unit tests
+        env:
+          PYTHONPATH: backend/src
         run: python -m unittest discover -s backend/tests -v
