@@ -1,6 +1,31 @@
 # Changelog
 
-NPCortex follows **development-milestone pre-release versioning**. The current source preview is **`v0.2.4-alpha.2`** (Forge) / **`0.2.4a2`** (Python distribution). Entries describe source milestones, not stable releases or confirmed full Quality Gates. Older milestones remain available in the [GitHub commit history](https://github.com/SIRP00M/NPCortex/commits/main).
+NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
+
+## Unreleased — `v0.2.5-alpha.1` · Character Profiles, in-game Manager and bounded long-range navigation (2026-10-27)
+
+**Base:** GitHub `main` commit `d3e95b2` (`v0.2.4-alpha.2`). This is a new public source milestone, not a tagged stable release.
+
+### Added
+
+- **Character Profiles:** SQLite v5 per-actor personalities, immutable history, structured/raw prompts, explicit opt-in with verified backup before existing database migration, profile import/export and revision-safe edits. Legacy Character Packs and older actor records are preserved.
+- **NPCortex Manager GUI:** ESC/Pause screen entry for NPC listing, creating NPCs with arbitrary names, profile registration, editing and saving. Uses a dedicated network channel with server-side authorization and conservative offline/uncertain state handling; includes a PowerShell profile registration fallback.
+- **Experimental long-range navigation:** operator `navlong` entrypoint and loaded-terrain-only bounded internal legs under a single logical C2 run, explicit long-running state, FIFO planning fairness, progress/timeout controls and conservative failed-state reporting. No force loading, automatic retry or cross-world planner.
+- **Verification tools:** Profile migration/API tests, in-game Manager protocol/core tests, G5 navigation acceptance datapack source and PowerShell observation/evidence scripts, isolated Java policy tests, and public operator guides.
+
+### Compatibility and scope
+
+- Forge metadata: `0.2.5-alpha.1`; Python distribution: `0.2.5a1`. Runtime code is preserved from the uploaded October 27 source snapshot; this packaging pass changes metadata/documentation and filters workstation-only artifacts.
+- Existing v1–v4 databases require deliberate `NPCORTEX_ALLOW_SCHEMA_V5=1` opt-in for the migration. Do not migrate an irreplaceable database without verified copy/restore rehearsal.
+- This milestone does **not** implement dynamic AI-generated personalities, evolving memory, autonomous world mining/pickup, automatic unloaded-chunk navigation or a new background action scheduler.
+
+### Verification status
+
+- **Owner-confirmed Windows single-player:** GUI smoke scenarios including character creation/profile registration passed in the scenarios tested. Earlier G4 C1/C2 motion and shutdown cases were accepted for their specific single-player test scope.
+- Reported Java/build/backend test outcomes from the development workspace are historical; the GitHub-Ready package is not by itself evidence that all those tests have been rerun.
+- **Still unverified:** full long-range G5 gameplay acceptance, multi-NPC 1/3/5/10 performance, dedicated-server Manager availability, live v4→v5 migration, comprehensive security/fault injection and multiplayer/multi-viewer compatibility.
+
+---
 
 ## Unreleased — `v0.2.4-alpha.2` · Optional API authentication and lifecycle fixes (2026-10-26)
 

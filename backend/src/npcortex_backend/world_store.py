@@ -3,15 +3,23 @@
 B2-C: all operational SQL runs through explicit short-lived SQLite units of
 work; B1 tables and the additive B2 schema remain unchanged.
 """
+from datetime import datetime, timezone
+import logging
+import os
 from pathlib import Path
 import sqlite3
+from .dbtools import BackupError, backup_database, table_counts
 from .persistence import SQLiteDatabase
 from uuid import uuid4, uuid5, UUID
 from .identity import canonical_uuid, dimension_id, player_id, world_name
+from .profiles import LEGACY_SENTINEL, PROFILE_SCHEMA_VERSION, Profile, note_text
+
+LOG = logging.getLogger(__name__)
 
 # Namespace is a fixed stable value; changing it would break derived conversation IDs.
 CONVERSATION_NAMESPACE = UUID("4bc93e61-ac2d-4c7a-94cf-4cfc4a3a59e1")
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+ALLOW_V5_ENV = "NPCORTEX_ALLOW_SCHEMA_V5"
 
 
 class RegistryNotFoundError(LookupError):
@@ -26,8 +34,32 @@ class SchemaVersionError(RuntimeError):
     pass
 
 
+class SchemaUpgradeNotAllowedError(SchemaVersionError):
+    """An existing pre-v5 database is never upgraded implicitly."""
+
+
+class ProfileNotRegisteredError(RegistryNotFoundError):
+    """The actor has no Character Profile (HTTP 404 profile_not_registered)."""
+
+
+class RevisionConflictError(RegistryConflictError):
+    def __init__(self, message: str, current_revision: int):
+        super().__init__(message)
+        self.current_revision = current_revision
+
+
+_PROFILE_COLUMNS = ("actor_id,revision,schema_version,composition,display_name,language,personality,"
+                    "speech_style,backstory,system_prompt,source,content_sha256,note,created_utc")
+
+
+def _profile_of(row) -> Profile:
+    return Profile(row["composition"], row["display_name"], row["language"], row["system_prompt"],
+                   row["personality"], row["speech_style"], row["backstory"])
+
+
 class WorldStore:
-    def __init__(self, db_path: Path, max_transcript_messages: int = 200):
+    def __init__(self, db_path: Path, max_transcript_messages: int = 200,
+                 allow_schema_upgrade: bool | None = None):
         if (not isinstance(max_transcript_messages, int) or isinstance(max_transcript_messages, bool)
                 or max_transcript_messages < 2 or max_transcript_messages % 2):
             raise ValueError("max_transcript_messages must be an even integer >= 2")
@@ -36,14 +68,35 @@ class WorldStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.database = SQLiteDatabase(self.db_path)
         with self.database.maintenance() as db:
-            # SQLite WAL supports concurrent readers and one serialized writer.
-            db.execute("PRAGMA journal_mode=WAL")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, 4, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"Unsupported SQLite schema version {version}; expected {SCHEMA_VERSION}. "
                     "Do not downgrade or delete a database containing player data."
                 )
+            if allow_schema_upgrade is None:
+                allow_schema_upgrade = os.environ.get(ALLOW_V5_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+            preexisting_counts = None
+            if 1 <= version < SCHEMA_VERSION:
+                if not allow_schema_upgrade:
+                    raise SchemaUpgradeNotAllowedError(
+                        f"{self.db_path} is schema v{version}; this build needs v{SCHEMA_VERSION} (Character Profiles). "
+                        f"Nothing was changed. Rehearse on a copy first (docs/character-profiles.md), then set "
+                        f"{ALLOW_V5_ENV}=1 to upgrade this database. A verified backup is written first.")
+                # Online-backup API + verification BEFORE any schema change; failure aborts the upgrade.
+                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                backup_path = self.db_path.with_name(f"{self.db_path.name}.v{version}-{stamp}.bak")
+                try:
+                    backup_database(db, backup_path, version)
+                except (BackupError, sqlite3.Error, OSError) as exc:
+                    raise SchemaVersionError(f"Pre-upgrade backup failed; database not modified: {exc}") from exc
+                LOG.warning("Schema v%s backup verified: %s", version, backup_path)
+                preexisting_counts = table_counts(db)
+                fk_before = len(db.execute("PRAGMA foreign_key_check").fetchall())
+            # SQLite WAL supports concurrent readers and one serialized writer. Switched only after the
+            # refusal and backup steps above so a refused or failed upgrade leaves the file byte-identical.
+            db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
                 # Atomic initial schema migration, including PRAGMA user_version.
                 db.executescript("""
@@ -241,6 +294,53 @@ class WorldStore:
                 actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
                 if not columns.issubset(actual):
                     raise sqlite3.DatabaseError(f"Invalid C0 schema: {table} missing columns")
+            if version in (0, 1, 2, 3, 4):
+                # Additive: one new table (immutable per-actor revisions). Nothing existing is rewritten.
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE character_profiles (
+                        actor_id TEXT NOT NULL REFERENCES actors(actor_id),
+                        revision INTEGER NOT NULL CHECK(revision >= 1),
+                        schema_version INTEGER NOT NULL CHECK(schema_version = 1),
+                        composition TEXT NOT NULL CHECK(composition IN ('raw','structured')),
+                        display_name TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        personality TEXT NOT NULL DEFAULT '',
+                        speech_style TEXT NOT NULL DEFAULT '',
+                        backstory TEXT NOT NULL DEFAULT '',
+                        system_prompt TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        content_sha256 TEXT NOT NULL,
+                        note TEXT NOT NULL DEFAULT '',
+                        created_utc TEXT NOT NULL,
+                        PRIMARY KEY(actor_id, revision)
+                    );
+                    CREATE TRIGGER character_profiles_immutable_update BEFORE UPDATE ON character_profiles
+                    BEGIN SELECT RAISE(ABORT, 'character profile revisions are immutable'); END;
+                    CREATE TRIGGER character_profiles_immutable_delete BEFORE DELETE ON character_profiles
+                    BEGIN SELECT RAISE(ABORT, 'character profile revisions are immutable'); END;
+                    PRAGMA user_version=5;
+                """)  # intentionally no COMMIT here: verified below, committed only if it passes
+            required_v5 = {
+                "character_profiles": {"actor_id", "revision", "composition", "display_name", "language",
+                                       "system_prompt", "source", "content_sha256"},
+            }
+            for table, columns in required_v5.items():
+                db.execute(f"SELECT * FROM {table} LIMIT 0")
+                actual = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if not columns.issubset(actual):
+                    raise sqlite3.DatabaseError(f"Invalid v5 schema: {table} missing columns")
+            if preexisting_counts is not None:
+                # Post-upgrade verification: version, referential integrity, no existing row lost.
+                if db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+                    raise SchemaVersionError(f"Upgrade did not reach the expected schema version; the upgrade was rolled back (backup kept at {backup_path})")
+                if len(db.execute("PRAGMA foreign_key_check").fetchall()) != fk_before:
+                    raise sqlite3.DatabaseError(f"foreign_key_check changed after the v5 upgrade; the upgrade was rolled back (backup kept at {backup_path})")
+                after = table_counts(db)
+                if any(after.get(name) != count for name, count in preexisting_counts.items()):
+                    raise sqlite3.DatabaseError(f"Existing table row counts changed during the v5 upgrade; the upgrade was rolled back (backup kept at {backup_path})")
+            if db.in_transaction:
+                db.execute("COMMIT")  # a verification failure above leaves the open transaction to be rolled back
 
     def register_world(self, name: str, world_id: str | None = None) -> dict:
         name = world_name(name)
@@ -275,6 +375,136 @@ class WorldStore:
         if record is None:
             raise RegistryNotFoundError("Actor not registered")
         return dict(record)
+
+    # ---- Character Profiles (v5) -------------------------------------------------
+    @staticmethod
+    def _insert_profile_row(db, aid: str, revision: int, profile: Profile, source: str, note: str = "") -> None:
+        db.execute(
+            f"INSERT INTO character_profiles({_PROFILE_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (aid, revision, PROFILE_SCHEMA_VERSION, profile.composition, profile.display_name, profile.language,
+             profile.personality, profile.speech_style, profile.backstory, profile.system_prompt, source,
+             profile.content_sha256, note, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+
+    @staticmethod
+    def _binding(db, aid: str) -> dict:
+        row = db.execute("SELECT * FROM actors WHERE actor_id=?", (aid,)).fetchone()
+        current = db.execute("SELECT * FROM character_profiles WHERE actor_id=? ORDER BY revision DESC LIMIT 1",
+                             (aid,)).fetchone()
+        return {"actor_id": aid, "world_id": row["world_id"], "dimension_id": row["dimension_id"],
+                "character_id": row["character_id"],
+                "profile": None if current is None else {
+                    "revision": current["revision"], "display_name": current["display_name"],
+                    "composition": current["composition"], "source": current["source"],
+                    "content_sha256": current["content_sha256"]}}
+
+    def register_actor_with_profile(self, world_id: str, dimension: str, actor_id: str | None,
+                                    profile: Profile, source: str) -> dict:
+        """Profile-bound registration: actor row + revision 1 commit together or not at all."""
+        wid = canonical_uuid(world_id, "world_id")
+        dim = dimension_id(dimension)
+        aid = canonical_uuid(actor_id, "actor_id") if actor_id is not None else str(uuid4())
+        with self.database.write() as db:
+            if db.execute("SELECT 1 FROM worlds WHERE world_id=?", (wid,)).fetchone() is None:
+                raise RegistryNotFoundError("World is not registered")
+            record = db.execute("SELECT * FROM actors WHERE actor_id=?", (aid,)).fetchone()
+            created = record is None
+            if created:
+                db.execute("INSERT INTO actors(actor_id,world_id,dimension_id,character_id) VALUES (?,?,?,?)",
+                           (aid, wid, dim, LEGACY_SENTINEL))
+                self._insert_profile_row(db, aid, 1, profile, source)
+            else:
+                if (record["world_id"], record["dimension_id"]) != (wid, dim):
+                    raise RegistryConflictError("actor_id already registered with different identity")
+                if record["character_id"] != LEGACY_SENTINEL:
+                    raise RegistryConflictError(
+                        "actor_id is a legacy Character Pack actor; profile registration is not allowed (adoption is required)")
+                first = db.execute("SELECT source,content_sha256 FROM character_profiles WHERE actor_id=? AND revision=1",
+                                   (aid,)).fetchone()
+                # inline/default are fully determined by the request; a preset is judged by its recorded source
+                # because the pack file may legitimately have changed since the copy was made.
+                same = first is not None and (first["content_sha256"] == profile.content_sha256
+                                              if source in ("inline", "default") else first["source"] == source)
+                if not same:
+                    raise RegistryConflictError("actor_id already registered with a different profile")
+            result = self._binding(db, aid)
+        result["created"] = created
+        return result
+
+    def bind_existing_profile(self, world_id: str, dimension: str, actor_id: str) -> dict:
+        """Used by custom-mode NPCs: bind only to an already registered profile, never create one."""
+        wid = canonical_uuid(world_id, "world_id")
+        dim = dimension_id(dimension)
+        aid = canonical_uuid(actor_id, "actor_id")
+        with self.database.read() as db:
+            record = db.execute("SELECT * FROM actors WHERE actor_id=?", (aid,)).fetchone()
+            if record is None or db.execute("SELECT 1 FROM character_profiles WHERE actor_id=? LIMIT 1",
+                                            (aid,)).fetchone() is None:
+                raise ProfileNotRegisteredError("No Character Profile is registered for this actor")
+            if (record["world_id"], record["dimension_id"]) != (wid, dim):
+                raise RegistryConflictError("actor_id already registered with different identity")
+            result = self._binding(db, aid)
+        result["created"] = False
+        return result
+
+    def get_current_profile(self, actor_id: str) -> tuple[int, Profile] | None:
+        aid = canonical_uuid(actor_id, "actor_id")
+        with self.database.read() as db:
+            row = db.execute("SELECT * FROM character_profiles WHERE actor_id=? ORDER BY revision DESC LIMIT 1",
+                             (aid,)).fetchone()
+            return None if row is None else (row["revision"], _profile_of(row))
+
+    def export_profile(self, actor_id: str) -> dict:
+        aid = canonical_uuid(actor_id, "actor_id")
+        with self.database.read() as db:
+            if db.execute("SELECT 1 FROM actors WHERE actor_id=?", (aid,)).fetchone() is None:
+                raise RegistryNotFoundError("Actor not registered")
+            row = db.execute("SELECT * FROM character_profiles WHERE actor_id=? ORDER BY revision DESC LIMIT 1",
+                             (aid,)).fetchone()
+            if row is None:
+                raise ProfileNotRegisteredError("Actor has no Character Profile (legacy Character Pack actor)")
+            profile = _profile_of(row)
+        return {"actor_id": aid, "revision": row["revision"], "source": row["source"],
+                "content_sha256": row["content_sha256"], "composition": profile.composition,
+                "effective_system_prompt": profile.system_prompt, "profile": profile.importable()}
+
+    def add_profile_revision(self, actor_id: str, expected_revision, profile: Profile, note=None) -> dict:
+        """Append revision N+1 iff the caller saw revision N. Replays and no-ops never create rows."""
+        aid = canonical_uuid(actor_id, "actor_id")
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 1:
+            from .identity import IdentityError
+            raise IdentityError("expected_revision must be a positive integer")
+        text = note_text(note)
+        with self.database.write() as db:
+            if db.execute("SELECT 1 FROM actors WHERE actor_id=?", (aid,)).fetchone() is None:
+                raise RegistryNotFoundError("Actor not registered")
+            current = db.execute("SELECT revision,content_sha256 FROM character_profiles WHERE actor_id=? "
+                                 "ORDER BY revision DESC LIMIT 1", (aid,)).fetchone()
+            if current is None:
+                raise ProfileNotRegisteredError("Actor has no Character Profile (legacy Character Pack actor)")
+            applied = True
+            if expected_revision == current["revision"]:
+                if current["content_sha256"] == profile.content_sha256:
+                    applied = False  # no-op edit
+                else:
+                    self._insert_profile_row(db, aid, expected_revision + 1, profile, "edit", text)
+            elif expected_revision + 1 == current["revision"] and current["content_sha256"] == profile.content_sha256:
+                applied = False  # idempotent retry of an edit that already committed
+            else:
+                raise RevisionConflictError(
+                    f"Profile is at revision {current['revision']}; you edited revision {expected_revision}",
+                    current["revision"])
+            result = self._binding(db, aid)
+        result["applied"] = applied
+        return result
+
+    def list_world_profiles(self, world_id: str) -> dict:
+        wid = canonical_uuid(world_id, "world_id")
+        with self.database.read() as db:
+            if db.execute("SELECT 1 FROM worlds WHERE world_id=?", (wid,)).fetchone() is None:
+                raise RegistryNotFoundError("World is not registered")
+            rows = db.execute("SELECT actor_id FROM actors WHERE world_id=? ORDER BY actor_id", (wid,)).fetchall()
+            actors = [self._binding(db, r["actor_id"]) for r in rows]
+        return {"world_id": wid, "actors": actors}
 
     @staticmethod
     def conversation_id(world_id: str, actor_id: str, participant: str) -> str:

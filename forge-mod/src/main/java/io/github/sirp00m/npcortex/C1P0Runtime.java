@@ -66,7 +66,14 @@ final class C1P0Runtime {
     }
 
     static String spawn(MinecraftServer server, ServerPlayer commander, String name) {
+        return spawn(server, commander, name, C1IdentityData.MODE_DEFAULT, "");
+    }
+
+    /** Local-only: never contacts the backend. {@code profileMode}/{@code preset} apply to NEW NPCs only. */
+    static String spawn(MinecraftServer server, ServerPlayer commander, String name, String profileMode, String preset) {
         ServerThread.require(server, "C1 spawn");
+        if (!C1IdentityData.validProfileSelection(profileMode, preset))
+            return "Invalid profile selection: use default, custom or preset <character pack id>.";
         if (!C1IdentityData.validName(name)) return "Invalid name: use 1-16 ASCII letters, digits or underscore.";
         C1IdentityData store = C1IdentityData.get(server);
         C1IdentityData.Entry prior = store.find(name);
@@ -92,16 +99,16 @@ final class C1P0Runtime {
         try {
             if (prior == null) {
                 // Persisted profile name is generated exactly once by ensure().
-                C1IdentityData.Entry saved = store.ensure(name, dimension, x, y, z, commander.getYRot());
+                C1IdentityData.Entry saved = store.ensure(name, dimension, x, y, z, commander.getYRot(), profileMode, preset);
                 spawnedProfile = saved.profileId();
                 spawnExisting(server, saved);
                 return "Spawn attempted: " + saved.character() + " / " + saved.profileId()
-                        + " (verify rendering on client)";
+                        + " (verify rendering on client) | " + profileSummary(store, saved, profileMode);
             }
             spawnExisting(server, candidate);
-            store.ensure(name, dimension, x, y, z, commander.getYRot());
+            store.ensure(name, dimension, x, y, z, commander.getYRot(), profileMode, preset);
             return "Spawn attempted: " + prior.character() + " / " + prior.profileId()
-                    + " (verify rendering on client)";
+                    + " (verify rendering on client) | " + profileSummary(store, prior, profileMode);
         } catch (RuntimeException ex) {
             LOG.error("NPCortex C1-P0 spawn failed for {}", name, ex);
             // For new records, the identity remains stable for retry but should
@@ -111,6 +118,23 @@ final class C1P0Runtime {
             if (current != null && current.profileId().equals(spawnedProfile)) store.deactivate(name);
             return "Spawn FAILED: " + ex.getClass().getSimpleName() + ": " + ex.getMessage();
         }
+    }
+
+    /**
+     * What the operator needs to know right after a local spawn. C1 creation never implies that the
+     * Character Profile exists or that the backend (C2) is usable.
+     */
+    static String profileSummary(C1IdentityData store, C1IdentityData.Entry entry, String requestedMode) {
+        String ids = "world_id=" + store.worldId() + " actor_id=" + entry.actorId() + " dimension=" + entry.dimension();
+        String note = switch (entry.profileMode()) {
+            case C1IdentityData.MODE_DEFAULT -> "Character Profile: NOT created yet (mode=default); the backend creates the generic default profile at the first C2 registration (the NPC name does NOT select a Character Pack; use 'spawn <name> preset <pack>' for that). Backend not contacted.";
+            case C1IdentityData.MODE_CUSTOM -> "Character Profile: NOT created yet (mode=custom); register it in the NPCortex Manager (Pause menu) or scripts/register-npc-profile.ps1 BEFORE using C2. Backend not contacted.";
+            case C1IdentityData.MODE_PRESET -> "Character Profile: NOT created yet (mode=preset:" + entry.preset() + "); copied from that Character Pack at the first C2 registration. Backend not contacted.";
+            case C1IdentityData.MODE_INVALID -> "Character Profile: saved mode is unreadable; C2 registration will refuse until this NPC is recreated.";
+            default -> "Character Profile: legacy pack '" + entry.character().toLowerCase(java.util.Locale.ROOT) + "' (name-based, not verified with the backend).";
+        };
+        boolean differs = !entry.profileMode().equals(requestedMode) && !entry.legacyProfile();
+        return note + (differs ? " (existing NPC: requested mode ignored)" : "") + " " + ids;
     }
 
     static void spawnExisting(MinecraftServer server, C1IdentityData.Entry entry) {

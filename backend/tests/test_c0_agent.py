@@ -89,24 +89,24 @@ class C0Tests(unittest.TestCase):
                     [self.actor['actor_id'],guide['actor_id']],[],'Before C0 migration')
         run=self.service.create_social_run(dialogue['dialogue_id'],2)
         with self.service.world_store.database.write() as db:
-            for table in ('agent_actions','agent_decisions','agent_observations','agent_goals'):
+            for table in ('character_profiles','agent_actions','agent_decisions','agent_observations','agent_goals'):
                 db.execute(f'DROP TABLE {table}')
             db.execute('PRAGMA user_version=3')
-        migrated=WorldStore(self.db_path)
+        migrated=WorldStore(self.db_path, allow_schema_upgrade=True)
         self.assertEqual(migrated.get_conversation(legacy['conversation_id'])['messages'][0]['content'],'Old history')
         with migrated.database.read() as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],4)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],5)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM dialogues').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM social_runs').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM agent_goals').fetchone()[0],0)
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
-        WorldStore(self.db_path)  # idempotent second startup
+        WorldStore(self.db_path)  # idempotent second startup (now v5: no flag needed)
 
     def test_register_goal_is_durable_and_does_not_touch_social(self):
         self.assertEqual(self.goal['status'],'pending')
-        self.assertEqual(SCHEMA_VERSION,4)
+        self.assertEqual(SCHEMA_VERSION,5)
         with sqlite_test_connection(self.db_path) as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],4)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],5)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM social_runs').fetchone()[0],0)
         other = self.make_service()
         self.assertEqual(other.get_agent_goal(self.goal['goal_id'])['objective'],self.goal['objective'])

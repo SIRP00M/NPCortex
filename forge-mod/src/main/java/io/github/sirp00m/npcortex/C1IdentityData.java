@@ -23,16 +23,45 @@ final class C1IdentityData extends SavedData {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private UUID worldId = UUID.randomUUID();
 
+    /** How an NPC gets its Character Profile at the backend. "" = legacy (name-based Character Pack). */
+    static final String MODE_DEFAULT = "default";
+    static final String MODE_CUSTOM = "custom";
+    static final String MODE_PRESET = "preset";
+    /** Unreadable saved mode: registration refuses instead of guessing a personality. */
+    static final String MODE_INVALID = "invalid";
+
+    /**
+     * {@code profileId} is the Minecraft GameProfile UUID; the Character Profile lives in the backend and is
+     * only ever referred to by {@code actorId}. {@code profileMode}/{@code preset} record how it is created.
+     */
     record Entry(String character, UUID actorId, UUID profileId, String profileName,
-                 String dimension, double x, double y, double z, C1RotationState rotation, boolean active) {
+                 String dimension, double x, double y, double z, C1RotationState rotation, boolean active,
+                 String profileMode, String preset) {
         float yaw() { return rotation.yaw(); }
+        boolean legacyProfile() { return profileMode.isEmpty(); }
         Entry withLocation(String targetDimension, double px, double py, double pz, C1RotationState facing, boolean enabled) {
             return new Entry(character, actorId, profileId, profileName, targetDimension,
-                    px, py, pz, facing, enabled);
+                    px, py, pz, facing, enabled, profileMode, preset);
         }
         Entry withActive(boolean enabled) {
-            return new Entry(character, actorId, profileId, profileName, dimension, x, y, z, rotation, enabled);
+            return new Entry(character, actorId, profileId, profileName, dimension, x, y, z, rotation, enabled,
+                    profileMode, preset);
         }
+    }
+
+    /** The backend world name; shared with scripts/register-npc-profile.ps1 (a static test compares them). */
+    static String backendWorldName(UUID worldId) {
+        return "NPCortex-C1-" + worldId;
+    }
+
+    static boolean validPresetId(String preset) {
+        return preset != null && preset.matches("[a-z][a-z0-9_-]{0,39}");
+    }
+
+    /** Legal (mode, preset) pairs for a NEW NPC. */
+    static boolean validProfileSelection(String mode, String preset) {
+        if (MODE_DEFAULT.equals(mode) || MODE_CUSTOM.equals(mode)) return preset.isEmpty();
+        return MODE_PRESET.equals(mode) && validPresetId(preset);
     }
 
     static C1IdentityData get(MinecraftServer server) {
@@ -56,7 +85,9 @@ final class C1IdentityData extends SavedData {
         return Collections.unmodifiableCollection(entries.values());
     }
 
-    Entry ensure(String name, String dimension, double x, double y, double z, float yaw) {
+    /** An existing NPC keeps its stored profile mode: the arguments only apply when the NPC is created. */
+    Entry ensure(String name, String dimension, double x, double y, double z, float yaw,
+                 String profileMode, String preset) {
         String key = key(name);
         Entry old = entries.get(key);
         if (old != null) {
@@ -70,7 +101,9 @@ final class C1IdentityData extends SavedData {
         // The suffix avoids profile-name collisions when names differ past eight characters.
         String profileName = "N" + name.substring(0, Math.min(8, name.length()))
                 + "_" + profile.toString().substring(0, 6);
-        Entry next = new Entry(name, actor, profile, profileName, dimension, x, y, z, C1RotationState.legacy(yaw), true);
+        if (!validProfileSelection(profileMode, preset)) throw new IllegalArgumentException("invalid profile selection");
+        Entry next = new Entry(name, actor, profile, profileName, dimension, x, y, z, C1RotationState.legacy(yaw), true,
+                profileMode, preset);
         entries.put(key, next);
         setDirty();
         return next;
@@ -141,8 +174,14 @@ final class C1IdentityData extends SavedData {
             if (!tag.contains("pitch", Tag.TAG_FLOAT)
                     || !tag.contains("head_yaw", Tag.TAG_FLOAT)
                     || !tag.contains("body_yaw", Tag.TAG_FLOAT)) store.setDirty();
+            // Missing keys = legacy NPC (name-based pack). Never rewritten on load.
+            String mode = tag.getString("profile_mode");
+            String preset = tag.getString("preset");
+            if (!mode.isEmpty() || !preset.isEmpty()) {
+                if (!validProfileSelection(mode, preset)) { mode = MODE_INVALID; preset = ""; }
+            }
             Entry entry = new Entry(character, tag.getUUID("actor_uuid"), tag.getUUID("profile_uuid"),
-                    profileName, dimension, x, y, z, rotation, tag.getBoolean("active"));
+                    profileName, dimension, x, y, z, rotation, tag.getBoolean("active"), mode, preset);
             store.entries.put(key(character), entry);
         }
         return store;
@@ -171,6 +210,8 @@ final class C1IdentityData extends SavedData {
             tag.putFloat("head_yaw", actor.rotation().headYaw());
             tag.putFloat("body_yaw", actor.rotation().bodyYaw());
             tag.putBoolean("active", actor.active());
+            if (!actor.profileMode().isEmpty()) tag.putString("profile_mode", actor.profileMode());
+            if (!actor.preset().isEmpty()) tag.putString("preset", actor.preset());
             list.add(tag);
         }
         root.put("actors", list);

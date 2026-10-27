@@ -1,5 +1,7 @@
 # Character packs
 
+> **Update (schema v5):** new NPCs no longer need a Character Pack. Each NPC owns a *Character Profile* stored in the backend database (see `character-profiles.md`). Packs remain supported for legacy actors (Yui, Guide) and as an optional `preset` that is copied once. Nothing below changed for legacy behavior.
+
 Each NPC has a folder `character-packs/<id>/character.json`. IDs must be 1–40 characters, lowercase a–z starting first, followed by a–z, digits, `_` or `-`.
 
 Example:

@@ -20,8 +20,11 @@ public final class NPCortex {
     public NPCortex() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, NPCortexConfig.SPEC);
         C1P0Network.register();
+        ManagerNetwork.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStarted);
+        MinecraftForge.EVENT_BUS.addListener(CharacterManagerService::onServerStarted);
+        MinecraftForge.EVENT_BUS.addListener(CharacterManagerService::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(C1VanillaLifecycleCoordinator::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusF1DiagnosticRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusEPreviewRuntime::onServerStopping);
@@ -40,6 +43,15 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(C1VanillaLifecycleCoordinator::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerChangedDimension);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onViewerRespawn);
+    }
+
+    private static int spawnCommand(com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+                                    String mode, String preset) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var source = context.getSource();
+        String result = C1P0Runtime.spawn(source.getServer(), source.getPlayerOrException(),
+                StringArgumentType.getString(context, "name"), mode, preset);
+        source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
+        return 1;
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
@@ -69,14 +81,13 @@ public final class NPCortex {
                         .then(C1P1InventoryCommands.copyHand())
                         .then(Commands.literal("spawn")
                                         .then(Commands.argument("name", StringArgumentType.word())
-                                                .executes(context -> {
-                                                    var source = context.getSource();
-                                                    String result = C1P0Runtime.spawn(source.getServer(),
-                                                            source.getPlayerOrException(),
-                                                            StringArgumentType.getString(context, "name"));
-                                                    source.sendSuccess(() -> Component.literal("NPCortex: " + result), false);
-                                                    return 1;
-                                                })))
+                                                .executes(context -> spawnCommand(context, "default", ""))
+                                                .then(Commands.literal("custom")
+                                                        .executes(context -> spawnCommand(context, "custom", "")))
+                                                .then(Commands.literal("preset")
+                                                        .then(Commands.argument("pack", StringArgumentType.word())
+                                                                .executes(context -> spawnCommand(context, "preset",
+                                                                        StringArgumentType.getString(context, "pack")))))))
                                 .then(Commands.literal("despawn")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .executes(context -> {

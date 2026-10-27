@@ -21,18 +21,25 @@ from .config import is_loopback_host
 from .identity import IdentityError, PLAYER_PATTERN
 from .ollama import ModelError
 from .agent_runtime import PlannerDecisionError
-from .service import ModelCapacityError
+from .service import ModelCapacityError, ChatService
 from .session import SessionBusyError, SessionCapacityError
-from .world_store import RegistryNotFoundError, RegistryConflictError
+from .profiles import ProfileError
+from .world_store import (RegistryNotFoundError, RegistryConflictError, ProfileNotRegisteredError,
+                          RevisionConflictError)
 
 LOG = logging.getLogger(__name__)
 MAX_BODY = 8192
+# Profile routes carry up to 5000 characters of prompt text (UTF-8), so they get a larger, explicit cap.
+PROFILE_MAX_BODY = 32768
 # Invalid/rejected POST bodies are discarded in small pieces to avoid a TCP
 # reset on Windows when sending a JSON 4xx response with unread bytes.
 # Never buffer the rejected payload or accept an unbounded drain workload.
 MAX_REJECT_DRAIN = 1024 * 1024
 REJECT_DRAIN_TIMEOUT_SECONDS = 2
 ACTOR_GET = re.compile(r"^/v1/actors/([^/]+)$")
+PROFILE_GET = re.compile(r"^/v1/actors/([^/]+)/profile$")
+PROFILE_REVISIONS = re.compile(r"^/v1/actors/([^/]+)/profile/revisions$")
+WORLD_PROFILES_GET = re.compile(r"^/v1/worlds/([^/]+)/profiles$")
 CONVERSATION_GET = re.compile(r"^/v1/conversations/([^/]+)$")
 DIALOGUE_GET = re.compile(r"^/v1/dialogues/([^/]+)$")
 DIALOGUE_TURNS = re.compile(r"^/v1/dialogues/([^/]+)/turns$")
@@ -158,6 +165,13 @@ def make_handler(service):
         def _handle_error(self, exc):
             if isinstance(exc, CharacterError):
                 return self._error(400, "invalid_character", str(exc))
+            if isinstance(exc, ProfileError):
+                return self._error(400, "invalid_profile", str(exc))
+            if isinstance(exc, ProfileNotRegisteredError):
+                return self._error(404, "profile_not_registered", str(exc))
+            if isinstance(exc, RevisionConflictError):
+                return self._json(409, {"error": str(exc), "code": "revision_conflict",
+                                        "current_revision": exc.current_revision})
             if isinstance(exc, IdentityError):
                 return self._error(400, "invalid_identity", str(exc))
             if isinstance(exc, RegistryNotFoundError):
@@ -195,6 +209,14 @@ def make_handler(service):
             return bool(local and len(secret) >= 24 and len(supplied) <= 512
                         and hmac.compare_digest(secret.encode("utf-8"), supplied.encode("utf-8", "replace")))
 
+        def _profile_auth_ok(self):
+            """Profile routes ALWAYS need the local token, independent of NPCORTEX_REQUIRE_TOKEN."""
+            if self._token_ok():
+                return True
+            self.close_connection = True
+            self._error(403, "forbidden", "Local token required for Character Profile routes")
+            return False
+
         def _legacy_auth_ok(self):
             if not token_required() or self._token_ok():
                 return True
@@ -220,6 +242,16 @@ def make_handler(service):
                 agent_goal = AGENT_GOAL_GET.fullmatch(self.path)
                 if agent_goal:
                     return self._json(200, service.get_agent_goal(agent_goal.group(1)))
+                profile_route = PROFILE_GET.fullmatch(self.path)
+                if profile_route:
+                    if not self._profile_auth_ok():
+                        return
+                    return self._json(200, service._require_world_store().export_profile(profile_route.group(1)))
+                world_profiles = WORLD_PROFILES_GET.fullmatch(self.path)
+                if world_profiles:
+                    if not self._profile_auth_ok():
+                        return
+                    return self._json(200, service._require_world_store().list_world_profiles(world_profiles.group(1)))
                 actor = ACTOR_GET.fullmatch(self.path)
                 if actor:
                     return self._json(200, service._require_world_store().get_actor(actor.group(1)))
@@ -248,6 +280,7 @@ def make_handler(service):
                 "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
                 "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
                 "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack")
+                or PROFILE_REVISIONS.fullmatch(self.path)
                 or DIALOGUE_TURNS.fullmatch(self.path)
                 or DIALOGUE_CLOSE.fullmatch(self.path)
                 or SOCIAL_STEP.fullmatch(self.path)
@@ -289,6 +322,8 @@ def make_handler(service):
             max_body = 24000 if self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
                 "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
                 "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack") else MAX_BODY
+            if self.path == "/v1/actors" or PROFILE_REVISIONS.fullmatch(self.path):
+                max_body = PROFILE_MAX_BODY
             if length < 1 or length > max_body:
                 self._discard_rejected_body(length)
                 return self._error(413, "request_too_large", f"Request size must be 1–{max_body} bytes")
@@ -468,11 +503,35 @@ def make_handler(service):
                     if "name" not in data:
                         return self._error(400, "invalid_request", "Missing world name")
                     return self._json(201, service.register_world(data["name"], data.get("world_id")))
+                revision_route = PROFILE_REVISIONS.fullmatch(self.path)
+                if revision_route:
+                    if not self._profile_auth_ok():
+                        return
+                    if "expected_revision" not in data or "profile" not in data or set(data) - {"expected_revision", "profile", "note"}:
+                        return self._error(400, "invalid_request", "Body must contain expected_revision and profile (and optionally note)")
+                    from .profiles import validate_profile
+                    store = service._require_world_store()
+                    submitted = data["profile"]
+                    if isinstance(submitted, dict) and "language" not in submitted:
+                        # An edit that does not mention the language keeps the stored one.
+                        current = store.get_current_profile(revision_route.group(1))
+                        if current is not None:
+                            submitted = {**submitted, "language": current[1].language}
+                    result = store.add_profile_revision(
+                        revision_route.group(1), data["expected_revision"], validate_profile(submitted), data.get("note"))
+                    return self._json(201 if result["applied"] else 200, result)
                 if self.path == "/v1/actors":
-                    if not all(key in data for key in ("world_id", "dimension_id", "character_id")):
+                    if not all(key in data for key in ("world_id", "dimension_id")) or not any(
+                            key in data for key in ChatService._SELECTORS):
                         return self._error(400, "invalid_request", "Missing actor identity fields")
-                    return self._json(201, service.register_actor(
-                        data["world_id"], data["dimension_id"], data["character_id"], data.get("actor_id")))
+                    # Only the legacy character_id selector keeps the optional-token rule; every selector that
+                    # can create or reveal a Character Profile needs the local token.
+                    if any(key in data for key in ChatService._SELECTORS if key != "character_id") \
+                            and not self._profile_auth_ok():
+                        return
+                    if "profile" not in data and length > MAX_BODY:
+                        return self._error(413, "request_too_large", f"Request size must be 1–{MAX_BODY} bytes")
+                    return self._json(201, service.register_actor_request(data))
                 if self.path == "/v1/chat":
                     character_id, participant, message = (data.get("character_id"), data.get("player_id"), data.get("message"))
                     if (not isinstance(character_id, str) or not isinstance(participant, str)

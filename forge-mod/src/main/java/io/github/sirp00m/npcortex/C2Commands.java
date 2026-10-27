@@ -28,6 +28,12 @@ final class C2Commands {
                                         .then(Commands.argument("y",DoubleArgumentType.doubleArg())
                                                 .then(Commands.argument("z",IntegerArgumentType.integer())
                                                         .executes(context -> navigate(context)))))))
+                .then(Commands.literal("navlong")
+                        .then(Commands.argument("name",StringArgumentType.word())
+                                .then(Commands.argument("x",IntegerArgumentType.integer())
+                                        .then(Commands.argument("y",DoubleArgumentType.doubleArg())
+                                                .then(Commands.argument("z",IntegerArgumentType.integer())
+                                                        .executes(context -> navigateLong(context)))))))
                 .then(Commands.literal("navscan")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .executes(context -> scan(context, C2NavGrid.DEFAULT_RADIUS))
@@ -143,6 +149,15 @@ final class C2Commands {
                 IntegerArgumentType.getInteger(ctx,"x"),IntegerArgumentType.getInteger(ctx,"supportY"),
                 IntegerArgumentType.getInteger(ctx,"z"));
         src.sendSuccess(() -> Component.literal("NPCortex: "+message),false);
+        return 1;
+    }
+
+    private static int navigateLong(com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> ctx) {
+        var src=ctx.getSource();
+        String msg=C2AgentRuntime.navigateLong(src.getServer(),StringArgumentType.getString(ctx,"name"),
+                IntegerArgumentType.getInteger(ctx,"x"),DoubleArgumentType.getDouble(ctx,"y"),
+                IntegerArgumentType.getInteger(ctx,"z"));
+        src.sendSuccess(() -> Component.literal("NPCortex: "+msg),false);
         return 1;
     }
 

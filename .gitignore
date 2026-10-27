@@ -24,20 +24,19 @@ logs/
 *.gguf
 *.safetensors
 
-# Local AI engineering assistants / code graph output (not part of public source)
+# Local AI engineering/working-session artifacts (not public source)
 .claude/
 CLAUDE.md
 graphify-out/
-
-# Candidate/acceptance metadata and operator working state
+g5-results/
 PENDING_TESTS.txt
 CANDIDATE_MANIFEST.json
-M04_MANIFEST.json
-M04_OPTION_D_MANIFEST.json
-M04_AUTO_ACCEPT_MANIFEST.json
-NPCortex-Automated-Reports/
+M04_*MANIFEST.json
 docs/m03-final/runs/
 docs/m03-final/focused-*/
-*.sqlite3-wal
+docs/m04/*VALIDATION.json
+docs/m04/acceptance-record.json
+*.sqlite3
 *.sqlite3-shm
-*.log.gz
+*.sqlite3-wal
+!backend/tests/fixtures/v4_baseline.sqlite3

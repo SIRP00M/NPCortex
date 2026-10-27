@@ -8,7 +8,8 @@ from .dialogues import DialogueStore
 from .identity import canonical_uuid, IdentityError
 from .ollama import ModelError
 from .world_store import RegistryConflictError
-from .characters import load_character
+from .characters import Character, CharacterError, load_character
+from .profiles import LEGACY_SENTINEL, ProfileError, default_profile, profile_from_pack, validate_profile
 from .session import SessionStore
 from .world_store import WorldStore
 
@@ -69,6 +70,47 @@ class ChatService:
         load_character(self.packs_dir, character_id)
         return self._require_world_store().register_actor(world_id, dimension_id, character_id, actor_id)
 
+    # Exactly one selector decides how an actor gets its personality (docs/character-profiles.md).
+    _SELECTORS = ("character_id", "profile", "preset", "default_profile", "require_existing_profile")
+
+    def register_actor_request(self, data: dict) -> dict:
+        """POST /v1/actors. Legacy payloads (character_id) behave exactly as before."""
+        present = [key for key in self._SELECTORS if key in data]
+        if len(present) != 1:
+            raise IdentityError("Exactly one of " + ", ".join(self._SELECTORS) + " is required")
+        selector = present[0]
+        if selector == "character_id":
+            return self.register_actor(data["world_id"], data["dimension_id"], data["character_id"], data.get("actor_id"))
+        store = self._require_world_store()
+        if selector == "require_existing_profile":
+            if data["require_existing_profile"] is not True or "actor_id" not in data:
+                raise IdentityError("require_existing_profile must be true and needs actor_id")
+            return store.bind_existing_profile(data["world_id"], data["dimension_id"], data["actor_id"])
+        if selector == "profile":
+            profile, source = validate_profile(data["profile"]), "inline"
+        elif selector == "default_profile":
+            body = data["default_profile"]
+            if not isinstance(body, dict) or set(body) != {"display_name"}:
+                raise ProfileError("default_profile must be {\"display_name\": ...}")
+            profile, source = default_profile(body["display_name"]), "default"
+        else:
+            preset = data["preset"]
+            if not isinstance(preset, str):
+                raise CharacterError("preset must be a character pack ID")
+            profile, source = profile_from_pack(load_character(self.packs_dir, preset)), f"preset:{preset}"
+        return store.register_actor_with_profile(data["world_id"], data["dimension_id"], data.get("actor_id"),
+                                                 profile, source)
+
+    def resolve_actor_character(self, actor: dict) -> Character:
+        """The single place an actor's personality is chosen: its profile revision, else its legacy pack."""
+        current = self._require_world_store().get_current_profile(actor["actor_id"])
+        if current is not None:
+            _, profile = current
+            return Character(actor["character_id"], profile.display_name, profile.language, profile.system_prompt)
+        if actor["character_id"] == LEGACY_SENTINEL:
+            raise CharacterError("Actor has no registered Character Profile")
+        return load_character(self.packs_dir, actor["character_id"])
+
     def _require_world_store(self) -> WorldStore:
         if self.world_store is None:
             raise RuntimeError("B1 WorldStore has not been configured")
@@ -87,7 +129,7 @@ class ChatService:
         if actor["world_id"] != wid or actor["dimension_id"] != dimension_id:
             from .world_store import RegistryConflictError
             raise RegistryConflictError("Actor does not belong to the requested world/dimension")
-        character = load_character(self.packs_dir, actor["character_id"])
+        character = self.resolve_actor_character(actor)
         # The A2 session lease is only a lock/queue; transcript source of truth is SQLite.
         # Lock scope is per world + actor + player, not character template.
         with self.sessions.conversation(f"{wid}/{player_id}", f"actor:{aid}"):
@@ -176,7 +218,7 @@ class ChatService:
             for actor_id in actor_ids:
                 aid = canonical_uuid(actor_id, "actor_id")
                 actor = self._require_world_store().get_actor(aid)
-                load_character(self.packs_dir, actor["character_id"])
+                self.resolve_actor_character(actor)
         return storage.create(world_id, dimension_id, actor_ids, player_ids, topic, max_turns)
 
     def get_dialogue(self, dialogue_id: str) -> dict:
@@ -245,7 +287,7 @@ class ChatService:
             raise RegistryConflictError("The same participant cannot speak in consecutive turns")
         if kind == "actor":
             actor = self._require_world_store().get_actor(sid)
-            character = load_character(self.packs_dir, actor["character_id"])
+            character = self.resolve_actor_character(actor)
             # Shared conversation data only: never inject private B1 player
             # transcripts of this or any other actor into a social dialogue.
             context = {

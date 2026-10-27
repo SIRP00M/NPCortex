@@ -1,0 +1,36 @@
+[27Oct2026 12:10:26.653] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [TestPlayer] [G5] SETUP ok
+[27Oct2026 12:10:26.653] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [G5] ready. /function npcortex_g5:start (all) or /function npcortex_g5:tests/navigation (group). Status: npcortex_g5:status
+[27Oct2026 12:10:26.653] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Executed 21 command(s) from function 'npcortex_g5:setup'
+[27Oct2026 12:10:26.662] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TestPlayer] [G5] SETUP ok
+[27Oct2026 12:10:32.728] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [TestPlayer: Executed 14 command(s) from function 'npcortex_g5:probe']
+[27Oct2026 12:10:32.728] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [TestPlayer] [G5] START only:p00_capability_probe
+[27Oct2026 12:10:32.734] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Executed 14 command(s) from function 'npcortex_g5:probe'
+[27Oct2026 12:10:32.734] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TestPlayer] [G5] START only:p00_capability_probe
+[27Oct2026 12:10:33.203] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] BEGIN p00_capability_probe capability probe
+[27Oct2026 12:10:33.205] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 HANDSHAKE_BEGIN viewer=TestPlayer npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef id=375
+[27Oct2026 12:10:33.205] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_START viewer=TestPlayer npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef entityId=375
+[27Oct2026 12:10:33.210] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=df5e8322-6ce2-5168-b3ef-5c985f86e5ef actor=3f666469-2dca-5ec7-b2fc-2905a83d82fd dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
+[27Oct2026 12:10:33.210] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] BEGIN p00_capability_probe capability probe
+[27Oct2026 12:10:33.210] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PREPARE npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef entityId=375
+[27Oct2026 12:10:33.215] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PROFILE_READY npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef
+[27Oct2026 12:10:33.219] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 PROFILE_READY viewer=TestPlayer npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef
+[27Oct2026 12:10:33.225] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_VERIFY npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef entityId=375
+[27Oct2026 12:10:33.259] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef id=375
+[27Oct2026 12:10:33.259] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT viewer=TestPlayer npc=df5e8322-6ce2-5168-b3ef-5c985f86e5ef repairs=0
+[27Oct2026 12:10:34.701] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] PROBE players_visible=1 (only the operator)
+[27Oct2026 12:10:34.702] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] PROBE selector=NONE (spawned NPC is not visible to TestPlayer)
+[27Oct2026 12:10:34.702] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] PROBE tag=FAIL
+[27Oct2026 12:10:34.703] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] PROBE entity_data=FAIL
+[27Oct2026 12:10:34.711] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] PROBE players_visible=1 (only the operator)
+[27Oct2026 12:10:34.711] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] PROBE selector=NONE (spawned NPC is not visible to TestPlayer)
+[27Oct2026 12:10:34.711] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] PROBE tag=FAIL
+[27Oct2026 12:10:34.711] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] PROBE entity_data=FAIL
+[27Oct2026 12:10:35.702] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] PROBE mode=FALLBACK (snapshot-evidence mode; scenarios take longer, the collector judges)
+[27Oct2026 12:10:35.702] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] OBS p00_capability_probe FALLBACK
+[27Oct2026 12:10:35.709] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] PROBE mode=FALLBACK (snapshot-evidence mode; scenarios take longer, the collector judges)
+[27Oct2026 12:10:35.709] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] OBS p00_capability_probe FALLBACK
+[27Oct2026 12:10:36.702] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] END p00_capability_probe
+[27Oct2026 12:10:36.703] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] SEQUENCE_DONE outcome=ALL_SCENARIOS_RAN (not a verdict)
+[27Oct2026 12:10:36.708] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] END p00_capability_probe
+[27Oct2026 12:10:36.709] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] SEQUENCE_DONE outcome=ALL_SCENARIOS_RAN (not a verdict)
+[27Oct2026 12:10:36.709] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [G5] sequence finished. Run scripts/collect-g5-evidence.ps1 to package evidence.

@@ -6,6 +6,10 @@ public class CompoundTag implements Tag {
     public void put(String key, Tag tag) { tags.put(key, tag); }
     public void putFloat(String key, float v) { tags.put(key, v); }
     public float getFloat(String key) { return tags.get(key) instanceof Float f ? f : 0.0f; }
+    public void putDouble(String key, double v) { tags.put(key, v); }
+    public double getDouble(String key) { return tags.get(key) instanceof Double d ? d : 0.0; }
+    public void putBoolean(String key, boolean v) { tags.put(key, v); }
+    public boolean getBoolean(String key) { return tags.get(key) instanceof Boolean b && b; }
     public void putInt(String key, int v) { tags.put(key, v); }
     public void putLong(String key, long v) { tags.put(key, v); }
     public void putString(String key, String v) { tags.put(key, v); }

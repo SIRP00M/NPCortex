@@ -87,4 +87,4 @@ passing a C1 Forge integration test.
   do not claim success without full output.
 - Minecraft gameplay: user must build/run and report evidence.
 
-**No GitHub actions by ChatGPT. No Test, No Push.**
+**These instructions do not, by themselves, certify completed tests or a GitHub update.**

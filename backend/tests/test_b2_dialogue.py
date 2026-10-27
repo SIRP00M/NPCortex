@@ -346,13 +346,13 @@ class B2MigrationTest(unittest.TestCase):
     def test_migration_from_real_v1_schema_preserves_all_data_and_is_idempotent(self):
         wid, aid, cid = self.create_v1()
         for _ in range(2):
-            store = WorldStore(self.path)
+            store = WorldStore(self.path, allow_schema_upgrade=True)
             self.assertEqual(store.get_actor(aid)["world_id"], wid)
             self.assertEqual(store.get_conversation(cid)["messages"],
                              [{"role": "user", "content": "B1 original secret"},
                               {"role": "assistant", "content": "B1 original answer"}])
         with sqlite_test_connection(self.path) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 5)
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(db.execute("SELECT COUNT(*) FROM transcript").fetchone()[0], 2)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM dialogue_turns").fetchone()[0], 0)
@@ -362,7 +362,7 @@ class B2MigrationTest(unittest.TestCase):
         with sqlite_test_connection(self.path) as db:
             db.execute("ALTER TABLE actors RENAME COLUMN character_id TO missing")
         with self.assertRaises(sqlite3.DatabaseError):
-            WorldStore(self.path)
+            WorldStore(self.path, allow_schema_upgrade=True)
         with sqlite_test_connection(self.path) as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 1)
 
@@ -371,7 +371,7 @@ class B2MigrationTest(unittest.TestCase):
         with sqlite_test_connection(self.path) as db:
             db.execute("DROP TABLE transcript")
         with self.assertRaises(sqlite3.Error):
-            WorldStore(self.path)
+            WorldStore(self.path, allow_schema_upgrade=True)
         with sqlite_test_connection(self.path) as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 1)
             self.assertFalse(db.execute("SELECT name FROM sqlite_master WHERE name='dialogues'").fetchone())

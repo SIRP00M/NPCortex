@@ -69,4 +69,4 @@ Acceptance must check:
 
 **Send back:** full Gradle failure or success log; chat output of `/npcortex c2 navscan yui 4` and `6` in flat and partial terrain; any `latest.log` stack traces; test outcome and observed MSPT where available.
 
-No GitHub branch, commit, merge or push was performed by ChatGPT.
+This development snapshot does not imply a public GitHub commit, merge or release.

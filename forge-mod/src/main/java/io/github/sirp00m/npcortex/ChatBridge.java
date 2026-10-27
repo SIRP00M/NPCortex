@@ -150,6 +150,53 @@ public final class ChatBridge {
         }
     }
 
+    private static final java.util.regex.Pattern PROFILE_PATH = java.util.regex.Pattern.compile(
+            "/v1/(?:worlds|worlds/[0-9a-f-]{36}/profiles|actors|actors/[0-9a-f-]{36}/profile|actors/[0-9a-f-]{36}/profile/revisions)");
+    static final int PROFILE_MAX_BODY = 32768;
+
+    /**
+     * NPCortex Manager calls (server side only). Unlike {@link #c2Post} this never throws for a 4xx/5xx: the
+     * caller needs the backend's status and code. The local credential is mandatory here: the profile routes
+     * reject requests without it, so a missing secret is reported before anything is sent. Never logged.
+     */
+    static CompletableFuture<ManagerCore.Http> profileRequest(String method, String path, JsonObject body) {
+        try {
+            if (!PROFILE_PATH.matcher(path).matches() || !("GET".equals(method) || "POST".equals(method)))
+                throw new IllegalArgumentException("Profile endpoint is not allowlisted");
+            String token;
+            try {
+                token = io.github.sirp00m.npcortex.cplus.CPlusLocalAuth.readToken();
+            } catch (java.io.IOException | RuntimeException ex) {
+                throw new IllegalStateException("Local credential unavailable: start the backend once so it creates its secret, then retry.");
+            }
+            byte[] encoded = body == null ? null : body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            if (encoded != null && encoded.length > PROFILE_MAX_BODY)
+                throw new IllegalArgumentException("Profile request is too large");
+            HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint(path))
+                    .header("X-NPCortex-CPlus-Token", token)
+                    .timeout(Duration.ofSeconds(15));
+            if (encoded == null) {
+                builder.GET();
+            } else {
+                builder.header("Content-Type", "application/json; charset=utf-8")
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(encoded));
+            }
+            return HTTP.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8))
+                    .thenApply(response -> {
+                        JsonObject parsed = new JsonObject();
+                        try {
+                            JsonElement element = JsonParser.parseString(response.body());
+                            if (element.isJsonObject()) parsed = element.getAsJsonObject();
+                        } catch (RuntimeException ignored) {
+                            // A non-JSON error page still yields its HTTP status.
+                        }
+                        return new ManagerCore.Http(response.statusCode(), parsed);
+                    });
+        } catch (RuntimeException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
+    }
+
     public static String describeFailure(Throwable failure) {
         Throwable cause = failure;
         while ((cause instanceof CompletionException || cause instanceof ExecutionException)

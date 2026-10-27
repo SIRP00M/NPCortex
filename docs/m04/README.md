@@ -2,9 +2,11 @@
 
 **Status: PARTIAL IMPLEMENTATION, NOT READY FOR WORLD MUTATION.**
 
-This foundation was developed from an earlier M03 source snapshot and its
-evidence-watcher changes. Always compare against the latest local working tree
-before replacing files; this document is not proof of a clean merge.
+This candidate is derived from the last full source ZIP available in the conversation,
+`NPCortex_M03_AllTests_FunctionLoadFix_FullRepository_CANDIDATE.zip`, plus the
+M03 Live Evidence watcher overlay. A 2026-10-26 source audit described
+an evolving *local* workspace not mounted here. Do not claim that the generated
+ZIP replaces newer local edits in `F:\AI\NPCortex` without a merge review.
 
 ## Implemented in this candidate
 
@@ -32,7 +34,8 @@ before replacing files; this document is not proof of a clean merge.
 
 ## Deferred / blockers
 
-- **Gate 0:** The previously identified M03 command provenance mismatch is not certified fixed. Checking that `CommandSourceStack.getPlayer()`
+- **Gate 0:** The M03 command provenance mismatch from the 2026-10-26 engineering
+  audit is not certified fixed. Checking that `CommandSourceStack.getPlayer()`
   resolves to a live OP does NOT by itself distinguish direct player chat
   from commands executed using `execute as` or via a datapack/command block.
   M04 mutating commands are not registered until authenticated origin is proven.

@@ -67,8 +67,9 @@ class B3Tests(unittest.TestCase):
         self.yui2 = self.service.register_actor(self.world['world_id'], 'minecraft:overworld', 'yui')
         self.guide = self.service.register_actor(self.world['world_id'], 'minecraft:overworld', 'guide')
 
-    def make_service(self, ai):
-        return ChatService(ROOT/'character-packs', 'fake', ai, SessionStore(), world_store=WorldStore(self.path))
+    def make_service(self, ai, allow_schema_upgrade=False):
+        return ChatService(ROOT/'character-packs', 'fake', ai, SessionStore(),
+                           world_store=WorldStore(self.path, allow_schema_upgrade=allow_schema_upgrade))
 
     def create_dialogue(self, actors=None, players=None, max_turns=12):
         return self.service.create_dialogue(self.world['world_id'], 'minecraft:overworld',
@@ -257,10 +258,11 @@ class B3Tests(unittest.TestCase):
             self.step(run)
 
     def test_schema_v3_additive_migration_from_v2_with_data(self):
-        self.assertEqual(SCHEMA_VERSION, 4)
+        self.assertEqual(SCHEMA_VERSION, 5)
         d = self.create_dialogue()
         self.service.dialogue_turn(d['dialogue_id'], 'actor', self.yui1['actor_id'])
         with sqlite_test_connection(self.path) as db:
+            db.execute('DROP TABLE character_profiles')
             db.execute('DROP TABLE agent_actions')
             db.execute('DROP TABLE agent_decisions')
             db.execute('DROP TABLE agent_observations')
@@ -268,10 +270,10 @@ class B3Tests(unittest.TestCase):
             db.execute('DROP TABLE social_steps')
             db.execute('DROP TABLE social_runs')
             db.execute('PRAGMA user_version=2')
-        upgraded = self.make_service(FakeSocialAI())
+        upgraded = self.make_service(FakeSocialAI(), allow_schema_upgrade=True)
         self.assertEqual(len(upgraded.get_dialogue(d['dialogue_id'])['turns']), 1)
         with sqlite_test_connection(self.path) as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 4)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 5)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM actors').fetchone()[0], 3)
 
 

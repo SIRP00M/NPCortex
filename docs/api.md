@@ -291,3 +291,8 @@ B1/B2 tables are preserved. See [B3 contract](b3-headless-social.md).
 See [C0 Agent Protocol](c0-headless-agent-runtime.md) for full examples,
 validation, session coordination, idempotency and C1 Player-based Forge Handoff.
 There are no real Minecraft world actions in this backend-only sprint.
+
+
+## Character Profiles (schema v5)
+
+See [character-profiles.md](character-profiles.md) for `POST /v1/actors` selectors, `GET /v1/actors/{id}/profile`, `POST /v1/actors/{id}/profile/revisions` and `GET /v1/worlds/{id}/profiles`. These routes always require the local token header.

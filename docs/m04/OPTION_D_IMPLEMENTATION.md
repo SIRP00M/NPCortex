@@ -9,9 +9,10 @@ claim the full Gate 0–6 gameplay implementation.
 
 ## Baseline and limitations
 
-This iteration was based on an earlier M04 Foundation source snapshot.
-Local development may have advanced since that baseline. Compare and merge
-against the latest source tree; **do not overwrite
+The full repository comes from the most recent available **M04 Foundation**
+ZIP in this conversation. `F:\AI\NPCortex` itself was **not mounted** into the
+Linux authoring sandbox. A subsequent engineering audit described local changes outside
+the earlier manifest. Merge-review against that local tree; **do not overwrite
 local source, saves, SQLite, configuration, old HOLD attempts or outbox**.
 
 The Forge/47.4.10 mappings and GameTest runtime cannot be type-checked here:

@@ -77,3 +77,20 @@ tasks.register('verifyM04Contract', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'io.github.sirp00m.npcortex.CPlusM04ContractSelfTest'
 }
+
+// Character Profile Foundation: NPCortex Manager wire format and state machine. Pure JVM, no Minecraft world.
+tasks.register('verifyManagerProtocol', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.ManagerProtocolSelfTest'
+}
+tasks.register('verifyManagerCore', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.ManagerCoreSelfTest'
+}
+tasks.register('verifyProfileRegistration', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.C2RegistrationPayloadSelfTest'
+}

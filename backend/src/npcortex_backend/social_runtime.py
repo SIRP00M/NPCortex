@@ -110,9 +110,8 @@ class SocialRuntime:
             if p["speaker_type"] != "actor":
                 raise RegistryConflictError("Social dialogue contains a player")
             char = self.service._require_world_store().get_actor(p["speaker_id"])
-            # Display name from pack; no private B1 memory is loaded here.
-            from .characters import load_character
-            character = load_character(self.service.packs_dir, char["character_id"])
+            # Display name from the actor's profile (or legacy pack); no private B1 memory is loaded here.
+            character = self.service.resolve_actor_character(char)
             actors.append({"actor_id": p["speaker_id"], "name": character.display_name,
                            "character_id": char["character_id"]})
         allowed = {a["actor_id"] for a in actors if a["actor_id"] != last}

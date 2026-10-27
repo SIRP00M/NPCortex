@@ -28,6 +28,7 @@ final class C2AgentRuntime {
     // attempt per server END tick, even with 10 NPCs reaching obstacles together.
     private static long serverTicks;
     private static long lastPlannerTick = -1;
+    private static final C2PlanQueue PLAN_QUEUE = new C2PlanQueue();
 
     // G3 current-process-only C0+C1+C2 terminal witness. Never rebuild from
     // SavedData text after restart; old HOLD remains fenced for manual audit.
@@ -47,6 +48,11 @@ final class C2AgentRuntime {
         C2WaypointExecution route;
         final C2ReplanningPolicy replanning = new C2ReplanningPolicy();
         UUID action;
+        // Option D: in-memory only. NONE for every run not started by navlong.
+        C2LongGoalPolicy.LongGoal longGoal;
+        C2LongGoalPolicy.LongState longState = C2LongGoalPolicy.LongState.NONE;
+        int legBaseTicks;
+        boolean longArrivalJudged;
         int routeTicks;
         int recoveryWaitTicks;
         int stableGroundTicks;
@@ -54,6 +60,7 @@ final class C2AgentRuntime {
         UUID replanningEntryToken;
         UUID passiveMotionToken;
         String phase = "REQUESTED";
+        String profileNote = "pending";
         int ticks;
         boolean moved;
         Run(MinecraftServer server, C1IdentityData.Entry id, UUID world, double tx, double ty, double tz, double tolerance, C2WaypointExecution route) {
@@ -145,12 +152,73 @@ final class C2AgentRuntime {
         return startInternal(server,name,tx,ty,tz,C2MoveGeometry.DEFAULT_TOLERANCE,route);
     }
 
+    /**
+     * Option D (operator-only): one logical C2 goal toward a far loaded target, executed as
+     * bounded local legs. Plans only the first leg here; the C0 goal/action stay single.
+     * Bounded heuristic: may end with NO_PROGRESS. Never loads chunks.
+     */
+    static String navigateLong(MinecraftServer server,String name,int x,double feetY,int z) {
+        if (server==null || !server.isSameThread()) return "navlong requires server thread";
+        C1IdentityData.Entry id=C1IdentityData.get(server).find(name);
+        if (id==null) return "Unknown NPC: "+name;
+        if (ACTIVE.containsKey(id.actorId())) return "C2 actor busy: "+name;
+        if (C2FollowRuntime.hasActiveActor(id.actorId())) return "C2-F1 follow owns NPC; use c2 unfollow first";
+        C1PlayerAvatar avatar=C1P0Runtime.activeAvatar(server,name);
+        if (avatar==null || !C1P1CLifecycleRuntime.mayRestore(server,id.profileId())
+                || !avatar.getUUID().equals(id.profileId())
+                || !avatar.serverLevel().dimension().location().toString().equals(id.dimension()))
+            return "navlong actor not live/alive in registered dimension";
+        if (!avatar.onGround() || C1P1MotionRuntime.c2Receipt(id.profileId()).active())
+            return "navlong NPC not grounded or movement busy";
+        if (!Double.isFinite(feetY) || feetY<Integer.MIN_VALUE+2.0 || feetY>Integer.MAX_VALUE-2.0)
+            return "navlong target footY invalid";
+        int finalSupportY=C2S3SupportY.at(feetY);
+        if (!avatar.serverLevel().hasChunkAt(new BlockPos(x,finalSupportY,z))) return "navlong target chunk not loaded";
+        int sx=net.minecraft.util.Mth.floor(avatar.getX()), sz=net.minecraft.util.Mth.floor(avatar.getZ());
+        int sy=C2S3SupportY.at(avatar.getY());
+        C2LongGoalPolicy.LongGoal lg;
+        try { lg=new C2LongGoalPolicy.LongGoal(sx,sy,sz,x,finalSupportY,z); }
+        catch (IllegalArgumentException ex) { return "navlong rejected: target farther than "+C2LongGoalPolicy.MAX_DISTANCE+" blocks"; }
+        C2WaypointExecution route;
+        boolean isFinal;
+        try {
+            var capture=C2GraphWorldProbe.captureWithSnapshot(avatar,C2NavGrid.MAX_RADIUS);
+            var startNode=nodeAt(capture.graph(),sx,sy,sz);
+            if (lg.finalInWindow(sx,sy,sz) && !lg.finalWalkable(capture.graph()))
+                return "navlong rejected: target is not a verified walkable node (UNSAFE_TARGET)";
+            var sel=lg.select(capture.graph(),startNode);
+            if (sel==null) return "navlong rejected: LONG_NO_CANDIDATE";
+            var planned=C2HierarchicalPlanner.plan(capture.graph(),capture.snapshot(),
+                    new C2AStarPlanner.Target(sx,sy,sz),
+                    new C2AStarPlanner.Target(sel.target().x(),sel.target().supportY(),sel.target().z()),
+                    C2RegionGraph.DEFAULT_TILE_SIZE,C2HierarchicalPlanner.DEFAULT_BUDGET);
+            if (!planned.found()) return "navlong planning rejected: "+planned.status();
+            lg.chargeSearch(planned.expandedNodes());
+            route=C2WaypointExecution.navigation3D(planned.path());
+            isFinal=sel.isFinal();
+        } catch (RuntimeException ex) { return "navlong rejected: "+ex.getMessage(); }
+        if (isFinal && Math.abs(route.path().get(route.path().size()-1).footY()-feetY)>C1S2TraversalPlan.HEIGHT_TOLERANCE)
+            return "navlong target footY does not match observed terrain surface";
+        return startInternal(server,name,x+0.5,feetY,z+0.5,C2MoveGeometry.DEFAULT_TOLERANCE,route,lg,isFinal);
+    }
+
+    private static C2TraversabilityGraph.Node nodeAt(C2TraversabilityGraph graph,int x,int supportY,int z) {
+        for (var n : graph.nodes()) if (n.x()==x && n.supportY()==supportY && n.z()==z) return n;
+        return null;
+    }
+
     static String start(MinecraftServer server, String name, double x, double y, double z, double tolerance) {
         return startInternal(server,name,x,y,z,tolerance,null);
     }
 
     private static String startInternal(MinecraftServer server, String name, double x,double y,double z,
                                         double tolerance,C2WaypointExecution route) {
+        return startInternal(server,name,x,y,z,tolerance,route,null,false);
+    }
+
+    private static String startInternal(MinecraftServer server, String name, double x,double y,double z,
+                                        double tolerance,C2WaypointExecution route,
+                                        C2LongGoalPolicy.LongGoal longGoal,boolean finalRoute) {
         try { C2MoveGeometry.validatedTolerance(tolerance); }
         catch (IllegalArgumentException ex) { return ex.getMessage(); }
         if (!C1IdentityData.validName(name)) return "Invalid NPC character name";
@@ -179,13 +247,18 @@ final class C2AgentRuntime {
         if (!avatar.serverLevel().hasChunkAt(BlockPos.containing(x,y,z))) return "Target chunk not loaded";
         if (C1P1MotionRuntime.c2Receipt(id.profileId()).active()) return "C1 movement busy";
         Run run = new Run(server,id,ids.worldId(),x,y,z,tolerance,route);
+        if (longGoal!=null && route!=null) {
+            run.longGoal=longGoal;
+            run.longState=finalRoute ? C2LongGoalPolicy.LongState.FINAL_ACTIVE : C2LongGoalPolicy.LongState.LEG_ACTIVE;
+            longGoal.legStarted(route.path().get(route.path().size()-1));
+        }
         if (!ACTIVE.claim(run.actor,run)) return "C2 scheduler rejected request";
         VERIFIED_WITNESSES.remove(run.actor); // never use evidence from an older goal
         EVENTS.publish(C2Events.Kind.REQUESTED,run.actor,run.goal,null,"move_to");
         write(run, "REQUESTED", "Waiting for C0 identity registration");
         JsonObject world = new JsonObject();
         world.addProperty("world_id",run.world.toString());
-        world.addProperty("name","NPCortex-C1-" + run.world);
+        world.addProperty("name",C1IdentityData.backendWorldName(run.world));
         send(run,"/v1/worlds",world,10,reply -> registerActor(run));
         return (route==null ? "C2 goal queued for " : "P1-C waypoint route queued for ") + name + " goal=" + run.goal + " target=" + x + "," + y + "," + z + " tolerance=" + tolerance;
     }
@@ -194,7 +267,7 @@ final class C2AgentRuntime {
         C1IdentityData.Entry id = C1IdentityData.get(server).find(name);
         if (id == null) return "Unknown NPC: " + name;
         Run current = ACTIVE.get(id.actorId());
-        if (current != null) return name + " C2=" + current.phase + " goal=" + current.goal
+        if (current != null) return name + " C2=" + current.phase + " profile=" + current.profileNote + " goal=" + current.goal
                 + " action=" + current.action
                 + (current.route==null ? "" : " waypoint="+current.route.currentIndex()+"/"+current.route.totalSegments()
                     + " generation="+current.replanning.generation()+" replans="+current.replanning.attempts())
@@ -202,6 +275,8 @@ final class C2AgentRuntime {
                     ? " recoveryWait="+current.recoveryWaitTicks+"/"+C2S4RecoveryPolicy.MAX_SETTLE_WAIT_TICKS
                         +" stableGround="+current.stableGroundTicks+"/"+C2S4RecoveryPolicy.REQUIRED_STABLE_GROUND_TICKS
                     : "")
+                + (current.longGoal==null ? "" : " long="+current.longState+" leg="+current.longGoal.legs()
+                    +" searchExpanded="+current.longGoal.expanded())
                 + " | C1=" + C1P1MotionRuntime.c2Receipt(current.profile).phase();
         C2ActionJournal.Row row = C2ActionJournal.get(server).find(id.actorId());
         return row == null ? name + " C2=NONE" : name + " C2=" + row.state() + " goal=" + row.goal()
@@ -256,18 +331,49 @@ final class C2AgentRuntime {
         return "C2 motion cancelled; backend reconciliation pending (no manual reset needed)";
     }
 
+    /** In-memory only (never persisted): what the backend reported when it last accepted this actor. */
+    private static final java.util.Map<UUID,String> PROFILE_BINDINGS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Registration payload by profile mode. Legacy NPCs (no saved mode) send exactly what they always did;
+     * the others never send a pack name derived from the NPC name. Only registration text changes here:
+     * C2 ownership, journal and navigation are untouched.
+     */
     private static void registerActor(Run run) {
-        JsonObject actor = new JsonObject();
-        actor.addProperty("world_id",run.world.toString());
-        actor.addProperty("dimension_id",run.dimension);
-        actor.addProperty("actor_id",run.actor.toString());
-        actor.addProperty("character_id",run.name.toLowerCase(java.util.Locale.ROOT));
-        send(run,"/v1/actors",actor,10,reply -> createGoal(run));
+        C1IdentityData.Entry entry = C1IdentityData.get(run.server).find(run.name);
+        if (entry == null || !entry.actorId().equals(run.actor)) {
+            interrupt(run,"Character Profile NOT registered: NPC identity changed");
+            return;
+        }
+        JsonObject actor;
+        try {
+            actor = C2RegistrationPayload.build(run.world,run.dimension,entry);
+        } catch (IllegalStateException ex) {
+            interrupt(run,"Character Profile NOT registered: "+ex.getMessage());
+            return;
+        }
+        send(run,"/v1/actors",actor,10,reply -> {
+            String note = bindingNote(reply);
+            PROFILE_BINDINGS.put(run.actor,note);
+            run.profileNote = note;
+            createGoal(run);
+        });
+    }
+
+    private static String bindingNote(JsonObject reply) {
+        try {
+            if (reply.has("profile") && reply.get("profile").isJsonObject()) {
+                JsonObject profile = reply.getAsJsonObject("profile");
+                return "source=" + profile.get("source").getAsString() + " rev=" + profile.get("revision").getAsInt();
+            }
+            if (reply.has("character_id")) return "legacy pack=" + reply.get("character_id").getAsString();
+        } catch (RuntimeException ignored) { }
+        return "bound";
     }
 
     private static void createGoal(Run run) {
         if (!run.isAlive()) { interrupt(run,"NPC unavailable during registration"); return; }
-        EVENTS.publish(C2Events.Kind.REGISTERED,run.actor,run.goal,null,"world/actor registered");
+        EVENTS.publish(C2Events.Kind.REGISTERED,run.actor,run.goal,null,"world/actor registered; profile "+run.profileNote);
         JsonObject goal = new JsonObject();
         goal.addProperty("world_id",run.world.toString());
         goal.addProperty("dimension_id",run.dimension);
@@ -379,7 +485,7 @@ final class C2AgentRuntime {
 
     private static void tickRoute(Run run) {
         run.routeTicks++;
-        if (run.routeTicks > ROUTE_TIMEOUT_TICKS || run.ticks > MOVE_TIMEOUT_TICKS) {
+        if (routeTimedOut(run) || run.ticks > MOVE_TIMEOUT_TICKS) {
             if (run.avatar()!=null) C1P1MotionRuntime.stop(run.server,run.name);
             interrupt(run,"P1-C route/segment timeout; operator reconciliation required");
             return;
@@ -421,6 +527,11 @@ final class C2AgentRuntime {
             return;
         }
         if (updated==C2WaypointExecution.Update.COMPLETE) {
+            // Option D: a finished leg is NOT a goal result; only a final-target route verifies.
+            if (C2LongGoalPolicy.onRouteComplete(run.longState)==C2LongGoalPolicy.Completion.LEG_DONE) {
+                enterLegQuiesce(run);
+                return;
+            }
             boolean finalReached=C2MoveGeometry.near(avatar.getX(),avatar.getY(),avatar.getZ(),
                     run.tx,run.ty,run.tz,run.tolerance);
             result(run,finalReached,finalReached?"P1-C all waypoints verified":"P1-C final goal tolerance not met");
@@ -474,7 +585,7 @@ final class C2AgentRuntime {
 
     private static void tickReplanning(Run run) {
         run.routeTicks++;
-        if (run.routeTicks > ROUTE_TIMEOUT_TICKS) {
+        if (routeTimedOut(run)) {
             run.replanning.stop();
             interrupt(run,"P1-D route timeout while replanning"); return;
         }
@@ -551,6 +662,7 @@ final class C2AgentRuntime {
             run.replanning.stop();
             result(run,true,"P1-D destination observed after movement stopped"); return;
         }
+        if (run.longState==C2LongGoalPolicy.LongState.LEG_QUIESCING) { tickLegPlan(run,avatar); return; }
         C2ReplanningPolicy.Gate gate=run.replanning.gate(run.routeTicks);
         if (gate==C2ReplanningPolicy.Gate.WAIT) return;
         if (gate!=C2ReplanningPolicy.Gate.READY) {
@@ -559,17 +671,23 @@ final class C2AgentRuntime {
             run.replanning.stop();
             result(run,false,"P1-D replanning exhausted; last="+run.replanning.lastStatus()); return;
         }
-        if (lastPlannerTick==serverTicks) return; // one B3 plan per server tick globally
+        // One B3 plan per server tick globally, granted FIFO (not HashMap order).
+        PLAN_QUEUE.touch(run.actor,serverTicks);
+        if (lastPlannerTick==serverTicks || !PLAN_QUEUE.isHead(run.actor,serverTicks)) return;
+        PLAN_QUEUE.done(run.actor);
         lastPlannerTick=serverTicks;
         final int budget=run.replanning.budget();
         try {
-            if (!avatar.serverLevel().hasChunkAt(BlockPos.containing(run.tx,run.ty,run.tz))) {
+            var legNode=run.longState==C2LongGoalPolicy.LongState.LEG_ACTIVE ? run.longGoal.legTarget() : null;
+            if (!avatar.serverLevel().hasChunkAt(legNode!=null ? new BlockPos(legNode.x(),legNode.supportY(),legNode.z())
+                    : BlockPos.containing(run.tx,run.ty,run.tz))) {
                 run.replanning.stop(); result(run,false,"P1-D destination chunk unloaded"); return;
             }
             var capture=C2GraphWorldProbe.captureWithSnapshot(avatar,C2NavGrid.MAX_RADIUS);
             var start=new C2AStarPlanner.Target(net.minecraft.util.Mth.floor(avatar.getX()),
                     C2S3SupportY.at(avatar.getY()),net.minecraft.util.Mth.floor(avatar.getZ()));
-            var goal=new C2AStarPlanner.Target(net.minecraft.util.Mth.floor(run.tx),
+            var goal=legNode!=null ? new C2AStarPlanner.Target(legNode.x(),legNode.supportY(),legNode.z())
+                    : new C2AStarPlanner.Target(net.minecraft.util.Mth.floor(run.tx),
                     C2S3SupportY.at(run.ty),net.minecraft.util.Mth.floor(run.tz));
             var planned=C2HierarchicalPlanner.plan(capture.graph(),capture.snapshot(),start,goal,
                     C2RegionGraph.DEFAULT_TILE_SIZE,budget);
@@ -625,6 +743,89 @@ final class C2AgentRuntime {
         }
     }
 
+    private static boolean routeTimedOut(Run run) {
+        if (run.longGoal==null) return run.routeTicks > ROUTE_TIMEOUT_TICKS;
+        return C2LongGoalPolicy.timedOut(run.routeTicks,run.legBaseTicks,run.longGoal.totalTickLimit());
+    }
+
+    /** Leg route finished: no C0 result. Wait for C1 release and stable ground, then plan the next leg. */
+    private static void enterLegQuiesce(Run run) {
+        if (run.avatar()==null || !run.isAlive()) { interrupt(run,"LONG leg ended without a live actor"); return; }
+        run.longState=C2LongGoalPolicy.LongState.LEG_QUIESCING;
+        run.longArrivalJudged=false;
+        run.recoveryWaitTicks=0;
+        run.stableGroundTicks=0;
+        run.replanningEntryToken=C1P1MotionRuntime.c2Ticket(run.profile).token();
+        run.passiveMotionToken=null;
+        write(run,"REPLANNING","LONG leg "+run.longGoal.legs()+" complete; quiescing before next leg");
+    }
+
+    /** Called from tickReplanning only after C1 is released, ground is stable and the final target is not yet reached. */
+    private static void tickLegPlan(Run run,C1PlayerAvatar avatar) {
+        var lg=run.longGoal;
+        if (!run.longArrivalJudged) {
+            run.longArrivalJudged=true;
+            var verdict=lg.arrived(net.minecraft.util.Mth.floor(avatar.getX()),C2S3SupportY.at(avatar.getY()),
+                    net.minecraft.util.Mth.floor(avatar.getZ()));
+            if (verdict!=C2LongGoalPolicy.Verdict.CONTINUE) {
+                result(run,false,"LONG_"+verdict+" legs="+lg.legs()+" best-effort heuristic; no path claim"); return;
+            }
+        }
+        if (lg.expanded()>=C2LongGoalPolicy.TOTAL_SEARCH_BUDGET) { result(run,false,"LONG_SEARCH_BUDGET exhausted"); return; }
+        PLAN_QUEUE.touch(run.actor,serverTicks);
+        if (lastPlannerTick==serverTicks || !PLAN_QUEUE.isHead(run.actor,serverTicks)) return;
+        PLAN_QUEUE.done(run.actor);
+        lastPlannerTick=serverTicks;
+        try {
+            if (!avatar.serverLevel().hasChunkAt(BlockPos.containing(run.tx,run.ty,run.tz))) {
+                result(run,false,"LONG destination chunk unloaded"); return;
+            }
+            var capture=C2GraphWorldProbe.captureWithSnapshot(avatar,C2NavGrid.MAX_RADIUS);
+            int sx=net.minecraft.util.Mth.floor(avatar.getX()), sz=net.minecraft.util.Mth.floor(avatar.getZ());
+            int sy=C2S3SupportY.at(avatar.getY());
+            if (lg.finalInWindow(sx,sy,sz) && !lg.finalWalkable(capture.graph())) {
+                result(run,false,"LONG final target is not a verified walkable node (UNSAFE_TARGET)"); return;
+            }
+            var sel=lg.select(capture.graph(),nodeAt(capture.graph(),sx,sy,sz));
+            if (sel==null) { result(run,false,"LONG_NO_PROGRESS no reachable leg candidate legs="+lg.legs()); return; }
+            var planned=C2HierarchicalPlanner.plan(capture.graph(),capture.snapshot(),
+                    new C2AStarPlanner.Target(sx,sy,sz),
+                    new C2AStarPlanner.Target(sel.target().x(),sel.target().supportY(),sel.target().z()),
+                    C2RegionGraph.DEFAULT_TILE_SIZE,C2HierarchicalPlanner.DEFAULT_BUDGET);
+            lg.chargeSearch(planned.expandedNodes());
+            if (!planned.found()) { result(run,false,"LONG leg plan failed: "+planned.status()); return; }
+            C2WaypointExecution replacement=C2WaypointExecution.navigation3D(planned.path());
+            if (sel.isFinal() && Math.abs(sel.target().footY()-run.ty)>C1S2TraversalPlan.HEIGHT_TOLERANCE) {
+                result(run,false,"S3 target footY does not match observed terrain surface"); return;
+            }
+            // Motion and action ownership must be checked AGAIN before committing the next leg.
+            if (ACTIVE.get(run.actor)!=run || C1P1MotionRuntime.c2Receipt(run.profile).active()) {
+                interrupt(run,"LONG movement owner changed between legs"); return;
+            }
+            run.route=replacement;
+            lg.legStarted(sel.target());
+            run.longState=sel.isFinal() ? C2LongGoalPolicy.LongState.FINAL_ACTIVE : C2LongGoalPolicy.LongState.LEG_ACTIVE;
+            run.legBaseTicks=run.routeTicks;
+            run.recoveryFrom3D=false;
+            EVENTS.publish(C2Events.Kind.ROUTE_REPLACED,run.actor,run.goal,run.action,
+                    "LONG leg="+lg.legs()+" final="+sel.isFinal());
+            String error=C2WaypointBridge.beginSegment(run);
+            if (error!=null) {
+                if (C2WaypointBridge.recoverableFailure(error)) {
+                    if (C2S4RecoveryPolicy.recoverableStartRefusal(error)) run.recoveryFrom3D=true;
+                    scheduleReplanning(run,C2ReplanningPolicy.Trigger.EDGE_INVALIDATED,error);
+                } else result(run,false,"LONG leg start refused: "+error);
+                return;
+            }
+            run.ticks=0;
+            write(run,"MOVING","LONG leg="+lg.legs()+" state="+run.longState+" segment="+run.route.currentIndex()
+                    +" ticket="+run.route.expectedTicket());
+        } catch (RuntimeException ex) {
+            LOG.warn("NPCortex LONG planner/probe rejected goal={}",run.goal,ex);
+            result(run,false,"LONG planning/probe rejected: "+ex.getClass().getSimpleName());
+        }
+    }
+
     private static JsonArray coords(double x,double y,double z) {
         JsonArray a=new JsonArray(); a.add(x);a.add(y);a.add(z);return a;
     }
@@ -651,7 +852,12 @@ final class C2AgentRuntime {
         CompletableFuture<JsonObject> future = ChatBridge.c2Post(route,payload,timeout);
         future.whenComplete((reply,error) -> run.server.execute(() -> {
             if (ACTIVE.get(run.actor)!=run) return;
-            if (error != null) { interrupt(run,"HTTP: "+ChatBridge.describeFailure(error)); return; }
+            if (error != null) {
+                // A registration failure is a Character Profile problem the operator must be able to tell apart.
+                String prefix = "/v1/actors".equals(route) ? "Character Profile NOT registered: " : "HTTP: ";
+                interrupt(run,prefix+ChatBridge.describeFailure(error));
+                return;
+            }
             try { next.accept(reply); }
             catch (RuntimeException ex) {
                 LOG.warn("NPCortex C2 event rejected goal={} phase={}",run.goal,run.phase,ex);
@@ -730,6 +936,7 @@ final class C2AgentRuntime {
         serverTicks=0;
         VERIFIED_WITNESSES.clear();
         lastPlannerTick=-1;
+        PLAN_QUEUE.clear();
         EVENTS.clear();
     }
 }
