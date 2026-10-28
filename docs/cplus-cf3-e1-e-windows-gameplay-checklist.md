@@ -8,12 +8,12 @@ Test on a **new disposable world**, separate from valuable saves. Java 17, Forge
 
 **BUILD only**:
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 **TEST focused only**:
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-cplus-e1-extended.ps1
 ```
 **TEST full backend, separate optional gate**:
@@ -23,12 +23,12 @@ python -W error::ResourceWarning -m unittest discover -s backend/tests -q
 ```
 **BACKEND only** (terminal A):
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-backend.ps1
 ```
 **RUN GAME only** (terminal B):
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

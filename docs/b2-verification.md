@@ -23,7 +23,7 @@ B2 repository root (replace the source path with your actual B1 backup):
 
 ```powershell
 New-Item -ItemType Directory -Force '.\backend\data' | Out-Null
-Copy-Item 'F:\AI\NPCortex-B1\backend\data\npcortex-B1-backup-YYYYMMDD-HHMMSS.sqlite3' `
+Copy-Item 'C:\path\to\NPCortex-B1\backend\data\npcortex-B1-backup-YYYYMMDD-HHMMSS.sqlite3' `
   '.\backend\data\npcortex.sqlite3'
 ```
 

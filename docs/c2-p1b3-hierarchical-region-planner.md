@@ -31,8 +31,8 @@
 
 ## Windows acceptance checklist
 
-1. Back up the last user-accepted B2 Repository; extract this **full repository ZIP** into `F:\AI\NPCortex` (do not overlay old stale source files).
-2. Run `cd F:\AI\NPCortex`, then `.\scripts\test-c2-p1b3.ps1` and `.\scripts\dev-forge.ps1 -Task build`. Confirm both exit 0 and `BUILD SUCCESSFUL`.
+1. Back up the last user-accepted B2 Repository; extract this **full repository ZIP** into `C:\path\to\NPCortex` (do not overlay old stale source files).
+2. Run `cd C:\path\to\NPCortex`, then `.\scripts\test-c2-p1b3.ps1` and `.\scripts\dev-forge.ps1 -Task build`. Confirm both exit 0 and `BUILD SUCCESSFUL`.
 3. Start `.\scripts\dev-forge.ps1 -Task runClient` (Ollama/Backend not required for read-only commands).
 4. Spawn Yui on flat grass and use `/npcortex c1 info yui`. Choose reachable target 2–4 columns away **at current feet Y** within radius 6. Compare `/npcortex c2 navplan yui <x> <y> <z>` and `/npcortex c2 navhier yui <x> <y> <z>`; expect matching `PATH_FOUND` and `cost`, Yui **does not move**.
 5. Put a full-block wall two blocks high between Yui and goal, with an opening inside the scan. Expect a detour with B3 cost equal to B2. Close the opening, leaving goal safe; expect `NO_PATH`. Do not confuse `UNSAFE_TARGET` (goal inside wall) with `NO_PATH`.

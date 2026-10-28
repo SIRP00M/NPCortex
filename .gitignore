@@ -18,7 +18,8 @@ Thumbs.db
 **/runs/
 **/out/
 # NPCortex local generated data (do not commit player data)
-data/
+/data/
+/backend/data/
 logs/
 # models should never be committed
 *.gguf
@@ -40,3 +41,16 @@ docs/m04/acceptance-record.json
 *.sqlite3-shm
 *.sqlite3-wal
 !backend/tests/fixtures/v4_baseline.sqlite3
+
+# Additional generated local acceptance records
+docs/m03-final/*-record.json
+docs/m03-final/*-inventory.json
+docs/m03-final/*-state.json
+docs/m03-final/*-hashes.json
+docs/m03-final/changed-files.*
+docs/m03-final/preservation-check.json
+docs/g5-test-harness/VALIDATION-RESULTS.md
+docs/m04/*AUDIT.md
+docs/m04/acceptance-record.json
+docs/m04/*VALIDATION.json
+docs/transport-e-changed-files.txt

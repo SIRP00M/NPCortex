@@ -32,7 +32,7 @@ No background tick or automatic graph refresh is introduced.
 
 ## Windows Acceptance (before P1-B2)
 
-1. `cd F:\AI\NPCortex`
+1. `cd C:\path\to\NPCortex`
 2. `.\scripts\test-c2-p1b1.ps1` (requires Eclipse Temurin JDK 17)
 3. `.\scripts\dev-forge.ps1 -Task build` (record `BUILD SUCCESSFUL`)
 4. Start Client, spawn Yui, compare `/npcortex c2 navscan yui 4`

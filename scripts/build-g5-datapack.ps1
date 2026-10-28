@@ -1,4 +1,4 @@
-# NPCortex Roadmap #2 G5 - TEST-ONLY data pack generator (Minecraft 1.20.1, pack_format 15), revision 4.
+# NPCortex Roadmap #2 G5 - TEST-ONLY data pack generator (Minecraft 1.20.1, pack_format 15), revision 6 (p10: per-tick trigger, <= 5 attempts; p18: typed finalize).
 # Writes integrations/datapacks/NPCortex_G5 and NPCortex_G5.zip. Touches no world, save, source or backend.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -36,12 +36,12 @@ Put 'lib/reset.mcfunction' @(
  'scoreboard players set #result g5 0','scoreboard players set #moved g5 0','scoreboard players set #moving g5 0',
  'scoreboard players set #still g5 0','scoreboard players set #settle g5 -1','scoreboard players set #cancelled g5 0',
  'scoreboard players set #lpx g5 -999999','scoreboard players set #lpz g5 -999999','scoreboard players set #pre g5 1')
-$despawnAll = @('yui') + (2..10 | ForEach-Object { 'g5n{0:d2}' -f $_ }) | ForEach-Object { "$OP c1 despawn $_" }
+$despawnAll = @('yui') + (2..10 | ForEach-Object { 'g5a{0:d2}' -f $_ }) | ForEach-Object { "$OP c1 despawn $_" }
 Put 'lib/fresh_start.mcfunction' (@('# Deterministic start: NPC yui at block (2,2) on the flat test area. All G5 NPCs are despawned first (identities are kept).') + $despawnAll + @('tp @a[tag=g5_op] 0.5 -60 0.5', "$OP c1 spawn yui", 'function npcortex_g5:lib/reset'))
 # NPC identification (tag based). The NPC's GameProfile name is "N"+character(<=8)+"_"+uuid6 (C1IdentityData), NOT the character name,
 # so selectors never use name=. #sel (set by p00) = 1: world-limited player selector, 2: typeless entity selector, 0: nothing verified.
 # A candidate is adopted ONLY when exactly one untagged non-operator candidate exists (#nu = 1); with 0 or >=2 nothing is tagged.
-$names = @('yui') + (2..10 | ForEach-Object { 'g5n{0:d2}' -f $_ })
+$names = @('yui') + (2..10 | ForEach-Object { 'g5a{0:d2}' -f $_ })
 foreach ($nm in $names) {
     Put "lib/adopt_$nm.mcfunction" @(
      "# tag the single untagged non-operator candidate as $nm (no-op when already tagged)",
@@ -98,7 +98,9 @@ Put 'lib/snap.mcfunction' @("$OP debug cplus m03 snapshot yui")
 Put 'lib/cancel_now.mcfunction' @(
  '# Snapshot (journal state at this instant) and cancel in the same tick; the snapshot proves which state was cancelled.',
  'scoreboard players set #cancelled g5 1','scoreboard players set #still g5 0',
- "$OP debug cplus m03 snapshot yui","$OP c2 cancel yui",'say [G5] NOTE cancel issued')
+ "$OP debug cplus m03 snapshot yui",
+ '# Revision 6: no `c2 status` here - command feedback of a function is suppressed by vanilla, so it never reached the log. The longState at the cancel is recorded by production (D1-B).',
+ "$OP c2 cancel yui",'say [G5] NOTE cancel issued')
 Put 'lib/advance.mcfunction' @(
  'scoreboard players add #phase g5 1','scoreboard players set #tick g5 -1','scoreboard players set #settle g5 -1','scoreboard players set #result g5 0',
  'execute if score #phase g5 > #last g5 run function npcortex_g5:lib/finished')
@@ -126,7 +128,7 @@ function AwaitLines($ph, [string]$cond) {   # $cond selects the poll(s) in which
     L $ph "execute $cond if score #settle g5 matches -1 run tellraw @a[tag=g5_op] {`"text`":`"[G5] AWAITING OWNER GATE: run scripts/g5-gate.ps1 -WorldName <world> -Watch and use /function npcortex_g5:gate only after it prints GO.`",`"color`":`"gold`"}"
     L $ph "execute $cond if score #settle g5 matches -1 run scoreboard players set #settle g5 -2"
 }
-function Finish($ph, [int]$reachSettle, [int]$otherSettle, [string[]]$cleanup, [int]$minTick = 0, [bool]$noGate = $false, [string]$awaitFn = 'npcortex_g5:lib/await_snap') {
+function Finish($ph, [int]$reachSettle, [int]$otherSettle, [string[]]$cleanup, [int]$minTick = 0, [bool]$noGate = $false, [string]$awaitFn = 'npcortex_g5:lib/await_snap', [string[]]$mid = @()) {
     # gate-needing outcomes: 2 TIMEOUT, 3 STALLED, 6 NEVER_MOVED, 8 CANCEL_NOT_TRIGGERED, 10 AWAITING_OWNER_GATE (+ 1 and 7 when #strict = 1)
     L $ph 'scoreboard players set #gn g5 0'
     foreach ($c in '2..3', '6', '8', '10') { L $ph "execute if score #result g5 matches $c run scoreboard players set #gn g5 1" }
@@ -136,6 +138,7 @@ function Finish($ph, [int]$reachSettle, [int]$otherSettle, [string[]]$cleanup, [
     foreach ($c in '4..5', '7', '11') { L $ph "execute if score #gn g5 matches 0 if score #result g5 matches $c if score #settle g5 matches -1 run scoreboard players set #settle g5 $otherSettle" }
     L $ph "execute if score #settle g5 matches -2 run function $awaitFn"
     L $ph 'execute if score #settle g5 matches 1.. run scoreboard players remove #settle g5 1'
+    foreach ($m in $mid) { L $ph $m }
     $gate = if ($minTick -gt 0) { " if score #tick g5 matches $minTick.." } else { '' }
     L $ph "execute if score #settle g5 matches 0$gate run function npcortex_g5:lib/snap"
     L $ph "execute if score #settle g5 matches 0$gate if score #result g5 matches 4..5 run scoreboard players add #blocked g5 1"
@@ -149,7 +152,7 @@ $CODES = [ordered]@{ 1='REACHED'; 2='TIMEOUT'; 3='STALLED_TERMINAL_INFERRED'; 4=
 # Adaptive (p00 verified selector/tag/data/position): position is polled with the tag selector and drives early termination / cancel triggers.
 # Owner-gated: the same commands run at fixed ticks; after the observation window ($fbEnd polls) the scenario AWAITS the owner gate.
 # $fbEnd = poll at which the owner-gated observation window ends (default max(60, timeout/4)); $fbCancel = poll at which the gated mode cancels.
-function NavPhase($id, $title, $startCmds, $preBlocks, $rx, $rz, $reachDist, $timeoutPolls, $pre, $post, $mode='reach', $trigger=$null, $measure=0, $minTick=0, $fbCancel=0, $fbEnd=0) {
+function NavPhase($id, $title, $startCmds, $preBlocks, $rx, $rz, $reachDist, $timeoutPolls, $pre, $post, $mode='reach', $trigger=$null, $measure=0, $minTick=0, $fbCancel=0, $fbEnd=0, $farFrom=0) {
     if ($preBlocks.Count -gt 0 -and $preBlocks[0] -isnot [array]) { $preBlocks = ,@($preBlocks) }
     if ($fbEnd -le 0) { $fbEnd = [math]::Max(60, [int]($timeoutPolls / 4)) }
     $cx = Ctr $rx; $cz = Ctr $rz
@@ -177,7 +180,11 @@ function NavPhase($id, $title, $startCmds, $preBlocks, $rx, $rz, $reachDist, $ti
         L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #moved g5 matches 1 if score #still g5 matches 60.. run scoreboard players set #result g5 3"
     }
     if ($mode -eq 'cancel') {
-        L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #cancelled g5 matches 0 if score #moved g5 matches 1 $trigger run function npcortex_g5:lib/cancel_now"
+        if ($farFrom -gt 0) {   # cancel only while the NPC is still far from the target: a stop at the destination is a completion, not a leg stop
+            LB $p { param($s) "execute if score #tick g5 matches 5.. $AD if score #sel g5 matches $s if score #result g5 matches 0 if score #cancelled g5 matches 0 if score #moved g5 matches 1 $trigger as $(NPCSEL $s 'yui') positioned $cx -60 $cz unless entity @s[distance=..$farFrom] run function npcortex_g5:lib/cancel_now" }
+        } else {
+            L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #cancelled g5 matches 0 if score #moved g5 matches 1 $trigger run function npcortex_g5:lib/cancel_now"
+        }
         L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #cancelled g5 matches 1 if score #still g5 matches 8.. run scoreboard players set #result g5 7"
         L $p ('execute if score #result g5 matches 7 if score #moving g5 matches 1 run say [G5] OBS ' + $id + ' MOVED_AFTER_CANCEL')
         L $p "execute if score #tick g5 matches $fbCancel $FB if score #result g5 matches 0 run function npcortex_g5:lib/cancel_now"
@@ -284,7 +291,70 @@ $null = NavPhase 'p07_small_wall_detour' 'small wall (11 wide) between start and
 $null = NavPhase 'p08_large_wall_no_progress' 'wall z -80..80 (3 high): bounded LONG_NO_PROGRESS/OSCILLATION expected' @("$OP c2 navlong yui 62 -60 2") @(@(62,2),@(12,-80),@(12,80)) 62 2 1.6 800 @('fill 12 -60 -80 12 -58 80 minecraft:stone') @('fill 12 -60 -80 12 -58 80 minecraft:air') 'noreach' $null 240 0
 # ---- cancellation (the gated mode cancels at a FIXED poll; the snapshot taken in the same tick proves which journal state was cancelled) ----
 $null = NavPhase 'p09_cancel_leg_active' 'cancel while the NPC is walking (state MOVING in snapshot)' @("$OP c2 navlong yui 82 -60 2") @(@(82,2)) 82 2 1.6 500 @() @() 'cancel' 'if score #moving g5 matches 1' 0 480 14 90
-$null = NavPhase 'p10_cancel_quiescing' 'cancel at the first stop after moving (state REPLANNING in snapshot = LEG_QUIESCING)' @("$OP c2 navlong yui 82 -60 2") @(@(82,2)) 82 2 1.6 500 @() @() 'cancel' 'if score #moving g5 matches 0 if score #still g5 matches 1' 120 0 24 100
+# p10 (revision 5): 150 blocks (several legs) and the cancel only counts at a stop that is still >= 25 blocks from the target, so it cannot land after the
+# goal completed. Two separate verdicts in the collector: cancellation safety vs LEG_QUIESCING race coverage (the latter only with a chat status sample).
+# ---- p10 (revision 6): up to FIVE attempts. The Rev5 trigger (a 10-tick stationary poll) could not see the 2-3 tick leg quiesce of a 150 block navlong
+# (a leg is about 6 blocks, the quiesce adds 0.10-0.15 s), and `c2 status` cannot be echoed from a function. Now a per-tick watch (own 1t schedule, bounded: it runs only while
+# #w = 1, which every attempt end, cancel and result clears) compares the NPC position in 1/1000 block and cancels in the first tick the NPC stands still after >= 10 moving
+# ticks while it is still >= 25 blocks from the target. The production diagnostic D1-B records the longState at the cancel() invocation; nothing here decides coverage.
+function P10Phase {
+    $id = 'p10_cancel_quiescing'
+    $p = NewPhase $id 'cancel at the first stand-still tick after moving while far from the target (<= 5 attempts, per-tick trigger; production diagnostic D1-B records longState)'
+    L $p "# $id (generated; revision 6). Attempt counter #att (1..5), per-tick watch lib/p10_watch, cancel lib/p10_cancel."
+    L $p 'execute if score #tick g5 matches 0 unless score #p10on g5 matches 1 run function npcortex_g5:lib/p10_init'
+    L $p "execute if score #tick g5 matches 0 if score #att g5 matches 1 run say [G5] BEGIN $id cancel at the first stand-still tick after moving while far from the target (up to 5 attempts)"
+    foreach ($k in 1..5) { L $p "execute if score #tick g5 matches 0 if score #att g5 matches $k run say [G5] NOTE attempt $k" }
+    L $p 'execute if score #tick g5 matches 0 run function npcortex_g5:lib/fresh_start'
+    L $p "execute if score #tick g5 matches 3 $AD run function npcortex_g5:lib/obs_yui"
+    L $p "execute if score #tick g5 matches 3 $AD unless score #present g5 matches 1 run scoreboard players set #result g5 4"
+    L $p 'execute if score #tick g5 matches 3 if score #result g5 matches 0 unless block 152 -64 2 minecraft:bedrock run scoreboard players set #result g5 5'
+    L $p "execute if score #tick g5 matches 3 $AD if score #result g5 matches 0 run function npcortex_g5:lib/prime"
+    L $p 'execute if score #tick g5 matches 4 if score #result g5 matches 0 run function npcortex_g5:lib/snap'
+    L $p "execute if score #tick g5 matches 4 if score #result g5 matches 0 run $OP c2 navlong yui 152 -60 2"
+    L $p "execute if score #tick g5 matches 4 $AD if score #result g5 matches 0 run function npcortex_g5:lib/p10_arm"
+    L $p "execute if score #tick g5 matches 5.. $AD if score #present g5 matches 1 run function npcortex_g5:lib/poll"
+    L $p 'execute if score #tick g5 matches 5.. if score #result g5 matches 0 if score #cancelled g5 matches 0 run function npcortex_g5:lib/periodic_snap'
+    L $p 'execute if score #tick g5 matches 5.. if score #cancelled g5 matches 1 unless score #settle g5 matches -2 run function npcortex_g5:lib/periodic_snap'
+    # explicit exit: the goal reached its target without a cancel (the trigger never fired)
+    LB $p { param($s) "execute if score #tick g5 matches 5.. $AD if score #sel g5 matches $s if score #result g5 matches 0 if score #cancelled g5 matches 0 if score #still g5 matches 3.. as $(NPCSEL $s 'yui') positioned 152.5 -60 2.5 if entity @s[distance=..1.6] run scoreboard players set #result g5 1" }
+    L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #cancelled g5 matches 1 if score #still g5 matches 8.. run scoreboard players set #result g5 7"
+    L $p ('execute if score #result g5 matches 7 if score #moving g5 matches 1 run say [G5] OBS ' + $id + ' MOVED_AFTER_CANCEL')
+    # bounded timeout (75 s per attempt; the walk takes about 46 s): a goal that moved but was never cancelled is cancelled as CLEANUP (noted, not counted as an attempt cancel)
+    L $p "execute if score #tick g5 matches 150.. $AD if score #result g5 matches 0 run scoreboard players set #result g5 2"
+    L $p "execute if score #result g5 matches 2 $AD if score #moved g5 matches 0 run scoreboard players set #result g5 6"
+    L $p 'execute if score #result g5 matches 2 run function npcortex_g5:lib/p10_timeout'
+    L $p "execute if score #tick g5 matches 24.. $FB if score #result g5 matches 0 run scoreboard players set #result g5 10"
+    L $p 'execute if score #result g5 matches 1.. run scoreboard players set #w g5 0'
+    Latch $p ([ordered]@{ 1='COMPLETED_WITHOUT_CANCEL'; 4='BLOCKED_NPC_NOT_SELECTABLE'; 5='BLOCKED_TARGET_CHUNK_NOT_LOADED'; 6='NEVER_MOVED'; 7='STOPPED_AFTER_CANCEL'; 10='AWAITING_OWNER_GATE'; 11='ATTEMPT_TIMEOUT_CLEANED_UP' })
+    # the next attempt starts only after the settle of THIS one (20 s of post-cancel snapshots after a cancel) and only while attempts remain (#att <= 4)
+    $mid = @(); foreach ($c in '1', '7', '11') { $mid += "execute if score #settle g5 matches 0 if score #att g5 matches ..4 if score #result g5 matches $c run function npcortex_g5:lib/p10_next" }
+    Finish $p 10 40 @('scoreboard players set #w g5 0', 'scoreboard players set #p10on g5 0', 'scoreboard players set #att g5 0') 0 $false 'npcortex_g5:lib/await_snap' $mid
+    L $p 'execute if score #result g5 matches 4 run function npcortex_g5:lib/abort_obs'
+    [void]$script:phases.Add($p)
+}
+Put 'lib/p10_init.mcfunction' @('# first attempt of p10','scoreboard players set #p10on g5 1','scoreboard players set #att g5 1','scoreboard players set #w g5 0')
+Put 'lib/p10_next.mcfunction' @('# next attempt (bounded by the #att <= 4 condition of the caller)','say [G5] NOTE attempt_end','scoreboard players add #att g5 1','scoreboard players set #tick g5 -1','scoreboard players set #settle g5 -1','scoreboard players set #result g5 0','scoreboard players set #w g5 0')
+Put 'lib/p10_arm.mcfunction' @('# arm the per-tick watch for this attempt','scoreboard players set #lqx g5 -999999','scoreboard players set #lqz g5 -999999','scoreboard players set #qrun g5 0','scoreboard players set #q g5 0','scoreboard players set #w g5 1','function npcortex_g5:lib/p10_watch')
+$wl = @('# p10 per-tick watch (generated). Bounded: re-schedules itself ONLY while #w = 1; attempt end, cancel and every result clear #w.',
+        'scoreboard players set #qx g5 -999998','scoreboard players set #qz g5 -999998')
+foreach ($s in 1, 2) { $wl += "execute if score #w g5 matches 1 if score #sel g5 matches $s as $(NPCSEL $s 'yui') store result score #qx g5 run data get entity @s Pos[0] 1000"; $wl += "execute if score #w g5 matches 1 if score #sel g5 matches $s as $(NPCSEL $s 'yui') store result score #qz g5 run data get entity @s Pos[2] 1000" }
+$wl += @('scoreboard players set #q g5 0',
+         'execute unless score #qx g5 matches -999998 if score #qx g5 = #lqx g5 if score #qz g5 = #lqz g5 run scoreboard players set #q g5 1',
+         '# cancel once: the first tick the NPC stands still after >= 10 moving ticks, still >= 25 blocks from the target, never twice (#cancelled, #w)')
+foreach ($s in 1, 2) { $wl += "execute if score #w g5 matches 1 if score #cancelled g5 matches 0 if score #q g5 matches 1 if score #qrun g5 matches 10.. if score #sel g5 matches $s as $(NPCSEL $s 'yui') positioned 152.5 -60 2.5 unless entity @s[distance=..25] run function npcortex_g5:lib/p10_cancel" }
+$wl += @('execute unless score #qx g5 matches -999998 if score #q g5 matches 0 run scoreboard players add #qrun g5 1',
+         'execute if score #q g5 matches 1 run scoreboard players set #qrun g5 0',
+         'scoreboard players operation #lqx g5 = #qx g5','scoreboard players operation #lqz g5 = #qz g5',
+         'execute if score #w g5 matches 1 run schedule function npcortex_g5:lib/p10_watch 1t replace')
+Put 'lib/p10_watch.mcfunction' $wl
+$cl = @('# p10 cancel (generated): the journal snapshot of the cancel tick, then the ONE cancel of this attempt. D1-B logs longState at the cancel() invocation.',
+        'scoreboard players set #cancelled g5 1','scoreboard players set #w g5 0','scoreboard players set #still g5 0')
+foreach ($k in 1..5) { $cl += "execute if score #att g5 matches $k run say [G5] NOTE cancel attempt $k" }
+$cl += @("$OP debug cplus m03 snapshot yui","$OP c2 cancel yui")
+Put 'lib/p10_cancel.mcfunction' $cl
+Put 'lib/p10_timeout.mcfunction' @('# attempt timed out after the NPC had moved: clean up (this is NOT an attempt cancel)','scoreboard players set #w g5 0',
+        'execute if score #moved g5 matches 1 run say [G5] NOTE cleanup_cancel',"execute if score #moved g5 matches 1 run $OP c2 cancel yui",'execute if score #moved g5 matches 1 run scoreboard players set #result g5 11')
+P10Phase
 
 # ---- recovery: Save&Quit checkpoint (MANUAL) then no-replay + new movement --------------------
 # p11 walks 150 blocks (about 40 s) so the NPC is still mid-goal while the owner gate is used in owner-gated mode.
@@ -397,10 +467,13 @@ L $p 'execute if score #tick g5 matches 4 if score #result g5 matches 0 run func
 L $p "execute if score #tick g5 matches 4 if score #result g5 matches 0 run $OP debug cplus m03 move yui"
 L $p "execute if score #tick g5 matches 5.. $AD if score #present g5 matches 1 run function npcortex_g5:lib/poll"
 L $p 'execute if score #tick g5 matches 5.. if score #result g5 matches 0 run function npcortex_g5:lib/periodic_snap'
-L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #moved g5 matches 1 if score #still g5 matches 30.. run scoreboard players set #result g5 1"
+L $p "execute if score #tick g5 matches 5.. $AD if score #result g5 matches 0 if score #moved g5 matches 1 if score #still g5 matches 30.. run scoreboard players set #result g5 10"
 L $p "execute if score #tick g5 matches 600.. $AD if score #result g5 matches 0 run scoreboard players set #result g5 2"
 L $p "execute if score #tick g5 matches 100.. $FB if score #result g5 matches 0 run scoreboard players set #result g5 10"
 L $p "execute if score #result g5 matches 2 $AD if score #moved g5 matches 0 run scoreboard players set #result g5 6"
+# Rev6: movement is not G3 acceptance. Immediately after the move the OWNER types the finalize (the answer, with the durable ACK, appears only for typed commands) and the status.
+L $p 'execute if score #result g5 matches 10 if score #settle g5 matches -1 if score #moved g5 matches 1 run say [G5] OBS p18_regress_e3_taskmove MOVED_AWAITING_TYPED_FINALIZE'
+L $p 'execute if score #result g5 matches 10 if score #settle g5 matches -1 run tellraw @a[tag=g5_op] [{"text":"[G5] p18: type NOW, as the operator and in this order: ","color":"gold"},{"text":"/npcortex debug cplus taskmovefinalize yui","color":"aqua"},{"text":"  then  ","color":"gold"},{"text":"/npcortex debug cplus taskmovestatus yui","color":"aqua"},{"text":"  - wait for each answer in chat (G3 COMPLETED ... durable ACK). Only then run scripts/g5-gate.ps1 and the gate command.","color":"gold"}]'
 Latch $p $CODES
 Finish $p 20 5 @()
 L $p 'execute if score #result g5 matches 4 run function npcortex_g5:lib/abort_obs'
@@ -501,6 +574,7 @@ Put 'setup.mcfunction' @(
  '# Run once as the operator, in a disposable SUPERFLAT world (cheats on). Verifies the test area; changes only test-world rules.',
  '# Also purges a stale scheduled loop and every state of an earlier run (stale-run protection).',
  'schedule clear npcortex_g5:loop',
+ 'schedule clear npcortex_g5:lib/p10_watch',
  'scoreboard objectives add g5 dummy',
  'tag @s add g5_op',
  'scoreboard players set #ready g5 0',
@@ -517,7 +591,8 @@ Put 'setup.mcfunction' @(
  'scoreboard players set #running g5 0','scoreboard players set #single g5 0','scoreboard players set #last g5 99','scoreboard players set #phase g5 0',
  'scoreboard players set #adaptive g5 0','scoreboard players set #probed g5 0','scoreboard players set #sel g5 0','scoreboard players set #per g5 5',
  'scoreboard players set #blocked g5 0','scoreboard players set #cp g5 0','scoreboard players set #strict g5 0','scoreboard players set #aw g5 10',
- 'scoreboard players set #gn g5 0','scoreboard players set #settle g5 -1','scoreboard players set #result g5 0')
+ 'scoreboard players set #gn g5 0','scoreboard players set #settle g5 -1','scoreboard players set #result g5 0',
+ 'scoreboard players set #w g5 0','scoreboard players set #att g5 0','scoreboard players set #p10on g5 0')
 function Starter($rel, $first, $last, $label, $key) {
     $note = if ($first -ne 1) { "execute if score #ready g5 matches 1 unless score #running g5 matches 1 unless score #probed g5 matches 1 run say [G5] NOTE mode=OWNER_GATED_UNPROBED (p00 not run in this setup: no in-game observation, every scenario needs the owner gate; run npcortex_g5:probe first for adaptive control)" } else { "# p00 decides the mode" }
     Put $rel @(
@@ -562,10 +637,12 @@ Put 'lib/rejoin_go.mcfunction' @(
 Put 'probe.mcfunction' @('# capability probe only (p00): decides ADAPTIVE vs OWNER_GATED for later runs in this setup','function npcortex_g5:only/p00_capability_probe')
 Put 'status.mcfunction' @(
  'tellraw @s [{"text":"[G5] running="},{"score":{"name":"#running","objective":"g5"}},{"text":" phase="},{"score":{"name":"#phase","objective":"g5"}},{"text":" tick="},{"score":{"name":"#tick","objective":"g5"}},{"text":" result="},{"score":{"name":"#result","objective":"g5"}},{"text":" settle="},{"score":{"name":"#settle","objective":"g5"}},{"text":" (-2 = awaiting owner gate) moved="},{"score":{"name":"#moved","objective":"g5"}},{"text":" still="},{"score":{"name":"#still","objective":"g5"}},{"text":" cancelled="},{"score":{"name":"#cancelled","objective":"g5"}},{"text":" adaptive="},{"score":{"name":"#adaptive","objective":"g5"}},{"text":" sel="},{"score":{"name":"#sel","objective":"g5"}},{"text":" probed="},{"score":{"name":"#probed","objective":"g5"}},{"text":" strict="},{"score":{"name":"#strict","objective":"g5"}}]',
- 'tellraw @s {"text":"result codes: 1 reached, 2 timeout, 3 stalled(terminal inferred), 4 NPC not selectable, 5 target chunk not loaded, 6 never moved, 7 stopped after cancel, 8 cancel not triggered, 10 awaiting owner gate, 11 owner-gated mode. None of these is a PASS; the collector decides.","color":"gray"}')
+ 'tellraw @s {"text":"result codes: 1 reached, 2 timeout, 3 stalled(terminal inferred), 4 NPC not selectable, 5 target chunk not loaded, 6 never moved, 7 stopped after cancel, 8 cancel not triggered, 10 awaiting owner gate, 11 p10 attempt timed out and was cleaned up (one noted cleanup cancel). None of these is a PASS; the collector decides.","color":"gray"}')
 Put 'stop.mcfunction' @(
  '# Stops the loop and removes ONLY the blocks this pack placed (stone walls inside the test area).',
  'schedule clear npcortex_g5:loop',
+ 'schedule clear npcortex_g5:lib/p10_watch',
+ 'scoreboard players set #w g5 0','scoreboard players set #p10on g5 0','scoreboard players set #att g5 0',
  'scoreboard players set #running g5 0',
  'fill 12 -60 -3 12 -58 7 minecraft:air','fill 12 -60 -80 12 -58 80 minecraft:air',
  'say [G5] STOP',

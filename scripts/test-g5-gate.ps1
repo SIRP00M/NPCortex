@@ -9,7 +9,7 @@ $fails = New-Object System.Collections.ArrayList; $checks = 0
 function Check($c, $m) { $script:checks++; if (-not $c) { [void]$script:fails.Add($m) } }
 $inv = [Globalization.CultureInfo]::InvariantCulture
 function G($fx, [datetime]$now, [double]$hung = 8) {
-    $o = & $gate -WorldName NPCortex_G5_fixture -RunDir (Join-Path $fx 'run') -OutDir (Join-Path $fx 'gateout') -Now $now -HungMinutes $hung -Quiet
+    $o = & $gate -WorldName NPCortex_G5_fixture -RunDir (Join-Path $fx 'run') -OutDir (Join-Path $fx 'gateout') -Now $now -HungMinutes $hung -Quiet -SkipPreflightCheck
     $code = $LASTEXITCODE
     $d = ($o | Select-Object -Last 1) | ConvertFrom-Json
     $d | Add-Member -NotePropertyName code -NotePropertyValue $code -Force
@@ -43,6 +43,17 @@ foreach ($mode in 'fb', 'ok') {
     $aw = $meta.awaits | Select-Object -First 1
     $d0 = G $fx ((T $aw.time).AddMilliseconds(100)); Check ($d0.decision -in 'GO', 'WAIT') "${mode}: decision right after the first AWAIT is GO or WAIT, never an error"
 }
+# ---------------------------------------------------------------- 1b. Rev6: p18 needs the OWNER-TYPED taskmovefinalize answer before GO; decisions are written run-scoped
+$fx = Join-Path $tmp 'nofin'; & node (Join-Path $PSScriptRoot 'g5-collector-fixture.js') $fx 'nofinalize' | Out-Null
+$meta = Get-Content -Raw (Join-Path $fx 'meta.json') | ConvertFrom-Json; $g18 = @($meta.gates | Where-Object { $_.id -eq 'p18_regress_e3_taskmove' }) | Select-Object -First 1
+Check ($null -ne $g18) 'nofinalize fixture has a p18 gate release'
+$d = G $fx ((T $g18.time).AddMilliseconds(-200)); Check ($d.decision -eq 'WAIT' -and $null -eq $d.command -and $d.reason -match 'taskmovefinalize' -and $d.reason -match 'taskmovestatus') "p18 without the typed finalize answer: WAIT and the reason names the typed commands (got $($d.decision): $($d.reason))"
+$fx = Join-Path $tmp 'ok'; $meta = Get-Content -Raw (Join-Path $fx 'meta.json') | ConvertFrom-Json; $g18 = @($meta.gates | Where-Object { $_.id -eq 'p18_regress_e3_taskmove' }) | Select-Object -First 1
+$d = G $fx ((T $g18.time).AddMilliseconds(-200)); Check ($d.decision -eq 'GO' -and $d.reason -match 'G3 COMPLETED task=SIM-TASK') "p18 with the typed finalize answer in the chat log: GO (SAFE_PROGRESSION only; got $($d.decision): $($d.reason))"
+$runF = Join-Path $fx 'g5/run-fixture'
+$null = & $gate -WorldName NPCortex_G5_fixture -RunDir (Join-Path $fx 'run') -OutDir (Join-Path $fx 'gateout') -G5RunDir $runF -Now ((T $g18.time).AddMilliseconds(-200)) -Quiet -SkipPreflightCheck
+$lastRow = (Get-Content (Join-Path $runF 'gate-log.jsonl') | Select-Object -Last 1) | ConvertFrom-Json
+Check ($lastRow.run_id -eq 'fixture' -and $lastRow.decision -eq 'GO' -and $lastRow.meaning -eq 'SAFE_PROGRESSION_ONLY_NOT_AN_ACCEPTANCE_VERDICT' -and $lastRow.world -eq 'NPCortex_G5_fixture') "gate decisions carry the run id and are appended to the run folder's own log ($($lastRow | ConvertTo-Json -Compress))"
 # ---------------------------------------------------------------- 2. an actor that never ends: never GO, HUNG after the game-time limit, stale snapshots detected
 $fx = Join-Path $tmp 'hang'; & node (Join-Path $PSScriptRoot 'g5-collector-fixture.js') $fx 'hang' | Out-Null
 $meta = Get-Content -Raw (Join-Path $fx 'meta.json') | ConvertFrom-Json; $aw = T (@($meta.awaits)[0].time)
@@ -127,6 +138,18 @@ $m = Mini 'norun' @(,@($base, 'unrelated line')) @(); $d = G $m (& $nowAt 5); Ch
 # a newer START supersedes everything before it (stale run protection)
 $m = Mini 'stale' @(@($base, '[Not Secure] [Server] [G5] START ALL'), @($base.AddSeconds(1), '[Not Secure] [Server] [G5] BEGIN p02_navlong_20 t'), @($base.AddSeconds(40), '[Not Secure] [Server] [G5] AWAIT p02_navlong_20 owner gate required'), @($base.AddSeconds(100), '[Not Secure] [Server] [G5] START ALL')) @((Sn 30 22.5 2.5 'COMPLETED'), (Sn 35 22.5 2.5 'COMPLETED'), (Sn 40 22.5 2.5 'COMPLETED'), (Sn 45 22.5 2.5 'COMPLETED'))
 $d = G $m (& $nowAt 110); Check ($d.decision -eq 'RUNNING' -and $null -eq $d.command) "a newer START ignores the earlier run's AWAIT (got $($d.decision): $($d.reason))"
+
+# revision 5: the gate STOPs without a passing preflight of the isolated run, and a GO is recorded as safe progression only (never a verdict)
+$m = Mini 'gate_pf' (Std 'p02_navlong_20') @((Sn 30 2 2 $null $null), (Sn 35 2 2 $null $null), (Sn 40 2 2 $null $null), (Sn 45 2 2 $null $null))
+$g5 = Join-Path $m 'g5run'; New-Item -ItemType Directory -Force -Path $g5 | Out-Null
+function RunGatePf { $o = & $gate -WorldName NPCortex_G5_fixture -RunDir (Join-Path $m 'run') -OutDir (Join-Path $m 'gateout') -Now (& $nowAt 46) -Quiet -G5RunDir $g5; $c = $LASTEXITCODE; $r = ($o | Select-Object -Last 1) | ConvertFrom-Json; $r | Add-Member -NotePropertyName code -NotePropertyValue $c -Force; return $r }
+$d = RunGatePf; Check ($d.decision -eq 'STOP' -and $d.code -eq 13 -and $d.reason -match 'preflight MISSING') "no preflight.json -> STOP (got $($d.decision): $($d.reason))"
+[IO.File]::WriteAllText((Join-Path $g5 'preflight.json'), '{"status":"FAIL","run_id":"x"}')
+$d = RunGatePf; Check ($d.decision -eq 'STOP' -and $d.reason -match 'preflight FAIL' -and $d.reason -match 'nothing is reset') "failed preflight -> STOP, nothing repaired (got $($d.decision): $($d.reason))"
+[IO.File]::WriteAllText((Join-Path $g5 'preflight.json'), '{"status":"PASS","run_id":"x"}')
+$d = RunGatePf; Check ($d.decision -eq 'GO') "passing preflight -> the normal rules apply (got $($d.decision): $($d.reason))"
+$row = (Get-Content -Raw (Join-Path $m 'gateout/g5-gate-log.jsonl') -Encoding UTF8 -ErrorAction SilentlyContinue)
+Check ($row -match 'SAFE_PROGRESSION_ONLY_NOT_AN_ACCEPTANCE_VERDICT' -and $row -match '"preflight":"PASS"') 'a recorded GO says it is safe progression only and names the preflight state'
 
 Remove-Item -LiteralPath $tmp -Recurse -Force
 [pscustomobject]@{ checks = $checks; failures = $fails.Count; status = $(if ($fails.Count) { 'FAIL' } else { 'PASS' }); scope = 'owner-gate rules on synthetic fixtures only' } | ConvertTo-Json

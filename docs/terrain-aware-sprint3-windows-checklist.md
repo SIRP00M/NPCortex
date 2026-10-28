@@ -7,7 +7,7 @@ and the Sprint 3 Full Repository. User performs all GitHub operations.
 ## Preparation (PowerShell)
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-terrain-s3.ps1
 .\scripts\dev-forge.ps1 -Task build
 # Terminal 2:

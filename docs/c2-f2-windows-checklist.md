@@ -3,7 +3,7 @@
 **Use F2 Candidate ZIP as full repository**, do not mix individual classes. Windows Java 17 (Temurin). Operator-only Follow requires no Ollama/Backend unless there is an unresolved prior C0 action. Save a backup world.
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-f2-natural.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

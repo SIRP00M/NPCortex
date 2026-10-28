@@ -2,6 +2,43 @@
 
 NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
 
+## Unreleased — `v0.2.6-alpha.2` · More reliable NPC navigation diagnostics and G5 verification (2026-10-28)
+
+**GitHub comparison base:** `main` commit `3d55562` (`v0.2.5-alpha.1`). The earlier `v0.2.6-alpha.1` package was prepared but is not present on `main` at packaging time; this archive includes its readable-name/G5 changes as well as the newer Revision 6 tests. `alpha.2` denotes iteration of the same milestone, not a new stable release.
+
+### Updated since the earlier `v0.2.6-alpha.1` package
+
+- **Navigation diagnostics:** C2 result/cancel logging now reads the same runtime state through a small read-only formatter, preserving the pre-cancel state and terminal reason for debugging. No path selection, movement token or recovery algorithm was changed by this update.
+- **G5 Revision 6:** revised per-tick cancellation attempts (maximum five), tighter save/quit snapshot correlation, explicit guarded-task terminal evidence, stricter collector diagnostics and performance uncertainty reporting.
+- **Verification contracts:** updated static tests, datapack functions and PowerShell/Node regression harnesses to check that instrumented behavior is not misreported as accepted gameplay.
+- **Visible names:** retained the separate client nametag and Forge TAB formatting changes from `alpha.1`. The internal GameProfile identity remains unchanged; the TAB result is **not yet visually accepted**.
+- Packaging filters raw local worlds, databases, AI-agent files, build/cache data, private logs and run-specific manifests while preserving source, CI, tests, generated datapack sources and sanitized regression fixtures.
+
+### Tests and limitations
+
+- Earlier G5 Rev5 Windows single-player evidence: 18 PASS, 3 PENDING, 1 UNVERIFIED, 0 FAIL among 22 scenarios; functional 1/3/5/10 lanes passed in that environment. **Do not transfer these verdicts to Rev6**. Rev6-specific p08/p10/p11/p18 checks and performance acceptance are still open until evidenced.
+- Static/fixture tests are not a Windows Forge Build or live Minecraft gameplay acceptance. In particular no autonomous mining, block placement, pickup, force-loaded pathfinding, dedicated-server or multiplayer release certification is claimed.
+
+## Unreleased — `v0.2.6-alpha.1` · Visible NPC names and improved navigation testing (2026-10-27)
+
+**Compared against GitHub `main` commit `3d55562` (`v0.2.5-alpha.1`).** This is an experimental public source milestone, not a stable release or a claim that all gameplay gates passed.
+
+### Added / changed
+
+- **Readable NPC names:** added an opt-in clientbound `npcortex:names` identity-to-display-name synchronization path for above-head NPC names, with bounded packets and lifecycle refresh after join, rejoin or dimension transitions. Added a separate Forge TAB display-name formatter in the latest source. Saved identity, GameProfile name/UUID, gameplay selectors and C1 motion/network identity remain unchanged.
+- **G5 navigation harness revision:** extended PowerShell isolation/preflight, generated test datapack and result collector for independent 1/3/5/10-NPC profiles and navigation lanes, safer cancellation evidence and explicit failure states. No force-loading, backend replay or autonomous movement behavior was added by the harness.
+- **Read-only C2 diagnostics:** bounded, sanitized terminal-reason and cancellation-state logging to distinguish cases such as long no-progress, oscillation and quiescing without changing the navigation state machine or action semantics.
+- Added focused Java/source-level tests and operator documentation. The existing G5 scripts/data pack are development acceptance tools, not shipped NPC gameplay features.
+
+### Evidence and remaining limits
+
+- Owner-reported Windows single-player: above-head names for Reika/Mika and name persistence across rejoin, tracking and dimension round trips passed in the tested cases. **Latest TAB player-list name handling remains unverified**; earlier captures showed internal `N...` names.
+- G5 revision-5 run (22 scenarios): **18 PASS, 3 PENDING, 1 UNVERIFIED, 0 FAIL**. The 1/3/5/10 NPC functional lanes passed for the tested environment. P10 quiescing cancellation, P11 in-progress Save & Quit snapshot and P18 E3 terminal review remained pending; P08 did not distinguish the failure cause. Added read-only diagnostics may help future runs, but are not retrospective proof.
+- Performance is **measured, not accepted**: one 10-NPC round, no comparable baseline or profiler/MSPT acceptance. Dedicated server, multiplayer, full TAB presentation, fault injection and full-suite Forge acceptance remain open.
+- This GitHub-ready packaging changed version metadata and public docs, excluded local workspaces/evidence, preserved production source logic from the uploaded developer archive, and did not commit or push GitHub.
+
+---
+
 ## Unreleased — `v0.2.5-alpha.1` · Character Profiles, in-game Manager and bounded long-range navigation (2026-10-27)
 
 **Base:** GitHub `main` commit `d3e95b2` (`v0.2.4-alpha.2`). This is a new public source milestone, not a tagged stable release.

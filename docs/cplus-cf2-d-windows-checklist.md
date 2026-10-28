@@ -5,7 +5,7 @@
 ### 1. Run tests
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-cplus-f2-readonly.ps1 -IncludeFullBackend -IncludeForgeBuild
 .\scripts\test-cplus-f1-final-gates.ps1 -IncludeForgeBuild
 .\scripts\test-c2-airborne-target-projection.ps1
@@ -17,13 +17,13 @@ C-F2 contract Python/Java, full backend, C-F1 and Forge build must all exit 0. I
 
 Window A:
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 .\scripts\dev-backend.ps1
 ```
 Window B:
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 .\scripts\dev-forge.ps1 -Task runClient
 ```

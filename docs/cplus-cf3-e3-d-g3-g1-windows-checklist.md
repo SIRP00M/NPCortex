@@ -6,7 +6,7 @@
 
 **A — Forge build (standalone, actual Temurin 17)**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 Record `BUILD SUCCESSFUL` or complete compile errors.

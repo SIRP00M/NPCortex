@@ -147,6 +147,8 @@ final class C1P0Runtime {
         if (level.getEntity(entry.profileId()) != null) {
             throw new IllegalStateException("World already contains profile UUID " + entry.profileId());
         }
+        // Name first: clients must know the logical name before the player-info/spawn packets create the entity.
+        NpcNameNetwork.announce(server, entry);
         C1PlayerAvatar avatar = new C1PlayerAvatar(server, level,
                 new GameProfile(entry.profileId(), entry.profileName()));
         // Restore full Vanilla ItemStacks before ChunkMap can track this avatar.

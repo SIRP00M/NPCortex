@@ -29,7 +29,7 @@ if ($haveSrc) { Get-ChildItem -Recurse -File -LiteralPath $srcDir -Filter *.java
 } }
 # M03 registers its leaf literals through a loop over string constants.
 if ($haveSrc) { foreach ($m in [regex]::Matches((Get-Content -Raw -LiteralPath (Join-Path $root 'forge-mod/src/main/java/io/github/sirp00m/npcortex/CPlusM03Runtime.java')), '"([a-z0-9-]+)"')) { $lits[$m.Groups[1].Value] = $true } }
-$npc = '(?:yui|g5n(?:0[2-9]|10))'
+$npc = '(?:yui|g5a(?:0[2-9]|10))'
 $npcortexShapes = @(
   ('^c1 spawn ' + $npc + '$'), ('^c1 despawn ' + $npc + '$'),
   '^c2 navlong ' + $npc + ' -?\d+ -?\d+ -?\d+$', '^c2 navigate ' + $npc + ' -?\d+ -?\d+ -?\d+$',
@@ -74,7 +74,7 @@ function CheckCommand([string]$cmd, [string]$where) {
                   $cmd -match '^scoreboard players operation #\w+ g5 (=|\+=|%=) #\w+ g5$'
             if (-not $ok) { Bad "$where scoreboard shape: $cmd" }
         }
-        'data' { if ($cmd -notmatch '^data get entity @s Pos\[(0|2)\]$') { Bad "$where data command: $cmd" } }
+        'data' { if ($cmd -notmatch '^data get entity @s Pos\[(0|2)\]( 1000)?$') { Bad "$where data command: $cmd" } }
         'say' {
             if ($cmd -notmatch '^say \[G5\] ') { Bad "$where say must start with [G5]: $cmd" }
             if ($cmd.Contains('@')) { Bad "$where say text contains '@' (vanilla expands selectors in say; the p00 log printed 'Dev' for an @e[...] in the text): $cmd" }
@@ -101,11 +101,11 @@ function CheckCommand([string]$cmd, [string]$where) {
             # or a selector on an already adopted NPC / probe tag. Always inside the bounded search box. Never @a, never the operator.
             $bx = [regex]::Escape($box)
             $okOp = ($cmd -eq 'tag @s add g5_op')
-            $okCand = ($cmd -match ('^tag @e\[(type=player|type=!item),tag=!g5_op,tag=!g5_npc,' + $bx + ',limit=1\] add (g5_npc_(yui|g5n\d\d)|g5_pv1|g5_pv2)$'))
-            $okTagged = ($cmd -match ('^tag @e\[(type=player,)?tag=(g5_npc_(yui|g5n\d\d)|g5_pv1|g5_pv2),' + $bx + '\] (add g5_npc|remove g5_pv[12])$'))
+            $okCand = ($cmd -match ('^tag @e\[(type=player|type=!item),tag=!g5_op,tag=!g5_npc,' + $bx + ',limit=1\] add (g5_npc_(yui|g5a\d\d)|g5_pv1|g5_pv2)$'))
+            $okTagged = ($cmd -match ('^tag @e\[(type=player,)?tag=(g5_npc_(yui|g5a\d\d)|g5_pv1|g5_pv2),' + $bx + '\] (add g5_npc|remove g5_pv[12])$'))
             if (-not ($okOp -or $okCand -or $okTagged)) { Bad "$where tag: $cmd" }
         }
-        'schedule' { if ($cmd -notmatch '^schedule (function npcortex_g5:loop 10t replace|clear npcortex_g5:loop)$') { Bad "$where schedule: $cmd" } }
+        'schedule' { if ($cmd -notmatch '^schedule (function npcortex_g5:loop 10t replace|clear npcortex_g5:loop|function npcortex_g5:lib/p10_watch 1t replace|clear npcortex_g5:lib/p10_watch)$') { Bad "$where schedule: $cmd" } }
         'function' {
             if ($cmd -notmatch '^function npcortex_g5:([\w/]+)$') { Bad "$where function ref: $cmd" }
             elseif (-not $rel.ContainsKey($Matches[1])) { Bad "$where missing function $($Matches[1])" } else { $callable[$Matches[1]] = $true }

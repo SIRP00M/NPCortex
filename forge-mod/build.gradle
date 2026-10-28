@@ -94,3 +94,13 @@ tasks.register('verifyProfileRegistration', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'io.github.sirp00m.npcortex.C2RegistrationPayloadSelfTest'
 }
+tasks.register('verifyNpcNames', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.NpcNameSelfTest'
+}
+tasks.register('verifyRev6', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.sirp00m.npcortex.Rev6DiagSelfTest'
+}

@@ -21,7 +21,7 @@
 **Before testing:** Use a COPY of a test world, ideally a flat safe area. Back up the world before keepInventory=false, falling, death, or dimension-change tests. Disable unrelated gameplay mods during initial smoke testing. Do **not** push to GitHub until all relevant quality gates pass.
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c1-p1c-vanilla-tick.ps1
 .\scripts\test-c1-p1-lifecycle.ps1
 .\scripts\test-c1-p0-sync.ps1

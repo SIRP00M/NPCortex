@@ -1,5 +1,8 @@
 # NPCortex Roadmap #2 - G5 test harness, revision 4 "probe v2 + owner gate" (TEST ONLY)
 
+> **Revision 6 (D1 diagnostics, p10 up to 5 attempts with a per-tick trigger, p18 typed finalize, collector hardening `rev6.0`): see [REVISION-6.md](REVISION-6.md) - it supersedes the p08/p10/p11/p18 rules and the log-collection notes of the older revisions.**
+> **Revision 5 (Character Profile aware, isolated run, lane-by-lane, p10 split verdicts): see [REVISION-5.md](REVISION-5.md) - it supersedes the lane names (`g5a02..`), the default database and the p10 rules described below.**
+
 A Minecraft 1.20.1 data pack drives the scenarios; M03 snapshots written by the existing production bridge are the **independent evidence**; PowerShell reads what the
 pack cannot (`g5-gate.ps1` decides when it is safe to progress, `collect-g5-evidence.ps1` decides every verdict). No production source, backend, prompt, E3 or journal code is touched.
 **Nothing in this package has run in Minecraft yet: every gameplay scenario is PENDING.**

@@ -19,6 +19,7 @@ Run 'controller simulation (mock world: probe v2 variants, adaptive, owner-gated
 Run 'collector tests (synthetic fixtures + real Forge log excerpt)' 'test-g5-collector.ps1' 'ps'
 Run 'owner-gate tests (g5-gate.ps1 on simulated runs + hand-built cases)' 'test-g5-gate.ps1' 'ps'
 Run 'installer test (throw-away tree)' 'test-g5-installer.ps1' 'ps'
+Run 'isolation/preflight/launcher tests (fail-closed prerequisites, one real isolated backend on a free port, collector refuses unverified databases)' 'test-g5-isolation.ps1' 'ps'
 $zip = Join-Path $root 'integrations/datapacks/NPCortex_G5.zip'
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
 $md = @('# G5 harness - offline validation results', '', "Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') by scripts/run-g5-validation.ps1. Pack zip SHA-256: ``$hash``", '',

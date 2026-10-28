@@ -5,7 +5,7 @@ Backup Repository/world first. **Use Windows Temurin Java 17**, Minecraft Forge 
 ## A. Automated/Forge build
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-f2-fix3-vanilla-adapter.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

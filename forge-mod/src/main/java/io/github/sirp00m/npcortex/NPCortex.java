@@ -21,6 +21,7 @@ public final class NPCortex {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, NPCortexConfig.SPEC);
         C1P0Network.register();
         ManagerNetwork.register();
+        NpcNameNetwork.register();
         MinecraftForge.EVENT_BUS.addListener(NPCortex::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onServerStarted);
         MinecraftForge.EVENT_BUS.addListener(CharacterManagerService::onServerStarted);
@@ -37,6 +38,10 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(CPlusM03Runtime::stopping); // TEMP M03
 
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogin);
+        MinecraftForge.EVENT_BUS.addListener(NpcNameNetwork::onLogin);
+        MinecraftForge.EVENT_BUS.addListener(NpcNameNetwork::onRespawn);
+        MinecraftForge.EVENT_BUS.addListener(NpcNameNetwork::onDimensionChange);
+        MinecraftForge.EVENT_BUS.addListener(NpcTabName::onTabListName);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStartTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onStopTracking);
         MinecraftForge.EVENT_BUS.addListener(C1P0Runtime::onLogout);

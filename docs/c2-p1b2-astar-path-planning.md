@@ -36,7 +36,7 @@ P1-B1 currently has only same-foot-height, four-cardinal WALK edges. Therefore P
 1. Extract this **full** ZIP into your **backed-up** development repository, keeping paths intact. Do not mix files with older versions.
 2. Run in Windows PowerShell:
    ```powershell
-   cd F:\AI\NPCortex
+   cd C:\path\to\NPCortex
    .\scripts\test-c2-p1b2.ps1
    .\scripts\dev-forge.ps1 -Task build
    .\scripts\dev-forge.ps1 -Task runClient

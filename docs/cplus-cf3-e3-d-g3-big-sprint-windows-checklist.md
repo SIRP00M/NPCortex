@@ -2,10 +2,10 @@
 
 The Forge build passed on the previous Candidate, but `test-cplus-e3-g3-big.ps1` failed twice during `TemporaryDirectory` deletion of test databases (`WinError 32`). The revised Candidate now closes test-only SQLite handles explicitly; no production code changed.
 
-With a clean extraction of this Candidate in `F:\AI\NPCortex` (or replace with your extracted folder):
+With a clean extraction of this Candidate in `C:\path\to\NPCortex` (or replace with your extracted folder):
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 # Test only the Python regression first (no Minecraft or Forge build required):
 .\scripts\test-cplus-e3-g3-big.ps1 -BackendOnly
 # Then also run Java/Gson contract validation using Windows Gradle:
@@ -26,7 +26,7 @@ Expected: all 5 G3/G2 Python groups return `OK` with no `WinError 32`; Java self
 ## Commands in separate terminals
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 # Terminal A: Compile only
 .\scripts\dev-forge.ps1 -Task build
 # Terminal B: Focused tests (includes Java/Gson tests)

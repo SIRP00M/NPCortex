@@ -5,7 +5,7 @@
 Back up world and original repo before installing candidate. Java 17 / Forge 1.20.1.
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-f2-fix2-smoothing.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

@@ -36,7 +36,7 @@ problem without claiming that a particular Vanilla or mod caller is the culprit.
 ## Run on Windows (Java 17 / Forge 1.20.1)
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c1-r2-fix2.ps1
 .\scripts\test-c1-r2-combat.ps1
 .\scripts\test-c1-r0-foundation.ps1
@@ -70,7 +70,7 @@ Hit Yui **once**, inspect visual displacement and compare `/npcortex c1 motion y
 For the first post-attack frames run:
 
 ```powershell
-Get-Content F:\AI\NPCortex\forge-mod\run\logs\latest.log |
+Get-Content C:\path\to\NPCortex\forge-mod\run\logs\latest.log |
   Select-String 'C1-R2 COMBAT_IMPULSE|C1-R2-FIX2 COMBAT_STEP|C1-P1 motion_done' |
   Select-Object -Last 40
 ```

@@ -10,7 +10,7 @@ where live evidence is missing.**
 From a PowerShell window at the root of this exact full repository:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\accept-m04.ps1
 ```
 
@@ -45,7 +45,7 @@ To optionally review an **existing** test world and backend SQLite read-only:
 
 ```powershell
 .\scripts\accept-m04.ps1 -WorldName 'New World (2)' `
-  -Database 'F:\AI\NPCortex\backend\data\npcortex.sqlite3'
+  -Database 'C:\path\to\NPCortex\backend\data\npcortex.sqlite3'
 ```
 
 World/Database must be supplied together and must identify the **same** running

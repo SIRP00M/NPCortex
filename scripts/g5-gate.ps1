@@ -3,6 +3,8 @@
 # state + goal/action ids written by production code) and the logged C2 terminal lines - and prints GO only when the actor is TERMINAL and QUIESCENT.
 # The owner then releases the scenario with /function npcortex_g5:gate (the pack refuses it unless the scenario is awaiting). A fixed timer never
 # progresses a scenario. It never writes to the world, the backend or the game; it appends decisions to g5-results/g5-gate-log.jsonl.
+# GO means "this scenario may be released" (SAFE PROGRESSION). It is never an acceptance verdict: PASS/FAIL come only from collect-g5-evidence.ps1,
+# which judges the scenario's own evidence. Revision 5: the gate STOPs unless the run's preflight (scripts/g5-preflight.ps1) passed.
 #   usage:  powershell -File scripts\g5-gate.ps1 -WorldName NPCortex_G5_Run1 -Watch        (prints GO and copies the command to the clipboard)
 #           powershell -File scripts\g5-gate.ps1 -WorldName NPCortex_G5_Run1               (one evaluation; exit 0 GO, 10 WAIT/RUNNING, 11 HUNG, 12 DONE, 13 STOP, 14 NO_RUN, 15 CHECKPOINT)
 param(
@@ -10,6 +12,8 @@ param(
     [string]$RunDir,
     [string]$OutDir,
     [datetime]$Now,
+    [string]$G5RunDir,
+    [switch]$SkipPreflightCheck,
     [switch]$Watch,
     [int]$IntervalSeconds = 3,
     [double]$HungMinutes = 8,
@@ -22,12 +26,23 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'g5-common.ps1')
 if (-not $RunDir) { $RunDir = Join-Path $root 'forge-mod/run' }
 if (-not $OutDir) { $OutDir = Join-Path $root 'g5-results' }
+foreach ($pn in 'RunDir', 'OutDir', 'G5RunDir') { $pv = Get-Variable -Name $pn -ValueOnly; if ($pv) { Set-Variable -Name $pn -Value (Resolve-G5Path $pv) } }   # relative paths: PowerShell location, never the process directory
 $world = Join-Path (Join-Path $RunDir 'saves') $WorldName
 if (-not (Test-Path -LiteralPath $world)) { throw "World folder not found: $world" }
 $logPath = Join-Path (Join-Path $RunDir 'logs') 'latest.log'
 $evDir = Join-Path $world 'data/npcortex/m03-evidence'
 $gateLog = Join-Path $OutDir 'g5-gate-log.jsonl'
 $MaxSnapAgeSeconds = 25
+$script:PreflightState = 'NOT_CHECKED'
+# Rev6: gate decisions are written with the id of the isolated G5 run and into that run's own folder, so entries of an older run can never be attributed to this one
+$gateRunDir = Resolve-G5RunDir $G5RunDir $OutDir
+$gateMarker = $null; if ($gateRunDir) { $gateMarker = Read-G5Json (Join-Path $gateRunDir 'G5-ISOLATED.marker.json') }
+$gateRunId = $(if ($gateMarker) { [string]$gateMarker.run_id } else { $null })
+if (-not $SkipPreflightCheck) {
+    $g5Dir = Resolve-G5RunDir $G5RunDir $OutDir
+    $pf = $null; if ($g5Dir) { $pf = Read-G5Json (Join-Path $g5Dir 'preflight.json') }
+    $script:PreflightState = $(if ($pf -and $pf.status -eq 'PASS') { 'PASS' } elseif ($pf) { 'FAIL' } else { 'MISSING' })
+}
 $script:HaveNow = $PSBoundParameters.ContainsKey('Now')
 
 function Read-Shared([string]$path) {   # the game keeps the file open: read with FileShare.ReadWrite
@@ -49,10 +64,15 @@ function Quiet-Snaps($list) {   # >= 3 snapshots spanning >= 7 s with a position
 
 function Get-GateDecision {
     $nowT = if ($script:HaveNow) { $Now } else { Get-Date }
+    if ($script:PreflightState -in 'FAIL', 'MISSING') { return Decision 'STOP' $null "preflight $($script:PreflightState): no passing scripts\g5-preflight.ps1 result is recorded for the isolated G5 run. The sequence must not progress; nothing is reset or repaired automatically." }
     if (-not (Test-Path -LiteralPath $logPath)) { return Decision 'NO_RUN' $null "no Minecraft log at $logPath" }
-    $markers = New-Object System.Collections.ArrayList; $c2 = New-Object System.Collections.ArrayList
+    $markers = New-Object System.Collections.ArrayList; $c2 = New-Object System.Collections.ArrayList; $finalizeSeen = New-Object System.Collections.ArrayList
     foreach ($ln in ((Read-Shared $logPath) -split "`r?`n")) {
         $m = [regex]::Match($ln, '^\[(\d\d[A-Za-z]{3}\d{4} \d\d:\d\d:\d\d)\.(\d{3})\] \[([^\]]+)\] \[[^\]]*\]: (.*)$')
+        if ($m.Success -and $m.Groups[3].Value -notlike 'Server thread*') {   # the client chat echo is ignored, except the OWNER-typed taskmovefinalize answer p18 needs
+            $fm = [regex]::Match($m.Groups[4].Value, '\[CHAT\] (?:\[[^\]]+\] )*(?:NPCortex: )?G3 (COMPLETED|CANCELLED) task=(\S+) durable ACK; actor fence released')
+            if ($fm.Success) { [void]$finalizeSeen.Add([pscustomobject]@{ t = [datetime]::ParseExact($m.Groups[1].Value, 'ddMMMyyyy HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture).AddMilliseconds([int]$m.Groups[2].Value); outcome = $fm.Groups[1].Value; task = $fm.Groups[2].Value }) }
+        }
         if (-not $m.Success -or $m.Groups[3].Value -notlike 'Server thread*') { continue }   # the client chat echo on the Render thread is ignored
         $t = [datetime]::ParseExact($m.Groups[1].Value, 'ddMMMyyyy HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture).AddMilliseconds([int]$m.Groups[2].Value)
         if ($t -gt $nowT) { continue }
@@ -151,7 +171,11 @@ function Get-GateDecision {
             $y = @($win | Where-Object { $_.name -eq 'yui' }); $q = Quiet-Snaps $y; $disp = Dist $newest $y[0].x $y[0].z
             if (-not $q.ok) { return NotReady $q.why }
             if ($disp -lt 1.0) { return NotReady "NPC has not been displaced yet ($(F1 $disp) blocks)" }
-            return Ready "NPC displaced $(F1 $disp) blocks and $($q.why) (E3 acceptance still needs taskmovefinalize + DB review)"
+            # Rev6: the pack waits for the Owner to TYPE `taskmovefinalize yui` right after the move; GO only once its durable-ACK answer is in the chat log
+            $fin = @($finalizeSeen | Where-Object { $_.t -ge $beg.t -and $_.outcome -eq 'COMPLETED' }) | Select-Object -First 1
+            if (-not $fin) { return NotReady "NPC displaced $(F1 $disp) blocks and $($q.why); waiting for your typed /npcortex debug cplus taskmovefinalize yui (answer 'G3 COMPLETED task=... durable ACK; actor fence released'), then /npcortex debug cplus taskmovestatus yui" }
+            $ev['finalize_task'] = $fin.task
+            return Ready "NPC displaced $(F1 $disp) blocks and $($q.why); typed taskmovefinalize answered G3 COMPLETED task=$($fin.task) (G3 acceptance is judged by the collector from the answer, taskmovestatus and the database)"
         }
         'multi' {
             foreach ($nm in $names) {
@@ -194,14 +218,16 @@ function Get-GateDecision {
 
 function Write-GateLog($d, $nowT) {
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    $row = [ordered]@{ time = $nowT.ToString('s'); scenario = $d.scenario; decision = $d.decision; reason = $d.reason; command = $d.command; evidence = $d.evidence }
-    [IO.File]::AppendAllText($gateLog, (($row | ConvertTo-Json -Compress -Depth 5) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    $row = [ordered]@{ time = $nowT.ToString('s'); run_id = $gateRunId; world = $WorldName; scenario = $d.scenario; decision = $d.decision; meaning = $(if ($d.decision -eq 'GO') { 'SAFE_PROGRESSION_ONLY_NOT_AN_ACCEPTANCE_VERDICT' } else { $null }); preflight = $script:PreflightState; reason = $d.reason; command = $d.command; evidence = $d.evidence }
+    $line = (($row | ConvertTo-Json -Compress -Depth 5) + "`n")
+    [IO.File]::AppendAllText($gateLog, $line, (New-Object System.Text.UTF8Encoding($false)))
+    if ($gateRunDir -and (Test-Path -LiteralPath $gateRunDir -PathType Container)) { [IO.File]::AppendAllText((Join-Path $gateRunDir 'gate-log.jsonl'), $line, (New-Object System.Text.UTF8Encoding($false))) }
 }
 function Show($d) {
     if ($Quiet) { return }
     $tag = "[G5 GATE] $(if ($d.scenario) { $d.scenario } else { '-' })"
     switch ($d.decision) {
-        'GO'         { Write-Host "$tag : GO" -ForegroundColor Green; Write-Host "  $($d.reason)"; Write-Host "  In Minecraft run:  $($d.command)" -ForegroundColor Green }
+        'GO'         { Write-Host "$tag : GO" -ForegroundColor Green; Write-Host "  $($d.reason)"; Write-Host "  In Minecraft run:  $($d.command)" -ForegroundColor Green; Write-Host '  GO releases the scenario only. It is NOT a test verdict: collect-g5-evidence.ps1 judges the evidence.' -ForegroundColor DarkGray }
         'HUNG'       { Write-Host "$tag : HUNG" -ForegroundColor Red; Write-Host "  $($d.reason)" }
         'MISSED'     { Write-Host "$tag : MISSED" -ForegroundColor Red; Write-Host "  $($d.reason)" }
         'CHECKPOINT' { Write-Host "$tag : CHECKPOINT" -ForegroundColor Yellow; Write-Host "  $($d.reason)" }

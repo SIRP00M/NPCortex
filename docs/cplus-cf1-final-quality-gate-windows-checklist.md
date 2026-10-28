@@ -1,13 +1,13 @@
 # NPCortex GWI — C-F1 Final Quality Gate — Windows Acceptance
 
-**Use this exact ZIP as your project root at `F:\AI\NPCortex`.** Python 3.13, Temurin JDK 17, Forge 1.20.1. No manually configured Token required. No GitHub operations.
+**Use this exact ZIP as your project root at `C:\path\to\NPCortex`.** Python 3.13, Temurin JDK 17, Forge 1.20.1. No manually configured Token required. No GitHub operations.
 
 ## A. One-command automated quality gates
 
 Open PowerShell from the repository root:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 Remove-Item Env:NPCORTEX_CPLUS_F1_SECRET_FILE -ErrorAction SilentlyContinue
 .\scripts\test-cplus-f1-final-gates.ps1 -IncludeForgeBuild
@@ -23,7 +23,7 @@ Remove-Item Env:NPCORTEX_CPLUS_F1_SECRET_FILE -ErrorAction SilentlyContinue
 **PowerShell 1**:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 Remove-Item Env:NPCORTEX_CPLUS_F1_SECRET_FILE -ErrorAction SilentlyContinue
 $env:PYTHONPATH = (Resolve-Path .\backend\src).Path
@@ -33,7 +33,7 @@ python -m npcortex_backend
 **PowerShell 2**:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 Remove-Item Env:NPCORTEX_CPLUS_F1_SECRET_FILE -ErrorAction SilentlyContinue
 .\scripts\dev-forge.ps1 -Task runClient
@@ -63,7 +63,7 @@ Previous operator evidence: **Test A, B (Backend Offline → Online), C (Save/Re
 
 ```powershell
 # REPLACE with an expendable copied save; do not point this at the original world!
-$copyWorld = 'F:\AI\NPCortex\forge-mod\run\saves\CF1_DISPOSABLE_COPY'
+$copyWorld = 'C:\path\to\NPCortex\forge-mod\run\saves\CF1_DISPOSABLE_COPY'
 $folder = Join-Path $copyWorld 'data\npcortex'
 if (-not (Test-Path -LiteralPath $folder -PathType Container)) { throw 'Copied world data\npcortex folder not found — stop!' }
 if (-not (Test-Path -LiteralPath (Join-Path $folder 'cplus_f1_delivery.cursor'))) { throw 'No existing copied-world cursor — run a real sync first' }

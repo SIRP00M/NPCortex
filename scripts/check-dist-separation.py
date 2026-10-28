@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CLASSES = ROOT / "forge-mod" / "build" / "classes" / "java" / "main" / "io" / "github" / "sirp00m" / "npcortex"
 CLIENT_MARKERS = ("net/minecraft/client/", "com/mojang/blaze3d/", "net/minecraftforge/client/")
 # Classes allowed to touch client APIs: they are only reached from Dist.CLIENT subscribers / DistExecutor lambdas.
-CLIENT_CLASSES = {"ManagerScreen", "ProfileScreen", "PauseMenuHook", "C1P0ClientSync", "C1ClientRotationBlend"}
+CLIENT_CLASSES = {"ManagerScreen", "ProfileScreen", "PauseMenuHook", "C1P0ClientSync", "C1ClientRotationBlend", "NpcNameClient"}
 
 
 def referenced(class_file: Path) -> set[str]:
@@ -39,10 +39,10 @@ def main() -> int:
             continue
         if touches_client:
             problems.append(f"{class_file.stem} (server-loadable) references client API: {touches_client[:3]}")
-        if reaches_client_class and simple not in {"ManagerNetwork", "C1P0Network"}:
+        if reaches_client_class and simple not in {"ManagerNetwork", "C1P0Network", "NpcNameNetwork"}:
             problems.append(f"{class_file.stem} references client-only class {reaches_client_class}")
     # The two network classes may only name a client class inside DistExecutor lambdas (never loaded on a server).
-    for name, allowed in (("ManagerNetwork", {"ManagerClient"}), ("C1P0Network", {"C1P0ClientSync"})):
+    for name, allowed in (("ManagerNetwork", {"ManagerClient"}), ("C1P0Network", {"C1P0ClientSync"}), ("NpcNameNetwork", {"NpcNameClient"})):
         refs = {n.rsplit("/", 1)[-1] for n in referenced(CLASSES / f"{name}.class")}
         extra = {r for r in refs if r.split("$")[0] in CLIENT_CLASSES} - allowed
         if extra:

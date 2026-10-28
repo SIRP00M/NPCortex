@@ -1,22 +1,23 @@
 # NPCortex
 
 **An open-source, local-AI companion framework for Minecraft Java 1.20.1 (Forge).**  
-Create in-game player-like NPCs with their own personalities, interact with a local AI backend, and experiment with navigation, following and carefully guarded tasks.
+Create in-game player-like NPCs with their own personalities and readable display names, interact with a local AI backend, and experiment with navigation, following and carefully guarded tasks.
 
-[Changelog](CHANGELOG.md) · [What's new](docs/patch-notes/v0.2.5-alpha.1.md) · [Character Profiles](docs/character-profiles.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+[Changelog](CHANGELOG.md) · [What's new](docs/patch-notes/v0.2.6-alpha.2.md) · [Character Profiles](docs/character-profiles.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development version: `v0.2.5-alpha.1` (27 October 2026).** This is an untagged **alpha source milestone**, not a stable release. Features and tests described below have different levels of verification. No automated block-breaking/pickup system, unrestricted navigation or production-ready multi-NPC behavior is claimed.
+> **Development version: `v0.2.6-alpha.2` (28 October 2026).** This is an untagged **alpha source milestone**, not a stable release. Features and tests described below have different levels of verification. No automated block-breaking/pickup system, unrestricted navigation or production-ready multi-NPC behavior is claimed.
 
 ## What you can do today
 
 | Capability | What is available | Maturity |
 |---|---|---|
 | **Create a player-like NPC** | Forge-side player-based NPC prototype with spawn, identity, controlled movement, lifecycle and equipment | Experimental; single-player scenarios tested; multiplayer not certified |
+| **See NPC names** | Experimental above-head name display uses the NPC’s chosen logical name while preserving its internal GameProfile identity; a separate TAB-list presentation path is included | Above-head names owner-confirmed in tested single-player lifecycle cases; latest TAB behavior unverified |
 | **Create a unique personality** | **ESC → NPCortex Manager** to create an NPC with a custom display name, structured personality or raw prompt; edit and save versioned profiles | Owner-confirmed Windows single-player GUI smoke tests passed for the tested creation/profile workflow |
 | **Local AI conversation** | Python backend plus Ollama / Qwen 3 8B, with persistent actor dialogue and experimental social turns | Requires separately running the local backend/model |
 | **Follow and navigate** | Terrain-aware bounded navigation, follow behavior, waypoint recovery and **operator-issued long-range navigation** on already loaded terrain | Experimental; not global pathfinding, no chunk forcing or cross-world routes |
 | **Guarded task workflow** | Explicit movement requests, state tracking, cancellation, terminal reconciliation and read-only world observations | Not a general-purpose autonomous block interaction engine |
-| **Testing tools** | Java/Python regressions, Windows PowerShell scripts and optional Minecraft acceptance datapacks | Tooling PASS is not a gameplay certification |
+| **Testing tools** | Java/Python regressions, Windows PowerShell scripts and optional Minecraft acceptance datapacks, including G5 multi-NPC lane checks, Rev6 cancel scenarios and read-only navigation diagnostics | G5 functional lanes have limited prior evidence; Rev6 cancel/terminal cases and performance acceptance are not yet verified |
 
 ## Requirements
 
@@ -50,7 +51,7 @@ New profiles use **SQLite schema v5** with immutable revisions and revision-conf
 
 See [Character Profile setup, API, migration and tests](docs/character-profiles.md). A [PowerShell registration fallback](scripts/register-npc-profile.ps1) is provided for operators.
 
-> **Acceptance boundary:** The project owner confirmed tested Windows **single-player GUI smoke scenarios** (including creating Reika through the Manager) passed. This does not establish dedicated-server operation, real existing-database migration, security fault injection, GUI multi-client behavior or full 1/3/5/10 NPC performance. An internal `GameProfile`-style nametag may still appear instead of the intended display name.
+> **Acceptance boundary:** The project owner confirmed tested Windows **single-player GUI smoke scenarios** (including creating Reika through the Manager) passed. This does not establish dedicated-server operation, real existing-database migration, security fault injection, GUI multi-client behavior or full 1/3/5/10 NPC performance. The tested above-head nametag now showed the chosen NPC name. The latest TAB player-list formatter remains pending in-game visual confirmation.
 
 ## Bounded long-range navigation
 
@@ -64,7 +65,11 @@ The experimental operator command is:
 - Maintains one logical C2 goal/action for internal legs; it does **not** load chunks, save an enduring route or automatically retry uncertain outcomes.
 - Obstacles, unloaded terrain and insufficient progress can result in a conservative failure. Existing `navigate`, `move`, Follow and guarded task entrypoints remain distinct.
 
-See [long-range navigation design and manual checks](docs/c2-long-range-option-d.md) and [G5 test-harness guide](docs/g5-test-harness/README.md). Full G5 acceptance, many-NPC load, shutdown/fault recovery and complex path quality are **not** certified by this alpha milestone.
+See [long-range navigation design and manual checks](docs/c2-long-range-option-d.md) and [G5 test-harness guide](docs/g5-test-harness/README.md). An earlier Windows single-player G5 run reported the functional 1/3/5/10 NPC lanes passing, but **not** full G5 acceptance: cancellation quiescence, save-quit checkpoint timing, E3 terminal verification, diagnostic reason distinction, and multi-round MSPT profiling need further evidence. These outcomes do not certify dedicated-server or multiplayer operation.
+
+See [Visible NPC names](docs/visible-npc-names.md) and [G5 revision 6 test guide](docs/g5-test-harness/REVISION-6.md) for public details and limitations.
+
+**Revision 6 adds** bounded cancellation attempts, per-action cancellation/result diagnostics, stronger checkpoint/terminal evidence correlation and conservative performance flagging. These are verification tools; this package has no new autonomous block interaction or certified multi-client behavior. Earlier gameplay verdicts do not certify Revision 6.
 
 ## Repository layout
 
@@ -83,6 +88,6 @@ docs/              Public architecture, API, setup and test guides
 - Keep the backend bound to **loopback**. Do not expose it directly to the internet. Optional local API authentication does not replace a public-service security review.
 - Actor/world IDs, server-side permission checks, and token handling remain authoritative on the server. GUI forms must not be treated as proof of authorization.
 - There is **no certified automatic mining, pickup or general world mutation**. M04 contracts/previews and test harnesses are not an autonomous executor.
-- The alpha milestone has not passed full multi-client, dedicated-server, multi-mod, database-upgrade or fault-injected Quality Gates.
+- The alpha milestone has not passed full multi-client, dedicated-server, multi-mod, database-upgrade, G5 performance or fault-injected Quality Gates.
 
 NPCortex is distributed under the [MIT License](LICENSE) for original project code. Minecraft/Forge, models and external assets have their own licenses. See [CONTRIBUTING.md](CONTRIBUTING.md) for developer guidelines.

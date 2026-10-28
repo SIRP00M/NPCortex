@@ -6,31 +6,31 @@ Test only on a **new disposable Minecraft Forge 1.20.1 world**, Java Temurin 17,
 
 **BUILD only:**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 
 **Focused TEST only:**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-cplus-e2-readonly.ps1
 ```
 
 **Full backend TEST (optional, independent):**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-cplus-e2-readonly.ps1 -IncludeFullBackend
 ```
 
 **BACKEND only — Terminal A:**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-backend.ps1
 ```
 
 **RUN MINECRAFT only — Terminal B:**
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

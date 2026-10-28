@@ -22,7 +22,7 @@
 2. Build with Temurin JDK 17 (check `java -version`). From repo root:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-test5-harness.ps1
 .\scripts\test-test6-harness.ps1
 .\scripts\dev-forge.ps1 -Task build

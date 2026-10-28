@@ -34,7 +34,7 @@ ollama pull qwen3:8b
 **2. Backend window (repo root):**
 
 ```powershell
-cd F:\AI\NPCortex                  # adapt to the unzipped repository location
+cd C:\path\to\NPCortex                  # adapt to the unzipped repository location
 python -m unittest discover -s backend/tests -v
 .\scripts\dev-backend.ps1
 ```
@@ -44,7 +44,7 @@ Optional in a separate terminal: `Invoke-RestMethod http://127.0.0.1:8765/health
 **3. Forge window (repo root):**
 
 ```powershell
-cd F:\AI\NPCortex                  # adapt to the unzipped repository location
+cd C:\path\to\NPCortex                  # adapt to the unzipped repository location
 .\scripts\phase3-check.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

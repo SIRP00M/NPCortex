@@ -17,7 +17,7 @@ The previous `/npcortex c2 move` command rejected targets within 1.5 blocks (`C2
 ## Windows test commands (PowerShell)
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-p0.ps1
 .\scripts\dev-forge.ps1 -Task build
 # Terminal 1: .\scripts\dev-backend.ps1

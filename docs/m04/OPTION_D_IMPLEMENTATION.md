@@ -10,8 +10,8 @@ claim the full Gate 0–6 gameplay implementation.
 ## Baseline and limitations
 
 The full repository comes from the most recent available **M04 Foundation**
-ZIP in this conversation. `F:\AI\NPCortex` itself was **not mounted** into the
-Linux authoring sandbox. A subsequent engineering audit described local changes outside
+ZIP in this conversation. `C:\path\to\NPCortex` itself was **not mounted** into the
+Linux authoring sandbox. Codex's later audit described local changes outside
 the earlier manifest. Merge-review against that local tree; **do not overwrite
 local source, saves, SQLite, configuration, old HOLD attempts or outbox**.
 
@@ -57,7 +57,7 @@ Minecraft before extracting sources. Merge source against local work, preserving
 `backend/data`, `forge-mod/run/saves`, journal, outbox and configs.
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-m04-option-d.ps1
 .\scripts\install-m04-datapack.ps1 -WorldName 'New World (2)'
 .\scripts\dev-backend.ps1
@@ -83,7 +83,7 @@ check `NPCORTEX_DB_PATH`):
 
 ```powershell
 .\scripts\review-m04-evidence.ps1 -WorldName 'New World (2)' `
-  -Database 'F:\AI\NPCortex\backend\data\npcortex.sqlite3'
+  -Database 'C:\path\to\NPCortex\backend\data\npcortex.sqlite3'
 ```
 
 To remove only the temporary datapack after completing evidence collection,

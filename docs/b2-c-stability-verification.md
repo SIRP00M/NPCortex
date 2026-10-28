@@ -14,7 +14,7 @@ real local Qwen. User acceptance and successful Windows execution are pending.
 1. Stop the NPCortex backend (`Ctrl+C`) and Minecraft client. Keep your existing
    repository/database as a rollback copy. Do **not** delete or overwrite the
    only copy of `backend\data\npcortex.sqlite3`.
-2. Run from `F:\AI\NPCortex` or your extracted repository root:
+2. Run from `C:\path\to\NPCortex` or your extracted repository root:
 
 ```powershell
 Copy-Item .\backend\data\npcortex.sqlite3 .\backend\data\npcortex.sqlite3.pre-B2-C.bak

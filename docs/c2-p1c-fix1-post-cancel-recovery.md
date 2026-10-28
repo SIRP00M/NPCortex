@@ -38,7 +38,7 @@ Response: `goal_id`, `actor_id`, `action_id`, `status` (`failed` or `completed`)
 ## Windows acceptance checklist
 
 1. Backup the functioning world/repository; extract this Full Repository ZIP.
-2. From PowerShell in `F:\AI\NPCortex`, run `./scripts/test-c2-p1c-fix1.ps1` and `./scripts/dev-forge.ps1 -Task build` (PowerShell `\.\scripts\...` also works).
+2. From PowerShell in `C:\path\to\NPCortex`, run `./scripts/test-c2-p1c-fix1.ps1` and `./scripts/dev-forge.ps1 -Task build` (PowerShell `\.\scripts\...` also works).
 3. Start `./scripts/dev-backend.ps1` and `./scripts/dev-forge.ps1 -Task runClient` separately.
 4. Spawn/inspect Yui; select an accessible destination 3–6 blocks away, run `/npcortex c2 navigate yui <x> <feetY> <z>`, then `/npcortex c2 cancel yui` while walking.
 5. Run `/npcortex c2 status yui`. `CANCEL_PENDING` may appear briefly; wait for `CANCELLED` (or a truthful already-terminal state). **Do not issue `/npcortex c2 reset yui`**.

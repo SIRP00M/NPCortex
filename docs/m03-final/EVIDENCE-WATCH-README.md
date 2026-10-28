@@ -15,13 +15,13 @@ This overlay targets `NPCortex_M03_AllTests_FunctionLoadFix_FullRepository_CANDI
 
 ## Installation (on a copy of the repository)
 
-Copy `scripts/m03_evidence_watch.py` and `scripts/m03-evidence-watch.ps1` from this overlay to `F:\AI\NPCortex\scripts\`. Existing files are not overwritten. No Gradle rebuild required: the Forge bridge/datapack already exist.
+Copy `scripts/m03_evidence_watch.py` and `scripts/m03-evidence-watch.ps1` from this overlay to `C:\path\to\NPCortex\scripts\`. Existing files are not overwritten. No Gradle rebuild required: the Forge bridge/datapack already exist.
 
 Open a **new PowerShell**. Confirm which DB is in use in the **actual Backend terminal** (`NPCORTEX_DB_PATH` override, otherwise default is generally `backend\data\npcortex.sqlite3`). Use that path explicitly; do not auto-pick a DB just because it exists.
 
 ```powershell
-cd F:\AI\NPCortex
-$Db = 'F:\AI\NPCortex\backend\data\npcortex.sqlite3' # ONLY if confirmed as the live backend database
+cd C:\path\to\NPCortex
+$Db = 'C:\path\to\NPCortex\backend\data\npcortex.sqlite3' # ONLY if confirmed as the live backend database
 .\scripts\m03-evidence-watch.ps1 -WorldName 'New World (2)' -Database $Db -BackendURL 'http://127.0.0.1:8765'
 ```
 

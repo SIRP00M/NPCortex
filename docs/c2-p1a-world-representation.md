@@ -32,10 +32,10 @@ C2-P0's trusted `C2WorldSensor.snapshot()` has `blocks: {}`. `C2MoveExecutor` co
 
 ## Windows build and Acceptance checklist
 
-Unzip the entire repository into `F:\AI\NPCortex`, keeping a backup of the current verified version. Open PowerShell with Temurin Java 17:
+Unzip the entire repository into `C:\path\to\NPCortex`, keeping a backup of the current verified version. Open PowerShell with Temurin Java 17:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-p1a.ps1
 .\scripts\test-c2-p0.ps1
 .\scripts\dev-forge.ps1 -Task build
@@ -69,4 +69,4 @@ Acceptance must check:
 
 **Send back:** full Gradle failure or success log; chat output of `/npcortex c2 navscan yui 4` and `6` in flat and partial terrain; any `latest.log` stack traces; test outcome and observed MSPT where available.
 
-This development snapshot does not imply a public GitHub commit, merge or release.
+No GitHub branch, commit, merge or push was performed by ChatGPT.

@@ -314,6 +314,7 @@ final class C2AgentRuntime {
         Run run = ACTIVE.get(id.actorId());
         if (run == null) return C2FollowRuntime.hasActiveActor(id.actorId())
                 ? C2FollowRuntime.unfollow(server,name) : "No active C2 goal";
+        LOG.info("{}",C2Diagnostics.cancel(run));   // D1-B: state at invocation, log only
         if (run.moved && run.avatar() != null) C1P1MotionRuntime.stop(server,name);
         run.replanning.stop();
         // The earliest registration steps cannot have created a C0 goal yet:
@@ -832,6 +833,7 @@ final class C2AgentRuntime {
 
     private static void result(Run run,boolean succeeded,String detail) {
         if (!ACTIVE.containsKey(run.actor) || ACTIVE.get(run.actor)!=run) return;
+        LOG.info("{}",C2Diagnostics.result(run,succeeded,detail));   // D1-A: exact reason, log only
         if (!run.isAlive()) { interrupt(run,"Actor unavailable before result submission"); return; }
         EVENTS.publish(C2Events.Kind.ACTION_FINISHED,run.actor,run.goal,run.action,detail);
         JsonObject payload = new JsonObject();

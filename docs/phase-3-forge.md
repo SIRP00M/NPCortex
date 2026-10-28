@@ -43,14 +43,14 @@ Get-ChildItem 'C:\Program Files\Eclipse Adoptium' -Directory
 ### Terminal 1 — AI backend
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\dev-backend.ps1
 ```
 
 ### Terminal 2 — preflight + game
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\phase3-check.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

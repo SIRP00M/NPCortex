@@ -16,13 +16,13 @@ class Sim {
   constructor(profile = {}) {
     this.p = Object.assign({ decide: 100, speed: 0.215, pausePeriod: 60, pauseLen: 30, loaded: (x, z) => Math.abs(x) <= 192 && Math.abs(z) <= 192,
       ignoreStart: () => false, stallAtX: null, v1: true, v2: true, tagFail: false, noData: false, extraPlayer: false, playerListIncludes: false,
-      movesAfterRejoin: false, noStop: false, autoGate: true, quietTicks: 300 }, profile);
+      movesAfterRejoin: false, noStop: false, autoGate: true, quietTicks: 300, typeFinalize: true }, profile);
     if (profile.selectable === false) { this.p.v1 = false; this.p.v2 = false; }
     this.score = new Map(); this.log = []; this.sched = []; this.tick = 0;
     this.op = { name: 'Op', type: 'player', pos: [0.5, -60, 0.5], tags: new Set() };
     this.extra = this.p.extraPlayer ? { name: 'Steve', type: 'player', tags: new Set(), pos: [5, -60, 5] } : null;
     this.npcs = new Map(); this.session = false; this.snapshots = []; this.stopped = false; this.rejoined = false;
-    this.cache = new Map(); this.cmds = []; this.selLog = []; this.events = []; this.gates = []; this.snapBy = {};
+    this.cache = new Map(); this.cmds = []; this.selLog = []; this.events = []; this.gates = []; this.snapBy = {}; this.typed = []; this.finalizeTyped = false;
     Sim.last = this;
   }
   fnLines(name) {
@@ -89,12 +89,12 @@ class Sim {
       const es = this.select(t[1], ctx); if (this.p.tagFail && es.some(e => e !== this.op && e.type === 'player' && this.npcs.has(e.character))) return 0;
       es.forEach(e => (t[2] === 'add' ? e.tags.add(t[3]) : e.tags.delete(t[3]))); return es.length ? es.length : 0;
     }
-    if (h === 'schedule') {
-      if (t[1] === 'clear') { this.sched = []; return 1; }
-      this.sched.push({ at: this.tick + 10, fn: 'loop' }); this.sched = this.sched.filter((s, i, a) => i === a.findIndex(o => o.fn === s.fn)); return 1;
+    if (h === 'schedule') {   // schedule function <ns>:<fn> <n>t replace  |  schedule clear <ns>:<fn>
+      if (t[1] === 'clear') { const f = t[2].split(':')[1]; this.sched = this.sched.filter(x => x.fn !== f); return 1; }
+      const f = t[2].split(':')[1], n = parseInt(t[3], 10); this.sched = this.sched.filter(x => x.fn !== f); this.sched.push({ at: this.tick + n, fn: f }); return 1;
     }
     if (h === 'function') { return this.fn(t[1].split(':')[1], ctx); }
-    if (h === 'data') { if (this.p.noData) return 0; const i = /Pos\[(\d)\]/.exec(cmd)[1]; return ctx.exec && ctx.exec.pos ? Math.trunc(ctx.exec.pos[parseInt(i, 10)]) : 0; }
+    if (h === 'data') { if (this.p.noData) return 0; const i = /Pos\[(\d)\]/.exec(cmd)[1]; const sc = t[t.length - 1] === '1000' ? 1000 : 1; return ctx.exec && ctx.exec.pos ? Math.trunc(ctx.exec.pos[parseInt(i, 10)] * sc) : 0; }
     if (h === 'npcortex') return this.mock(t.slice(1), ctx);
     throw new Error('unsupported command ' + cmd);
   }
@@ -140,6 +140,12 @@ class Sim {
       return 1;
     }
     if (a[0] === 'c2' && a[1] === 'cancel') { const n = this.npcs.get(a[2]); if (n && n.goal) this.events.push({ tick: this.tick, npc: a[2], type: 'CANCEL' }); if (n) n.goal = null; this.say('MOCK cancel ' + a[2]); return 1; }
+    if (a[0] === 'c2' && a[1] === 'status') {   // chat-only production status line: the long-goal state is visible only here
+      const n = this.npcs.get(a[2]); this.cmds.push(J);
+      this.statuses = this.statuses || [];
+      this.statuses.push({ tick: this.tick, npc: a[2], text: n && n.goal ? a[2] + ' C2=' + (n.paused ? 'REPLANNING' : 'MOVING') + ' goal=sim action=sim waypoint=1/2 long=' + (n.paused ? 'LEG_QUIESCING' : 'LEG_ACTIVE') + ' leg=1 searchExpanded=false | C1=MOVING' : a[2] + ' C2=NONE' });
+      return 1;
+    }
     if (J === 'debug cplus m03 enable') { this.session = true; return 1; }
     if (a[3] === 'snapshot') { const n = this.npcs.get(a[4]); const sn = { tick: this.tick, npc: a[4], state: n && n.goal ? (n.paused ? 'REPLANNING' : 'MOVING') : 'NONE', x: n ? n.pos[0] : null, z: n ? n.pos[2] : null, op: [this.op.pos[0], this.op.pos[2]] }; this.snapshots.push(sn); (this.snapBy[a[4]] = this.snapBy[a[4]] || []).push(sn); return 1; }
     if (a[3] === 'measure-auto') { this.say('MOCK measure ' + a[4]); return 1; }
@@ -170,6 +176,7 @@ class Sim {
     const id = this.curPhase(); if (!id) return false;
     const npcs = [...this.npcs.values()];
     if (id.startsWith('p11_')) return npcs.some(n => n.goal && Math.hypot(n.pos[0] - 2, n.pos[2] - 2) >= 3);    // mid-goal: the checkpoint may start
+    if (id.startsWith('p18_') && !this.finalizeTyped) return false;                                              // Rev6: GO only after the OWNER-typed taskmovefinalize answer
     let beginTick = 0; for (let k = this.log.length - 1; k >= 0; k--) if (this.log[k].text.startsWith('[G5] BEGIN ')) { beginTick = this.log[k].tick; break; }
     const spread = ss => Math.max(Math.max(...ss.map(s => s.x)) - Math.min(...ss.map(s => s.x)), Math.max(...ss.map(s => s.z)) - Math.min(...ss.map(s => s.z)));
     // same rule as scripts/g5-gate.ps1 (independent re-implementation): terminal (no active goal) AND >= 3 of the last 4 snapshots spanning >= 7 s with spread <= 0.5
@@ -186,6 +193,12 @@ class Sim {
       const due = this.sched.filter(s => s.at <= this.tick); this.sched = this.sched.filter(s => s.at > this.tick);
       for (const s of due) this.fn(s.fn, { exec: null, pos: [0, 0, 0] });
       if (this.get('#settle') === -2 && this.get('#running') === 1) { if (this.awaitSince === null || this.awaitSince === undefined) this.awaitSince = this.tick; } else this.awaitSince = null;
+      // the owner types the p18 finalize + status right after the pack asks for it (the answers exist only for typed commands)
+      if (this.p.typeFinalize && !this.finalizeTyped && this.get('#settle') === -2 && this.get('#running') === 1 && this.curPhase() === 'p18_regress_e3_taskmove' && this.tick - this.awaitSince >= 80) {
+        this.finalizeTyped = true;
+        this.typed.push({ tick: this.tick, text: 'NPCortex: G3 COMPLETED task=SIM-TASK durable ACK; actor fence released; no world mutation' });
+        this.typed.push({ tick: this.tick + 20, text: 'NPCortex: E3 G2=COMPLETED; yui C2=COMPLETED goal=sim; G3 durable terminal recorded' });
+      }
       // the owner reacts to the AWAIT message after >= 8 s (script poll + clipboard + chat), and only when the gate model says terminal + quiescent
       if (this.p.autoGate && this.tick % 10 === 5 && this.get('#running') === 1 && this.get('#settle') === -2 && this.tick - this.awaitSince >= 160 && this.gateReady()) {
         this.gates.push({ tick: this.tick, id: this.curPhase() }); this.fn('gate', { exec: this.op, pos: this.op.pos.slice() });
@@ -220,10 +233,11 @@ function fullRun(profile = {}, fb = false) {
   const AD = { p00_capability_probe: 'ADAPTIVE', p02_navlong_20: 'REACHED', p03_navlong_40: 'REACHED', p04_navlong_80: 'REACHED', p05_navlong_150: 'REACHED',
     p06_navlong_diag60: 'REACHED', p07_small_wall_detour: 'REACHED', p08_large_wall_no_progress: 'STALLED_TERMINAL_INFERRED',
     p09_cancel_leg_active: 'STOPPED_AFTER_CANCEL', p10_cancel_quiescing: 'STOPPED_AFTER_CANCEL', p12_rejoin_no_replay: 'NO_MOVEMENT_AFTER_REJOIN', p13_new_navlong_after_recovery: 'REACHED',
-    p14_regress_c2_navigate: 'REACHED', p15_regress_c2_move: 'REACHED', p16_regress_follow_start: 'REACHED', p17_regress_follow_stop: 'REACHED', p18_regress_e3_taskmove: 'REACHED',
+    p14_regress_c2_navigate: 'REACHED', p15_regress_c2_move: 'REACHED', p16_regress_follow_start: 'REACHED', p17_regress_follow_stop: 'REACHED', p18_regress_e3_taskmove: 'MOVED_AWAITING_TYPED_FINALIZE',
     p19_multi_1_npc: 'ALL_REACHED', p20_multi_3_npc: 'ALL_REACHED', p21_multi_5_npc: 'ALL_REACHED', p22_multi_10_npc: 'ALL_REACHED' };
   const want = {}; for (const k of Object.keys(AD)) want[k] = fb ? (k === 'p00_capability_probe' ? 'OWNER_GATED' : 'AWAITING_OWNER_GATE') : AD[k];
-  for (const [k, v] of Object.entries(want)) ok((o[k] || []).includes(v) && (o[k] || []).filter(x => !x.startsWith('NPC_')).length === 1, `${k} -> ${v}, got ${JSON.stringify(o[k])}`);
+  const expectN = k => (fb ? 1 : k === 'p10_cancel_quiescing' ? 5 : k === 'p18_regress_e3_taskmove' ? 2 : 1);   // p10: one OBS per attempt (5); p18: the finalize request + the gate wait
+  for (const [k, v] of Object.entries(want)) ok((o[k] || []).includes(v) && (o[k] || []).filter(x => !x.startsWith('NPC_')).length === expectN(k), `${k} -> ${v}, got ${JSON.stringify(o[k])}`);
   const order = begins(s);
   ok(order.slice(0, 11).join() === 'p00_capability_probe,p02_navlong_20,p03_navlong_40,p04_navlong_80,p05_navlong_150,p06_navlong_diag60,p07_small_wall_detour,p08_large_wall_no_progress,p09_cancel_leg_active,p10_cancel_quiescing,p11_savequit_checkpoint', 'phases run in the documented order');
   ok(order.length === 22 && order[11] === 'p12_rejoin_no_replay', 'all 22 phases ran once');
@@ -232,18 +246,30 @@ function fullRun(profile = {}, fb = false) {
   const aw = s.awaits(), gt = s.log.map(l => /^\[G5\] GATE (\S+) RELEASED/.exec(l.text)).filter(Boolean).map(m => m[1]);
   ok(aw.join() === gt.join(), `every AWAIT is released exactly once, in order: AWAIT=${aw.join()} GATE=${gt.join()}`);
   if (fb) ok(aw.length === 21 && !aw.includes('p00_capability_probe'), `owner-gated mode: all 21 scenarios except the probe await the gate (${aw.length})`);
-  else ok(aw.join() === 'p08_large_wall_no_progress', `adaptive mode awaits only for the non-terminal stall (p08), got ${aw.join()}`);
+  else ok(aw.join() === 'p08_large_wall_no_progress,p18_regress_e3_taskmove', `adaptive mode awaits only for the non-terminal stall (p08) and the typed p18 finalize, got ${aw.join()}`);
+  if (!fb) { ok(s.finalizeTyped && s.typed.length === 2, 'p18: the gate model waited for the typed finalize answer'); ok(!s.cmds.some(c => c.startsWith('c2 status')), 'the pack never issues c2 status (function feedback is suppressed)'); }
   // wall build/cleanup are paired and inside the area
   const fills = s.log.filter(l => l.text.startsWith('FILL ')).map(l => l.text);
   ok(fills.filter(f => f.endsWith('minecraft:stone')).length === fills.filter(f => f.endsWith('minecraft:air')).length, 'every wall placed is removed');
   const snaps = s.snapshots.filter(x => x.npc === 'yui');
   const cancelSnaps = []; s.log.forEach(l => { if (l.text === '[G5] NOTE cancel issued') cancelSnaps.push(l.tick); });
-  ok(cancelSnaps.length === 2, 'two cancels issued (p09, p10)');
+  ok(cancelSnaps.length === 1, 'one cancel issued by lib/cancel_now (p09)');
   const st = cancelSnaps.map(t => snaps.filter(x => x.tick === t).map(x => x.state));
-  ok(st[0].length > 0 && st[1].length > 0, 'a snapshot is taken in the very tick of each cancel: ' + JSON.stringify(st));
+  ok(st[0].length > 0, 'a snapshot is taken in the very tick of the p09 cancel: ' + JSON.stringify(st));
+  const att = s.log.filter(l => /^\[G5\] NOTE attempt \d$/.test(l.text)).map(l => l.tick), c10 = s.log.filter(l => /^\[G5\] NOTE cancel attempt \d$/.test(l.text)).map(l => l.tick);
+  if (!fb) {
+    ok(att.length === 5 && c10.length === 5, `p10 runs exactly 5 bounded attempts with one cancel each: attempts=${att.length} cancels=${c10.length}`);
+    ok(s.cmds.filter(c => c === 'c2 cancel yui').length === 6, 'one c2 cancel per cancel (p09 + 5 x p10), no duplicate dispatch: ' + s.cmds.filter(c => c === 'c2 cancel yui').length);
+    for (const t of c10) {
+      const sn = snaps.filter(x => x.tick === t && x.npc === 'yui');
+      ok(sn.length >= 1 && sn.every(x => x.state === 'REPLANNING'), 'p10: a journal snapshot is taken in the very tick of the cancel (mock quiesce = REPLANNING): ' + JSON.stringify(sn.map(x => x.state)));
+      ok(sn.every(x => 152.5 - x.x >= 25), 'p10 cancel lands while the NPC is still >= 25 blocks from the 152.5 target (cannot be a completion): ' + JSON.stringify(sn.map(x => x.x)));
+    }
+  } else ok(att.length === 1 && c10.length === 0, 'owner-gated p10: one attempt marker, no cancel (the NPC cannot be observed in game)');
+  const lanes = [...new Set(s.cmds.filter(c => c.startsWith('c1 spawn ')).map(c => c.split(' ')[2]))];
+  ok(lanes.length === 10 && lanes[0] === 'yui' && lanes.slice(1).every((n, i) => n === 'g5a' + String(i + 2).padStart(2, '0')), 'fresh g5a02..g5a10 lane identities: ' + lanes.join(','));
   if (!fb) {
     ok(st[0].includes('MOVING'), 'p09 cancel snapshot state MOVING: ' + JSON.stringify(st));
-    ok(st[1].includes('REPLANNING'), 'p10 cancel snapshot state REPLANNING (quiescing proxy): ' + JSON.stringify(st));
   } else {
     const end0 = s.log.find(l => l.text === '[G5] END p00_capability_probe').tick;
     ok(!s.selLog.some(t => t > end0), 'owner-gated mode never evaluates a selector-based observation after p00');
@@ -272,7 +298,7 @@ function afterRejoinContinue() {
   ok(runGroup(s, 'tests/regression', 600000), 'regression group completes');
   const o = s.obs();
   for (const k of ['p14_regress_c2_navigate', 'p15_regress_c2_move', 'p16_regress_follow_start', 'p17_regress_follow_stop', 'p18_regress_e3_taskmove'])
-    ok((o[k] || []).join() === 'REACHED', `${k} REACHED got ${JSON.stringify(o[k])}`);
+    ok((o[k] || []).join() === (k.startsWith('p18') ? 'MOVED_AWAITING_TYPED_FINALIZE,AWAITING_OWNER_GATE' : 'REACHED'), `${k} outcome got ${JSON.stringify(o[k])}`);
   const m = new Sim({}); setup(m); ok(runGroup(m, 'tests/multi_npc', 1200000), 'multi group completes');
   const mo = m.obs();
   for (const [k, n] of [['p19_multi_1_npc', 1], ['p20_multi_3_npc', 3], ['p21_multi_5_npc', 5], ['p22_multi_10_npc', 10]])
@@ -410,6 +436,33 @@ function negatives() {
   const op = new Sim({}); setup(op); op.call('start'); op.step(200); op.op.tags.delete('g5_op'); op.step(30);
   ok(op.get('#running') === 0 && op.has('ABORT operator offline'), 'operator watchdog stops the loop');
 }
+function p10Bounds() {
+  // an NPC that never stands still: the per-tick trigger never fires -> every attempt ends by an explicit REACHED exit, 5 attempts, no cancel, then the phase ends
+  const a = new Sim({ pausePeriod: 1e9, pauseLen: 0 }); setup(a); a.call('probe'); ok(a.runUntil(() => pdone(a), 5000), 'probe');
+  const m = a.log.length; a.call('only/p10_cancel_quiescing');
+  ok(a.runUntil(() => a.log.slice(m).some(l => l.text.includes('SEQUENCE_DONE')), 3000000), 'p10 (never stands still) finishes');
+  const oa = a.obs().p10_cancel_quiescing || [];
+  ok(oa.length === 5 && oa.every(x => x === 'COMPLETED_WITHOUT_CANCEL'), 'never-still NPC: 5 attempts, each COMPLETED_WITHOUT_CANCEL ' + JSON.stringify(oa));
+  ok(!a.cmds.includes('c2 cancel yui') && a.log.filter(l => /NOTE attempt \d$/.test(l.text)).length === 5 && !a.has('NOTE attempt 6'), 'no cancel, never more than 5 attempts');
+  ok(a.get('#w') === 0 && a.sched.length === 0, 'the per-tick watch is stopped and unscheduled after the phase');
+  // an NPC that walks forever too slowly: every attempt times out (75 s), is cleaned up with ONE noted cancel, 5 attempts at most
+  const t = new Sim({ speed: 0.01, pausePeriod: 1e9, pauseLen: 0 }); setup(t); t.call('probe'); ok(t.runUntil(() => pdone(t), 5000), 'probe');
+  const mt = t.log.length; t.call('only/p10_cancel_quiescing');
+  ok(t.runUntil(() => t.log.slice(mt).some(l => l.text.includes('SEQUENCE_DONE')), 4000000), 'p10 (timeouts) finishes');
+  const ot = t.obs().p10_cancel_quiescing || [];
+  ok(ot.length === 5 && ot.every(x => x === 'ATTEMPT_TIMEOUT_CLEANED_UP'), 'slow NPC: 5 timed-out attempts, each cleaned up ' + JSON.stringify(ot));
+  ok(t.cmds.filter(c => c === 'c2 cancel yui').length === 5 && t.log.filter(l => l.text === '[G5] NOTE cleanup_cancel').length === 5 && !t.log.some(l => /NOTE cancel attempt/.test(l.text)), 'cleanup cancels are noted and are not attempt cancels');
+  ok(!t.has('AWAIT p10'), 'a cleaned-up timeout does not need the gate');
+  // the watch never cancels twice inside one attempt even if the NPC stays still for many ticks
+  const c = new Sim({ pausePeriod: 60, pauseLen: 55 }); setup(c); c.call('probe'); ok(c.runUntil(() => pdone(c), 5000), 'probe');
+  const mc = c.log.length; c.call('only/p10_cancel_quiescing'); ok(c.runUntil(() => c.log.slice(mc).some(l => l.text.includes('SEQUENCE_DONE')), 3000000), 'p10 (long stand-stills) finishes');
+  ok(c.cmds.filter(x => x === 'c2 cancel yui').length === 5, 'exactly one cancel per attempt even with long stand-stills: ' + c.cmds.filter(x => x === 'c2 cancel yui').length);
+  // the real quiesce is only about 3 ticks long: the per-tick watch must still catch it and the cancel-tick snapshot must show it
+  const q = new Sim({ pausePeriod: 40, pauseLen: 3 }); setup(q); q.call('probe'); ok(q.runUntil(() => pdone(q), 5000), 'probe');
+  const mq = q.log.length; q.call('only/p10_cancel_quiescing'); ok(q.runUntil(() => q.log.slice(mq).some(l => l.text.includes('SEQUENCE_DONE')), 3000000), 'p10 (3-tick quiesce) finishes');
+  const ct = q.log.filter(l => /^\[G5\] NOTE cancel attempt \d$/.test(l.text)).map(l => l.tick);
+  ok(ct.length === 5 && ct.every(t => q.snapshots.filter(x => x.tick === t && x.npc === 'yui').every(x => x.state === 'REPLANNING') && q.snapshots.some(x => x.tick === t)), 'a 3-tick quiesce is caught by the per-tick watch in all 5 attempts (cancel-tick snapshot = quiesce proxy): ' + ct.length);
+}
 function groups() {
   const s = new Sim({}); setup(s); s.call('tests/navigation');
   ok(s.runUntil(() => s.has('SEQUENCE_DONE'), 400000), 'navigation group'); ok(begins(s).length === 6 && begins(s)[5] === 'p06_navlong_diag60', 'navigation = p00..p06');
@@ -418,8 +471,8 @@ function groups() {
   const st = new Sim({}); setup(st); st.call('start'); st.step(50); st.call('stop'); st.step(300);
   ok(st.get('#running') === 0 && begins(st).length >= 1 && st.sched.length === 0, 'stop halts the loop and clears the schedule');
 }
-if (require.main !== module) { module.exports = { Sim, setup, fullRun, hangRun }; } else try {
-  fullRun(); fullRun({ v1: false, v2: false }, true); probeTests(); afterRejoinContinue(); negatives(); groups();
+if (require.main !== module) { module.exports = { Sim, setup, fullRun, hangRun, begins }; } else try {
+  fullRun(); fullRun({ v1: false, v2: false }, true); probeTests(); afterRejoinContinue(); negatives(); p10Bounds(); groups();
   console.log(`PASS G5 data pack controller simulation: ${assertions} assertions (mock world; controller logic only, not NPCortex/Minecraft behaviour)`);
 } catch (e) {
   console.error('FAIL ' + e.message); if (process.env.G5_SIM_TRACE) console.error(e.stack);

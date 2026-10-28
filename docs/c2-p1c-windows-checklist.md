@@ -2,9 +2,9 @@
 
 ## 0. Environment / build
 
-- [ ] Back up working B3 ZIP and unzip this C2-P1-C Full Repository candidate over `F:\AI\NPCortex`.
+- [ ] Back up working B3 ZIP and unzip this C2-P1-C Full Repository candidate over `C:\path\to\NPCortex`.
 - [ ] Java 17: `java -version` / `javac -version`.
-- [ ] PowerShell `cd F:\AI\NPCortex` then `.\scripts\test-c2-p1c.ps1`: must PASS P1-C protocol, B3/B2/B1/P1-A/C1 tests and Backend 193 cases.
+- [ ] PowerShell `cd C:\path\to\NPCortex` then `.\scripts\test-c2-p1c.ps1`: must PASS P1-C protocol, B3/B2/B1/P1-A/C1 tests and Backend 193 cases.
 - [ ] `.\scripts\dev-forge.ps1 -Task build`: must print BUILD SUCCESSFUL. A previously passed B3 build does NOT validate new C1/C2-P1-C changes.
 - [ ] Start Ollama Qwen, `.\scripts\dev-backend.ps1` (separate window), `.\scripts\dev-forge.ps1 -Task runClient` (separate window).
 

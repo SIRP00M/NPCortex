@@ -35,7 +35,7 @@ A* regression cases include flat optimal paths, identity path, closed wall, wall
 Required:
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-c2-p1b2.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

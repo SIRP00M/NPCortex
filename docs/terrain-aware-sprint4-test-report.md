@@ -63,7 +63,7 @@ are baseline evidence, **not** proof of Sprint 4 recovery behavior.
 ## Reproduction on Windows
 
 ```powershell
-cd F:\AI\NPCortex
+cd C:\path\to\NPCortex
 .\scripts\test-terrain-s4.ps1
 .\scripts\dev-forge.ps1 -Task build
 # Terminal 2:
