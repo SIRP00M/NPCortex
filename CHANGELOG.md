@@ -2,6 +2,40 @@
 
 NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
 
+## Unreleased — `v0.2.6-alpha.3` refreshed source snapshot · Read-only world inspection and reliability hardening (2026-10-28)
+
+**Base:** GitHub `main` `cbd9cd9` (`v0.2.6-alpha.2`). This replacement supersedes the earlier prepared `v0.2.6-alpha.3` ZIP **without incrementing the version**. Gameplay code is preserved from `NPCortex(9).rar`; public packaging only filters local artifacts and updates version metadata/docs.
+
+### Added / changed
+
+- Stage 4 **read-only world perception** and `/npcortex m04 observe` with bounded, loaded-chunk-only sampling and explicit `OK`, `PARTIAL_UNLOADED`, `PARTIAL_BUDGET`, `CANCELLED` and `REJECTED` outcomes. `CommandOrigin` is diagnostic/reporting only; mutation authorization, exactly-once effect ledger, mining and pickup executors are not provided.
+- HTTP rejection reliability: a framed POST rejected by Host validation now drains within existing time/size limits before the 403 response. Token checks and rejection outcomes remain in place.
+- Gradle `check`/`build` now invokes Java self-tests; `scripts/run-offline-verification.ps1` provides an opt-in Windows offline verification workflow.
+- M03 tick duration measurement now pairs START/END and ignores an unmatched END; this does not establish multi-NPC MSPT/performance acceptance.
+- Added read-only world-perception and rejection-handling tests, Java self-tests, and [Stage 4 technical documentation](docs/stage4/README.md).
+
+### Verification boundary
+
+- Scope-limited C2/G3 p18 Windows gameplay acceptance remains **historical evidence**, not a fresh result for this exact source snapshot.
+- Read-only world perception has offline policy tests; its live-world Forge command, dedicated-server behavior and performance are **not accepted** here. No world mutation feature or background autonomous action executor is claimed.
+- The uploaded archive contained development caches, local worlds, databases, logs, candidate manifests and AI-assistant configuration; these were removed from the public ZIP. Existing sanitized test fixtures, automated tests, source, CI and previous Patch Notes are retained.
+- Backend/Forge checks should be evaluated separately; a successful isolated test is not equivalent to a full native Minecraft acceptance.
+
+## Unreleased — `v0.2.6-alpha.3` · Reliable NPC task completion at destination (2026-10-28)
+
+**Compared with GitHub `main` commit `cbd9cd9` (`v0.2.6-alpha.2`).** This is a fix within the existing NPC names/navigation reliability milestone, not a stable release.
+
+### Fixed
+
+- **Correct movement task arrival verification:** Java and Python E3/G3 terminal validators compare the NPC's observed position to the horizontal **block center** `(x+0.5, y, z+0.5)`, matching C2's arrival convention, instead of the integer block corner. The vertical foot height and the existing 3D tolerance are unchanged.
+- **Cross-language verification:** new shared, synthetic JSON position vectors and focused Java/Python tests verify accepted and rejected boundaries, negative coordinates and legacy durable/fail-closed states. Existing motion control, task ownership, persistence schema and world-effect permissions were not changed by this focused fix.
+
+### Verification and limitations
+
+- **Owner-reported Windows single-player acceptance (2026-10-28):** focused G5 Rev6 **p18** passed after the position-contract alignment, with C2 `COMPLETED`, typed G3 terminal `COMPLETED` and durable acknowledgment, SQLite integrity and one matching durable terminal record. This is a scenario-limited result from owner-provided evidence, not a fresh Forge run performed during packaging.
+- Earlier Rev5 functional 1/3/5/10 NPC tests remain scoped to their tested environment. Other G5 cases, including p08 reason distinction, p10 cancellation timing, p11 mid-goal checkpoint timing, TAB name presentation and multi-round G4/MSPT performance acceptance, are **not certified by p18**.
+- This public packaging preserves runtime code and automated tests from the supplied archive, removes workstation/AI-agent assets and raw owner evidence, aligns Forge/Python metadata to `0.2.6-alpha.3` / `0.2.6a3` and retains earlier Patch Notes and change history. No GitHub commit, push or tag was performed.
+
 ## Unreleased — `v0.2.6-alpha.2` · More reliable NPC navigation diagnostics and G5 verification (2026-10-28)
 
 **GitHub comparison base:** `main` commit `3d55562` (`v0.2.5-alpha.1`). The earlier `v0.2.6-alpha.1` package was prepared but is not present on `main` at packaging time; this archive includes its readable-name/G5 changes as well as the newer Revision 6 tests. `alpha.2` denotes iteration of the same milestone, not a new stable release.

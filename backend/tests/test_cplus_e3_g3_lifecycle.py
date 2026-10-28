@@ -33,7 +33,7 @@ class G3Lifecycle(unittest.TestCase):
         c['action_id']=str(uuid4())
         c['target']=self.accepted['target']
         c['tolerance']=self.accepted['tolerance']
-        c['c1']['position']={k:float(v) for k,v in c['target'].items()}
+        c['c1']['position']={'x':c['target']['x']+0.5,'y':float(c['target']['y']),'z':c['target']['z']+0.5}  # block centre, where C2 stops
         c['c2']['goal_id']=c['c0']['goal_id']=self.goal
         c['c2']['action_id']=c['c0']['action_id']=c['action_id']
         return c

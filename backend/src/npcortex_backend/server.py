@@ -224,10 +224,23 @@ def make_handler(service):
             self._error(403, "forbidden", "Local token required (NPCORTEX_REQUIRE_TOKEN is enabled)")
             return False
 
-        def _host_ok(self):
+        def _drain_framed_body(self):
+            """Consume a POST body whose framing is known (one Content-Length, no transfer coding) before an
+            early rejection, so the client can read the error instead of hitting a connection reset."""
+            lengths = self.headers.get_all("Content-Length", [])
+            if self.headers.get("Transfer-Encoding") or len(lengths) != 1:
+                return
+            try:
+                self._discard_rejected_body(int(lengths[0]))
+            except ValueError:
+                pass
+
+        def _host_ok(self, body_follows=False):
             if _host_header_allowed(self.headers.get("Host")):
                 return True
             self.close_connection = True
+            if body_follows:
+                self._drain_framed_body()
             self._error(403, "forbidden_host", "Host header must name a loopback address")
             return False
 
@@ -269,7 +282,7 @@ def make_handler(service):
             return self._error(404, "not_found", "Not found")
 
         def do_POST(self):
-            if not self._host_ok():
+            if not self._host_ok(body_follows=True):
                 return
             known_route = (self.path in (
                 "/v1/chat", "/v1/worlds", "/v1/actors", "/v1/actor-chat",

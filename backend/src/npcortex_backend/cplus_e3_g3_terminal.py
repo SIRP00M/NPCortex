@@ -38,6 +38,13 @@ def _position(obj):
     return position
 
 
+def arrival_point(target):
+    """Position contract (mirrors CPlusE3G3TerminalContract.arrivalPoint): an integer block
+    target (x,y,z) is verified at its horizontal block CENTER (x+0.5, z+0.5), the point C2
+    navigates to. Y is the integer foot height as stored; it is deliberately not shifted."""
+    return [target[0]+0.5, target[1], target[2]+0.5]
+
+
 def validate_terminal_candidate(candidate, admitted):
     """Validate exact matching ID/goal/action and typed *candidate* fields.
 
@@ -83,7 +90,7 @@ def validate_terminal_candidate(candidate, admitted):
     if c1['phase']!='COMPLETE' or c1['active'] is not False:
         _reject('c1 receipt not terminal')
     live=_position(c1['position'])
-    if sum((a-b)**2 for a,b in zip(coords,live))>tolerance*tolerance:
+    if sum((a-b)**2 for a,b in zip(arrival_point(coords),live))>tolerance*tolerance:
         _reject('actual position outside tolerance')
     if type(c2) is not dict or set(c2)!={'goal_id','action_id','state','local_verified'}:
         _reject('c2 evidence shape')

@@ -54,3 +54,10 @@ docs/m04/*AUDIT.md
 docs/m04/acceptance-record.json
 docs/m04/*VALIDATION.json
 docs/transport-e-changed-files.txt
+# Local verification/workstation artifacts
+forge-mod/run/
+forge-mod/logs/
+backend/data/
+**/__pycache__/
+**/*.pyc
+**/.gradle/

@@ -22,3 +22,8 @@ The previous Windows single-player G5 run reported 18 passed, 3 pending, 1 unver
 Run the relevant G5 PowerShell build, collector, gate, isolation and validation scripts on Windows. See [G5 harness guide](README.md) and [Revision 5 history](REVISION-5.md). Always use a copied Minecraft world for live acceptance tests.
 
 This guide intentionally excludes raw run logs, local databases, saved worlds, personal paths, and operator-specific test records.
+
+
+## Focused p18 acceptance (28 October 2026)
+
+Following the E3/G3 block-center verification correction in `v0.2.6-alpha.3`, the project owner reported a focused Windows Minecraft single-player p18 run passing end-to-end: C2 movement completed, G3 finalized with durable acknowledgment, and the database contained one matching completed terminal. This does not change the status of unrelated Rev6 scenarios or performance acceptance.

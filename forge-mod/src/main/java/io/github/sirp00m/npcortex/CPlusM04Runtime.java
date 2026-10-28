@@ -52,6 +52,14 @@ final class CPlusM04Runtime {
                 .then(Commands.literal("preview-auto")
                         .then(Commands.argument("name", StringArgumentType.word())
                         .executes(c -> previewAuto(c.getSource(), StringArgumentType.getString(c, "name")))))
+                // Stage 4 read-only perception: reads loaded blocks around the NPC, never changes anything.
+                .then(Commands.literal("observe")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, CPlusWorldPerception.MAX_RADIUS))
+                        .then(Commands.argument("block", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                        .executes(c -> observe(c.getSource(), StringArgumentType.getString(c, "name"),
+                                com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(c, "radius"),
+                                net.minecraft.commands.arguments.ResourceLocationArgument.getId(c, "block")))))))
                 .then(Commands.literal("preview")
                         .then(Commands.argument("name", StringArgumentType.word())
                         .then(Commands.argument("block", BlockPosArgument.blockPos())
@@ -63,6 +71,33 @@ final class CPlusM04Runtime {
     private static int output(CommandSourceStack source, String message) {
         source.sendSuccess(() -> Component.literal("NPCortex M04: " + message), false);
         return 1;
+    }
+
+    /** Read-only. The result is logged as typed JSON; the chat line is a short summary. The origin is only reported
+     * (diagnostic for the pending command-origin experiment), never used to allow or deny anything. */
+    private static int observe(CommandSourceStack source, String name, int radius, net.minecraft.resources.ResourceLocation block) {
+        CommandOrigin.Kind origin = CommandOrigin.classify(source);
+        CPlusWorldPerceptionRuntime.Observation observation;
+        try {
+            observation = CPlusWorldPerceptionRuntime.observe(source.getServer(), name, radius, java.util.List.of(block.toString()),
+                    CPlusWorldPerceptionRuntime.DEFAULT_BELOW, CPlusWorldPerceptionRuntime.DEFAULT_ABOVE,
+                    CPlusWorldPerceptionRuntime.DEFAULT_RESULTS, CPlusWorldPerception.DEFAULT_EXAMINED);
+        } catch (IllegalStateException ex) {
+            return output(source, "HOLD: perception requires the server thread");
+        }
+        CPlusWorldPerceptionRuntime.log(origin.name(), observation);
+        var result = observation.result();
+        StringBuilder summary = new StringBuilder("observe outcome=").append(result.outcome());
+        if (result.reject() != null) summary.append(" reject=").append(result.reject());
+        if (result.outcome() != CPlusWorldPerception.Outcome.REJECTED) {
+            summary.append(" hits=").append(result.matchesFound()).append(" examined=").append(result.examined())
+                    .append("/").append(result.volume());
+            if (result.skippedUnloaded() > 0) summary.append(" unloaded_blocks=").append(result.skippedUnloaded()).append(" (UNKNOWN, not empty)");
+            if (result.provenEmpty()) summary.append(" none found (complete scan)");
+            result.hits().stream().limit(3).forEach(h -> summary.append(" ").append(h.blockId()).append("@")
+                    .append(h.x()).append(",").append(h.y()).append(",").append(h.z()));
+        }
+        return output(source, summary + "; read-only, full JSON in the server log");
     }
 
     private static int preview(CommandSourceStack source, String name, BlockPos pos) {

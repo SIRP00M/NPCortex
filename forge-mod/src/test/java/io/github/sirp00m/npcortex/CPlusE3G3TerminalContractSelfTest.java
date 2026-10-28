@@ -49,6 +49,34 @@ public final class CPlusE3G3TerminalContractSelfTest {
         x=c.deepCopy();x.addProperty("tolerance",1.5);reject(x,a);
         x=c.deepCopy();x.addProperty("schema_version",1.0);reject(x,a);
         x=a.deepCopy();x.addProperty("state","HOLD");reject(c,x);
+        // Shared arrival-position vectors (the same file is replayed by the Python test).
+        Path vectorFile=Path.of(args.length>1?args[1]:"../docs/contracts/e3_g3_position_vectors_v1.json");
+        com.google.gson.JsonArray vectors=JsonParser.parseString(Files.readString(vectorFile))
+                .getAsJsonObject().getAsJsonArray("vectors");
+        if(vectors.size()<30) throw new AssertionError("position vectors missing");
+        for(com.google.gson.JsonElement element: vectors) {
+            JsonObject vec=element.getAsJsonObject();
+            com.google.gson.JsonArray tg=vec.getAsJsonArray("target"), ps=vec.getAsJsonArray("position");
+            JsonObject cand=c.deepCopy(), adm=a.deepCopy();
+            for(int i=0;i<3;i++) {
+                String axis=new String[]{"x","y","z"}[i];
+                cand.getAsJsonObject("target").addProperty(axis,tg.get(i).getAsInt());
+                adm.getAsJsonObject("target").addProperty(axis,tg.get(i).getAsInt());
+                cand.getAsJsonObject("c1").getAsJsonObject("position").addProperty(axis,ps.get(i).getAsDouble());
+            }
+            checks++;
+            boolean expectPass="PASS".equals(vec.get("expect").getAsString());
+            try {
+                CPlusE3G3TerminalContract.validateCandidate(cand,adm);
+                if(!expectPass) throw new AssertionError("vector must be REJECTED: "+vec.get("name").getAsString());
+            } catch(IllegalArgumentException ex) {
+                if(expectPass || !ex.getMessage().contains("outside tolerance"))
+                    throw new AssertionError("vector verdict mismatch: "+vec.get("name").getAsString()+" -> "+ex.getMessage());
+            }
+        }
+        double[] centre=CPlusE3G3TerminalContract.arrivalPoint(-3,-60,-8);
+        if(centre[0]!=-2.5||centre[1]!=-60.0||centre[2]!=-7.5) throw new AssertionError("arrivalPoint contract");
+        checks++;
         System.out.println("PASS E3-D G3-1 dry-run terminal contract checks="+checks+
                 "; NO terminal state write; NO actor fence release");
     }

@@ -156,8 +156,10 @@ class Rev6Contract(unittest.TestCase):
 
     def test_deferred_items_are_untouched(self):
         m03 = text(JAVA / "CPlusM03Runtime.java")
-        self.assertEqual(m03.count("tickStart"), 3, "the M03 first-sample defect is deferred: tickStart is not repaired in Rev6")
-        self.assertIn("if(e.phase==TickEvent.Phase.START){s.tickStart=System.nanoTime();return;}", m03)
+        # Superseded by the Owner-approved D3 hardening (2026-10-28): the first-sample defect is now repaired and pinned by
+        # FoundationHardeningContract + CPlusM03TickClockSelfTest. Only the metric contract is still pinned here.
+        for metric in ("tick_event_mean_ms", "tick_event_p95_ms", "tick_event_max_ms", "MEASURED_NOT_ACCEPTED"):
+            self.assertIn(metric, m03)
         self.assertIn("MAX_ACTORS = 10;", text(JAVA / "C2AgentRuntime.java"))
         collector = text(SCRIPTS / "collect-g5-evidence.ps1")
         self.assertIn("MEASURED_NOT_ACCEPTED", collector)
@@ -248,6 +250,118 @@ class Rev6Contract(unittest.TestCase):
         self.assertIn("-le 1.5 -and $_.goal -and ($own -contains $_.goal)", collector)   # same +-1.5 s window, plus the goal correlation; the rule is not loosened
         self.assertTrue((SCRIPTS / "fixtures" / "m03-real-p11-rev5").is_dir())
         self.assertEqual(len(list((SCRIPTS / "fixtures" / "m03-real-p11-rev5").glob("*.json"))), 2)
+
+
+class E3PositionContract(unittest.TestCase):
+    """E3/G3 arrival-point alignment: only the two verifiers change; C2, tolerances and the persistence gate stay put."""
+
+    def test_both_verifiers_use_the_centre_helper_and_keep_the_3d_rule(self):
+        java = text(JAVA / "CPlusE3G3TerminalContract.java")
+        self.assertIn("static double[] arrivalPoint(int x,int y,int z) { return new double[]{x+0.5,y,z+0.5}; }", java)
+        self.assertIn("arrivalPoint(coordinate(target,\"x\")", java)
+        self.assertIn("if (distanceSq > tolerance*tolerance)", java)          # unchanged comparison
+        py = text(ROOT / "backend" / "src" / "npcortex_backend" / "cplus_e3_g3_terminal.py")
+        self.assertIn("return [target[0]+0.5, target[1], target[2]+0.5]", py)
+        self.assertIn("zip(arrival_point(coords),live))>tolerance*tolerance", py)
+
+    def test_tolerances_and_c2_arrival_are_not_touched(self):
+        self.assertIn('body.addProperty("tolerance",0.75)', text(JAVA / "CPlusE3G2Runtime.java"))
+        self.assertIn("tolerance < 0.20 || tolerance > 0.75", text(JAVA / "CPlusE3G3TerminalContract.java"))
+        self.assertIn("static final double DEFAULT_TOLERANCE = 0.35;", text(JAVA / "C2MoveGeometry.java"))
+        self.assertIn("double tx=target.x()+0.5, ty=target.footY(), tz=target.z()+0.5;", text(JAVA / "C2AgentRuntime.java"))
+
+    def test_legacy_attempts_stay_fail_closed_without_a_schema_change(self):
+        store = text(ROOT / "backend" / "src" / "npcortex_backend" / "cplus_e3_g2_motion.py")
+        self.assertIn("SET state='HOLD',updated_at=? \"", store)                # the restart sweep that fences pre-fix rows
+        self.assertIn("if done or row[12] not in ('C2_ACCEPTED','CANCEL_PENDING'):", store)
+        self.assertNotIn("ALTER TABLE cplus_e3_g2_moves ADD", store)         # no column/version migration was added
+        self.assertTrue((ROOT / "docs" / "contracts" / "e3_g3_position_vectors_v1.json").is_file())
+
+
+class FoundationHardeningContract(unittest.TestCase):
+    """D1/D2/D3 offline hardening: behaviour is tested elsewhere; these pin the wiring that makes it count."""
+
+    def test_d1_host_rejection_drains_a_framed_post_body_and_keeps_every_status(self):
+        server = text(ROOT / "backend" / "src" / "npcortex_backend" / "server.py")
+        self.assertIn("if not self._host_ok(body_follows=True):", server)           # do_POST
+        self.assertRegex(server, r"if body_follows:\s+self\._drain_framed_body\(\)\s+self\._error\(403, \"forbidden_host\"")
+        self.assertIn('if self.headers.get("Transfer-Encoding") or len(lengths) != 1:', server)   # unframed bodies are never read
+        self.assertIn("MAX_REJECT_DRAIN = 1024 * 1024", server)                     # the byte bound is unchanged
+        self.assertIn("REJECT_DRAIN_TIMEOUT_SECONDS = 2", server)                   # and so is the time bound
+        self.assertIn('return os.environ.get("NPCORTEX_REQUIRE_TOKEN", "")', server)  # default auth policy untouched
+
+    def test_d2_every_java_selftest_runs_under_check_and_a_failure_fails_the_build(self):
+        gradle = text(ROOT / "forge-mod" / "build.gradle")
+        self.assertIn("include: '**/*SelfTest.java'", gradle)
+        self.assertIn("tasks.named('check') { dependsOn tasks.named('verifySelfTests') }", gradle)
+        self.assertNotIn("ignoreExitValue", gradle)                                  # JavaExec default: nonzero exit fails
+        self.assertIn("Self-test without a main method cannot run", gradle)          # an unrunnable test is a build error, not a silent skip
+        tests = list((ROOT / "forge-mod" / "src" / "test" / "java").rglob("*SelfTest.java"))
+        self.assertGreaterEqual(len(tests), 64)
+        for path in tests:
+            self.assertIn("static void main", text(path), path.name)
+
+    def test_d3_m03_pairs_tick_start_with_end(self):
+        runtime = text(JAVA / "CPlusM03Runtime.java")
+        self.assertNotIn("tickStart", runtime)
+        self.assertIn("if(Double.isNaN(ms))return;", runtime)
+        clock = text(JAVA / "CPlusM03TickClock.java")
+        self.assertIn("if (!open) { unmatchedEnds++; return Double.NaN; }", clock)
+        self.assertNotIn("net.minecraft", clock)                                     # stays pure so it is unit-testable
+
+
+class Stage4ReadOnlyFoundationContract(unittest.TestCase):
+    """Stage 4 read-only milestone: perception is observation only, reachable only through the read-only m04 tree, and the
+    mutating skills stay declared-but-unimplemented. Source-shape pins that complement the Java behavioural self-tests."""
+    NEW_JAVA = ("CPlusWorldPerception.java", "CPlusWorldPerceptionRuntime.java", "CommandOrigin.java")
+    MUTATION_APIS = ("setBlock", "destroyBlock", "removeBlock", "setBlockAndUpdate", "useItemOn", "addFreshEntity", "setChunkForced",
+                     "forceChunk", "addTicket", ".getChunk(", "level.getBlockState", "gameMode", "ItemEntity", "playerTouch")
+
+    def test_new_sources_use_no_mutating_or_chunk_loading_api(self):
+        for name in self.NEW_JAVA:
+            code = re.sub(r"/\*.*?\*/|//[^\n]*", "", text(JAVA / name), flags=re.S)
+            for forbidden in self.MUTATION_APIS:
+                self.assertNotIn(forbidden, code, f"{name} must not use {forbidden}")
+        self.assertIn("getChunkNow", text(JAVA / "CPlusWorldPerceptionRuntime.java"))
+
+    def test_perception_is_reachable_only_through_the_read_only_m04_command(self):
+        referencing = sorted(p.name for p in JAVA.rglob("*.java")
+                             if "CPlusWorldPerception" in text(p) and not p.name.startswith("CPlusWorldPerception"))
+        self.assertEqual(referencing, ["CPlusM04Runtime.java"], "only the m04 read-only command may call perception")
+        server = text(ROOT / "backend" / "src" / "npcortex_backend" / "server.py")
+        for word in ("perception", "observe_world", "world_observation"):
+            self.assertNotIn(word, server, "no backend route may expose or accept observations in this milestone")
+        agent = text(ROOT / "backend" / "src" / "npcortex_backend" / "agent_skills.py")
+        self.assertNotIn("perception", agent)
+
+    def test_mutating_skills_are_declared_but_still_have_no_forge_executor(self):
+        agent = text(ROOT / "backend" / "src" / "npcortex_backend" / "agent_skills.py")
+        declared = set(re.findall(r'^\s+"(move_to|break_block|place_block|pickup_item|use_item|equip_item)": "', agent, flags=re.M))
+        self.assertEqual(declared, {"move_to", "break_block", "place_block", "pickup_item"})
+        registry = text(JAVA / "C2SkillRegistry.java")
+        self.assertIn("only move_to is advertised", registry)
+        # The only Forge mentions are the read-only F2 evidence policy and the sampler that asks it; neither can act.
+        mentions = sorted(path.name for path in JAVA.rglob("*.java")
+                          if any(f'"{name}"' in text(path) for name in ("break_block", "place_block", "pickup_item")))
+        self.assertEqual(mentions, ["CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java"])
+        for name in mentions:
+            code = text(next(JAVA.rglob(name)))
+            for api in ("setBlock", "destroyBlock", "removeBlock", "useItemOn", "addFreshEntity", "gameMode", "playerTouch"):
+                self.assertNotIn(api, code, f"{name} must not call {api}")
+        policy = text(JAVA / "cplus" / "CPlusF2ReadOnlyPolicy.java")
+        self.assertIn('new Decision(Verdict.UNKNOWN, "mutation_claim_adapter_unverified")', policy)   # a mutation is never ALLOWed
+
+    def test_design_documents_and_contract_exist_with_the_required_content(self):
+        stage4 = ROOT / "docs" / "stage4"
+        ledger = text(stage4 / "PERMISSION_AND_WORLD_EFFECT_LEDGER_DESIGN.md")
+        self.assertIn("Exactly-once world effects cannot be guaranteed and are not", ledger)
+        for row in ("| 1 | Crash before the effect", "| 2 | Crash after the effect", "| 3 | Terminal committed, then chunk rollback",
+                    "| 4 | Lost ACK", "| 5 | Cancel during execution", "| 6 | World changed externally"):
+            self.assertIn(row, ledger)
+        self.assertIn("**Verdict: UNKNOWN for authorization.**", text(stage4 / "COMMAND_ORIGIN_INVESTIGATION.md"))
+        contract = text(ROOT / "docs" / "contracts" / "world_observation_v1.json")
+        for outcome in ("OK", "PARTIAL_UNLOADED", "PARTIAL_BUDGET", "CANCELLED", "REJECTED"):
+            self.assertIn(f'"{outcome}"', contract)
 
 
 if __name__ == "__main__":

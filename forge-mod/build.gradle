@@ -43,13 +43,14 @@ tasks.register('verifyG2Identity', JavaExec) {
     mainClass = 'io.github.sirp00m.npcortex.CPlusE3G2IdentitySelfTest'
 }
 
-// Integrated First World Action — G3-1 dry-run only. Does NOT execute movement,
+// Integrated First World Action โ€” G3-1 dry-run only. Does NOT execute movement,
 // grant permissions, or persist/ack a C+ terminal movement state.
 tasks.register('verifyG3TerminalContract', JavaExec) {
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'io.github.sirp00m.npcortex.CPlusE3G3TerminalContractSelfTest'
-    args = [rootProject.file('../docs/contracts/e3_g3_terminal_candidate_v1.json').absolutePath]
+    args = [rootProject.file('../docs/contracts/e3_g3_terminal_candidate_v1.json').absolutePath,
+            rootProject.file('../docs/contracts/e3_g3_position_vectors_v1.json').absolutePath]
 }
 
 // Option E: actual shared transport and outbox tests (no Minecraft world).
@@ -104,3 +105,37 @@ tasks.register('verifyRev6', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'io.github.sirp00m.npcortex.Rev6DiagSelfTest'
 }
+
+// D2: `gradlew check` (and therefore `build`) runs EVERY Java self-test. The explicit verify* tasks above are kept
+// (some pass fixture arguments); each remaining *SelfTest class gets a generated task, one JVM per class, so a
+// static-state leak between tests is impossible and any AssertionError / nonzero exit fails the build.
+// The tests are headless: they use the Minecraft jars on the classpath but never boot a game or a world.
+def explicitSelfTests = tasks.names.findAll { it.startsWith('verify') }
+        .collect { tasks.named(it).get().mainClass.get() }.toSet()
+def generatedSelfTests = []
+fileTree(dir: 'src/test/java', include: '**/*SelfTest.java').files.sort().each { f ->
+    def text = f.getText('UTF-8').replace('\uFEFF', '')
+    def pkg = (text =~ /(?m)^package\s+([\w.]+);/)[0][1]
+    def fqn = pkg + '.' + f.name.replace('.java', '')
+    if (!text.contains('static void main'))
+        throw new GradleException("Self-test without a main method cannot run: ${fqn}")
+    if (!explicitSelfTests.contains(fqn)) {
+        def taskName = 'selfTest' + f.name.replace('SelfTest.java', '')
+        tasks.register(taskName, JavaExec) {
+            group = 'verification'
+            description = "Self-test ${fqn}"
+            dependsOn tasks.named('testClasses')
+            classpath = sourceSets.test.runtimeClasspath
+            mainClass = fqn
+        }
+        generatedSelfTests << taskName
+    }
+}
+tasks.register('verifySelfTests') {
+    group = 'verification'
+    description = 'All Java self-tests: the explicit verify* tasks plus one generated task per remaining *SelfTest class.'
+    dependsOn tasks.names.findAll { it.startsWith('verify') && it != 'verifySelfTests' }
+    dependsOn generatedSelfTests
+}
+tasks.named('check') { dependsOn tasks.named('verifySelfTests') }
+

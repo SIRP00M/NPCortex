@@ -65,9 +65,11 @@ final class CPlusE3G3TerminalContract {
         if (flag(c1,"active")) throw new IllegalArgumentException("G3-1 motion still active");
         JsonObject position=object(c1,"position");
         requireFields(position,Set.of("x","y","z"),"position");
+        double[] arrival=arrivalPoint(coordinate(target,"x"),coordinate(target,"y"),coordinate(target,"z"));
         double distanceSq=0.0;
-        for (String axis : new String[]{"x","y","z"}) {
-            double p=number(position,axis), t=coordinate(target,axis);
+        String[] axes={"x","y","z"};
+        for (int i=0;i<3;i++) {
+            double p=number(position,axes[i]), t=arrival[i];
             if(!Double.isFinite(p) || Math.abs(p)>=16777216)
                 throw new IllegalArgumentException("G3-1 invalid position");
             distanceSq += (p-t)*(p-t);
@@ -141,6 +143,11 @@ final class CPlusE3G3TerminalContract {
             throw new IllegalArgumentException("G3-1 number "+key);
         return item.getAsDouble();
     }
+    /** Position contract (shared with cplus_e3_g3_terminal.arrival_point): an integer block target
+     * (x,y,z) is verified at its horizontal block CENTER (x+0.5, z+0.5), the point C2 navigates to.
+     * Y is the integer foot height as stored; it is deliberately not shifted. */
+    static double[] arrivalPoint(int x,int y,int z) { return new double[]{x+0.5,y,z+0.5}; }
+
     private static int coordinate(JsonObject o,String key) {
         JsonElement item=o.get(key);
         if (item==null || !item.isJsonPrimitive() || !item.getAsJsonPrimitive().isNumber())

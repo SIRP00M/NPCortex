@@ -22,7 +22,8 @@ final class CPlusM03Runtime {
         final UUID operator,run=UUID.randomUUID();
         final ExecutorService io=new ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(32),
                 r->{Thread t=new Thread(r,"npcortex-m03-evidence");t.setDaemon(true);return t;},new ThreadPoolExecutor.AbortPolicy());
-        long tickStart,started;
+        long started;
+        final CPlusM03TickClock clock=new CPlusM03TickClock();
         int remaining,expected;
         String[] names;
         UUID measurement;
@@ -312,13 +313,15 @@ final class CPlusM03Runtime {
         s.measurement=UUID.randomUUID();s.observed.clear();s.transitions=new JsonArray();
         try {for(String name:list)snapshot(src,s,live(src.getServer(),name),"performance-start");}
         catch(Exception e){return say(src,"HOLD: an NPC is unavailable");}
-        s.names=list;s.expected=count;s.remaining=seconds*20;s.started=System.nanoTime();s.ticks.clear();s.invalid=false;
+        s.names=list;s.expected=count;s.remaining=seconds*20;s.started=System.nanoTime();s.ticks.clear();s.invalid=false;s.clock.reset();
         return say(src,"measurement started; tick-event work time (not scheduler interval); no automatic tasks or NPC spawning");
     }
     static void tick(TickEvent.ServerTickEvent e){
         Session s=SESSIONS.get(e.getServer());if(s==null||s.remaining==0)return;
-        if(e.phase==TickEvent.Phase.START){s.tickStart=System.nanoTime();return;}
-        s.ticks.add((System.nanoTime()-s.tickStart)/1e6);
+        if(e.phase==TickEvent.Phase.START){s.clock.start(System.nanoTime());return;}
+        double ms=s.clock.end(System.nanoTime());
+        if(Double.isNaN(ms))return; // END of a tick whose START predates this measurement: no sample, no countdown
+        s.ticks.add(ms);
         var operator=e.getServer().getPlayerList().getPlayer(s.operator);
         if(operator==null||!operator.hasPermissions(2))s.invalid=true;
         long active=C1IdentityData.get(e.getServer()).all().stream().filter(id->id.active()&&C1P0Runtime.activeAvatar(e.getServer(),id.character())!=null).count();
