@@ -4,7 +4,7 @@
 
 ## 0 — Setup safely
 
-1. Back up the existing `C:\path\to\NPCortex` installation and the old Minecraft save / Backend data **without modifying the originals**. Extract the new Full Repository ZIP into a **separate clean directory**; don't overlay old versions.
+1. Back up the existing `F:\AI\NPCortex` installation and the old Minecraft save / Backend data **without modifying the originals**. Extract the new Full Repository ZIP into a **separate clean directory**; don't overlay old versions.
 2. Use Java 17 Temurin and a **NEW disposable Creative world**, different from the world that produced `invalid reserve reply`; enable cheats/Operator. The new world gets its own world UUID and NPC actor; it cannot silently repair an old G2 attempt.
 3. Leave the old Backend DB intact. Check `taskmovestatus` in the old world **read-only** if desired, but do not submit another move there.
 
@@ -13,7 +13,7 @@
 **Build (Terminal A, one time):**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 
@@ -32,14 +32,14 @@ This runs the existing focused Backend suites, the new real Backend HTTP parity 
 **Backend server (Terminal B, keep open):**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-backend.ps1
 ```
 
 **Minecraft client (Terminal C, keep open):**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

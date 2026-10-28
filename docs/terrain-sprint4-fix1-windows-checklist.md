@@ -2,16 +2,16 @@
 
 ## Install/build (user controls repo; no Git operation by assistant)
 
-Open the delivered FULL Repository ZIP into `C:\path\to\NPCortex` (make backup of existing world/backend DB first).
+Open the delivered FULL Repository ZIP into `F:\AI\NPCortex` (make backup of existing world/backend DB first).
 
 PowerShell #1:
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-terrain-s4-fix1.ps1
 .\scripts\dev-forge.ps1 -Task build
 ```
-PowerShell #2: `cd C:\path\to\NPCortex; .\scripts\dev-backend.ps1`.
-PowerShell #3: `cd C:\path\to\NPCortex; .\scripts\dev-forge.ps1 -Task runClient`.
+PowerShell #2: `cd F:\AI\NPCortex; .\scripts\dev-backend.ps1`.
+PowerShell #3: `cd F:\AI\NPCortex; .\scripts\dev-forge.ps1 -Task runClient`.
 
 ## Test A — Legacy journal reconciliation (no manual reset)
 

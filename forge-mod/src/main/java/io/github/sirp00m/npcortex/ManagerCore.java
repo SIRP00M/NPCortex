@@ -48,6 +48,13 @@ final class ManagerCore {
         void onServerThread(Runnable task);
         CompletableFuture<Http> http(String method, String path, JsonObject body);
         void log(String message);
+        /** Stage 4 no-op world action. {@code requester} is the authenticated packet sender (never client text). */
+        CompletableFuture<WorldEffectFlow.Result> worldAction(UUID requester, String npcName, boolean reconcile);
+        /** Stage 4 native break/pickup: preview, confirm or cancel. {@code requester} is the authenticated packet sender. */
+        default CompletableFuture<NativeEffectFlow.Result> nativeAction(UUID requester, String npcName, int action, String nonce) {
+            return CompletableFuture.completedFuture(new NativeEffectFlow.Result(NativeEffectFlow.Kind.REJECTED,
+                    "Native actions are not available on this host.", ""));
+        }
     }
 
     private final Host host;
@@ -87,6 +94,8 @@ final class ManagerCore {
             else if (message instanceof ManagerProtocol.RegisterReq m) run(player, key, m, register(m));
             else if (message instanceof ManagerProtocol.LoadReq m) run(player, key, m, load(m));
             else if (message instanceof ManagerProtocol.SaveReq m) run(player, key, m, save(m));
+            else if (message instanceof ManagerProtocol.NoopReq m) run(player, key, m, noop(player, m));
+            else if (message instanceof ManagerProtocol.NativeReq m) run(player, key, m, nativeAction(player, m));
         } catch (RuntimeException ex) {
             host.log("Manager internal error: " + ex);
             fail(player, key, op(message), message.opId(), Status.ERROR, "Internal error; see the server log.");
@@ -98,6 +107,8 @@ final class ManagerCore {
         if (message instanceof ManagerProtocol.RegisterReq m) return m.name();
         if (message instanceof ManagerProtocol.LoadReq m) return m.name();
         if (message instanceof ManagerProtocol.SaveReq m) return m.name();
+        if (message instanceof ManagerProtocol.NoopReq m) return m.name();
+        if (message instanceof ManagerProtocol.NativeReq m) return m.name();
         return null;
     }
 
@@ -106,6 +117,8 @@ final class ManagerCore {
         if (message instanceof ManagerProtocol.RegisterReq) return Op.REGISTER;
         if (message instanceof ManagerProtocol.LoadReq) return Op.LOAD;
         if (message instanceof ManagerProtocol.SaveReq) return Op.SAVE;
+        if (message instanceof ManagerProtocol.NoopReq) return Op.NOOP;
+        if (message instanceof ManagerProtocol.NativeReq) return Op.NATIVE;
         return Op.LIST;
     }
 
@@ -373,6 +386,48 @@ final class ManagerCore {
             Failure failure = classify(errorValue);
             return new OpRep(request.opId(), Op.SAVE, failure.status, clip(failure.message), 0, 0, rowFor(npc, null), null);
         });
+    }
+
+    // ---------------------------------------------------------------- NOOP world action (Stage 4)
+
+    private CompletableFuture<ManagerProtocol.ToClient> noop(UUID player, ManagerProtocol.NoopReq request) {
+        if (find(request.name()) == null)
+            return done(request.opId(), Op.NOOP, Status.REJECTED, "Unknown NPC '" + request.name() + "'.", null);
+        return host.worldAction(player, request.name(), request.reconcile()).thenApply(result -> {
+            Status status = switch (result.kind()) {
+                case OK -> Status.OK;
+                case DENIED -> Status.DENIED;
+                case REJECTED -> Status.REJECTED;
+                case BUSY -> Status.BUSY;
+                case ERROR -> Status.ERROR;
+                case UNKNOWN -> Status.UNKNOWN;
+            };
+            Npc npc = find(request.name());
+            return (ManagerProtocol.ToClient) new OpRep(request.opId(), Op.NOOP, status, clip(result.message()), 0, 0,
+                    npc == null ? null : rowFor(npc, null), null);
+        }).exceptionally(error -> new OpRep(request.opId(), Op.NOOP, Status.UNKNOWN,
+                "World action outcome unknown; see the server log. Use Reconcile before retrying.", 0, 0, null, null));
+    }
+
+    // ---------------------------------------------------------------- NATIVE break / pickup (Stage 4 Option D)
+
+    private CompletableFuture<ManagerProtocol.ToClient> nativeAction(UUID player, ManagerProtocol.NativeReq request) {
+        String malformed = ManagerProtocol.validateNative(request);
+        if (malformed != null) return done(request.opId(), Op.NATIVE, Status.REJECTED, malformed, null);
+        if (find(request.name()) == null)
+            return done(request.opId(), Op.NATIVE, Status.REJECTED, "Unknown NPC '" + request.name() + "'.", null);
+        return host.nativeAction(player, request.name(), request.action(), request.nonce()).thenApply(result -> {
+            Status status = switch (result.kind()) {
+                case OK -> Status.OK;
+                case DENIED -> Status.DENIED;
+                case REJECTED -> Status.REJECTED;
+                case BUSY -> Status.BUSY;
+                case ERROR -> Status.ERROR;
+                case UNKNOWN -> Status.UNKNOWN;
+            };
+            return (ManagerProtocol.ToClient) new ManagerProtocol.NativeRep(request.opId(), status, clip(result.message()), result.nonce());
+        }).exceptionally(error -> new OpRep(request.opId(), Op.NATIVE, Status.UNKNOWN,
+                "Native action outcome unknown; see the server log. Use Rec. before retrying.", 0, 0, null, null));
     }
 
     // ---------------------------------------------------------------- helpers

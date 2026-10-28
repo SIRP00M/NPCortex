@@ -121,6 +121,14 @@ class GuardedMotionStore(MovePreviewStore):
                             (actor,'DISPATCHING')).fetchone() if e2_table else None)
             if busy:
                 raise GraphConflict('read-only resource lease still in flight')
+            # Stage 4: the world-effect and M04 stores fence this actor too. Same SQLite file and the same BEGIN IMMEDIATE
+            # write lock, so this Check + Reserve cannot interleave with theirs. A store never used here has no table.
+            for table, states in (('cplus_we_runs', ('RESERVED', 'EXECUTING', 'HOLD_IN_DOUBT')),
+                                  ('cplus_wn_runs', ('RESERVED', 'EXECUTING', 'HOLD_IN_DOUBT')),
+                                  ('cplus_m04_runs', ('RESERVED', 'ACTIVE', 'HOLD'))):
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone() and                         db.execute(f"SELECT 1 FROM {table} WHERE world_id=? AND actor_id=? AND state IN "
+                                   f"({','.join('?' for _ in states)}) LIMIT 1", (world, actor, *states)).fetchone():
+                    raise GraphConflict('a world-effect or M04 attempt owns this actor; reconcile before movement')
             now=int(time.time())
             try:
                 db.execute('''INSERT INTO cplus_e3_g2_moves

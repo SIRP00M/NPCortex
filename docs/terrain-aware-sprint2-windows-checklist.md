@@ -5,7 +5,7 @@
 ## Commands
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-terrain-s2.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

@@ -15,7 +15,7 @@ On a lethal hit the controlled handler consults the *current* world's `keepInven
 The usual repository root PowerShell commands apply:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c1-p1-lifecycle.ps1
 .\scripts\test-c1-p0-sync.ps1
 .\scripts\test-c1-p1-motion.ps1

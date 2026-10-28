@@ -47,7 +47,7 @@ The baseline runs `C1P0Runtime.onServerTick` then `C1P1MotionRuntime.onTick` the
 Open PowerShell at the repository root. Use installed JDK 17 (Temurin supported).
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c1-r0-foundation.ps1
 .\scripts\test-c1-p0-sync.ps1
 .\scripts\test-c1-p1-motion.ps1

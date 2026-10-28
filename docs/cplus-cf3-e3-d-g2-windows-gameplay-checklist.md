@@ -7,7 +7,7 @@
 **Build:**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 
@@ -26,14 +26,14 @@ cd C:\path\to\NPCortex
 **Backend — separate terminal (leave running):**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-backend.ps1
 ```
 
 **Minecraft — separate terminal:**
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

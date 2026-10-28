@@ -3,9 +3,9 @@
 **An open-source, local-AI companion framework for Minecraft Java 1.20.1 (Forge).**  
 Create in-game player-like NPCs with their own personalities and readable display names, interact with a local AI backend, and experiment with navigation, following and carefully guarded tasks.
 
-[Changelog](CHANGELOG.md) · [What's new](docs/patch-notes/v0.2.6-alpha.3.md) · [Character Profiles](docs/character-profiles.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+[Changelog](CHANGELOG.md) · [What's new](docs/patch-notes/v0.2.7-alpha.1.md) · [Character Profiles](docs/character-profiles.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
 
-> **Development version: `v0.2.6-alpha.3` (28 October 2026; refreshed source snapshot).** This is an untagged **alpha source milestone**, not a stable release. Features and tests described below have different levels of verification. No automated block-breaking/pickup system, unrestricted navigation or production-ready multi-NPC behavior is claimed.
+> **Development version: `v0.2.7-alpha.1` (28 October 2026).** Experimental milestone for guarded native block breaking and item pickup. No unrestricted autonomous mining, automatic walk-to-target, or item-attraction pickup is claimed. Forge build and focused offline tests are separate from complete live gameplay/CI acceptance.
 
 ## What you can do today
 
@@ -16,6 +16,7 @@ Create in-game player-like NPCs with their own personalities and readable displa
 | **Create a unique personality** | **ESC → NPCortex Manager** to create an NPC with a custom display name, structured personality or raw prompt; edit and save versioned profiles | Owner-confirmed Windows single-player GUI smoke tests passed for the tested creation/profile workflow |
 | **Local AI conversation** | Python backend plus Ollama / Qwen 3 8B, with persistent actor dialogue and experimental social turns | Requires separately running the local backend/model |
 | **Follow and navigate** | Terrain-aware bounded navigation, follow behavior, waypoint recovery and **operator-issued long-range navigation** on already loaded terrain | Experimental; not global pathfinding, no chunk forcing or cross-world routes |
+| **Native block interaction** | ESC → NPCortex Manager provides **Brk** and **Pck** preview/confirm for one nearby block or dropped item with explicit owner allowlist and backend receipts | Experimental; owner-reported single-player Brk/Pck and claim-conflict checks, not autonomous harvesting or automatic walking |
 | **Guarded task workflow** | Explicit movement requests, state tracking, cancellation, terminal reconciliation and read-only world observations; experimental `/npcortex m04 observe` inspects loaded blocks without modifying them | Not a general-purpose autonomous block interaction engine; the new perception path still needs live gameplay verification |
 | **Testing tools** | Java/Python regressions, Windows PowerShell scripts and optional Minecraft acceptance datapacks, including G5 multi-NPC lane checks, Rev6 cancel scenarios and read-only navigation diagnostics | G5 functional lanes have limited prior evidence; Rev6 p18 guarded-task completion was accepted in one owner-tested Windows single-player run; other cancellation/checkpoint cases and performance acceptance remain open |
 
@@ -36,6 +37,14 @@ This replacement package **keeps the version `v0.2.6-alpha.3`** and includes fur
 - **More accurate timing metrics:** M03 pairs tick-start and tick-end samples and ignores unmatched ends. This is a measurement fix, not a claim of accepted 1/3/5/10-NPC performance.
 
 **Verification boundary:** The new Stage 4 observation path remains unverified in live Minecraft in this packaging session. Previous G5 p18 movement acceptance remains scenario-specific; the TAB-list name issue, other pending G5 scenarios, performance and multiplayer are not declared resolved. This source snapshot was not committed or pushed automatically.
+
+## Native block breaking and item pickup (experimental)
+
+The NPCortex Manager exposes **Brk** and **Pck** as explicit **Preview → Confirm** actions. Forge performs a guarded, server-authoritative break or pickup, while the local backend keeps durable claims, action receipts, and recovery state. Only authorized operators may enable these actions through a deny-by-default allowlist (`scripts/install-native-allowlist.ps1`); do not expose the local backend to the internet.
+
+These are **near-target actions**, not autonomous multi-step harvesting. NPCs do not automatically walk into range for a Brk/Pck request, and a dropped item is **not automatically pulled into NPC inventory merely because it is nearby**. A successful Pck transfers an item as part of its explicitly requested operation. Operator-reported Windows single-player checks of native break/pickup and an exclusive claim conflict are scenario-limited, not proof of multiplayer, crash-window exactly-once effects, or broad mod compatibility.
+
+See [Native break/pickup technical guide](docs/stage4/NATIVE_BREAK_PICKUP.md), [Stage 4 overview](docs/stage4/README.md), and [v0.2.7 patch notes](docs/patch-notes/v0.2.7-alpha.1.md).
 
 ## Requirements
 

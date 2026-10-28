@@ -8,7 +8,7 @@ Date: 2026-10-23. **Gate-1 focused local Python PASS; overall Gate-1 PENDING Win
 - **Source-confirmed root cause:** `status()` and `cancel()` provided redundant `"e1/status"` / `"e1/cancel"` despite `idOperation()` already switching routes on its `boolean cancel` parameter.
 - **Narrow corrective change:** replace `idOperation(src,name,taskId,"e1/status",false)` with `idOperation(src,name,taskId,false)`, and `idOperation(src,name,taskId,"e1/cancel",true)` with `idOperation(src,name,taskId,true)`. Leave method signature, callback, route logic, authorization and C1/C2 untouched.
 - **Verification:** 61/61 focused Python regression PASS after change, clean ZIP CRC PASS. These Python checks do not compile Forge/Java. **Forge Build Fix #1 = PENDING Windows rerun**, Minecraft acceptance PENDING; full backend suite repeatability remains PENDING. Gate-2 remains disabled.
-- **Expected next command on clean extract:** `cd C:\path\to\NPCortex; .\scripts\dev-forge.ps1 -Task build`.
+- **Expected next command on clean extract:** `cd F:\AI\NPCortex; .\scripts\dev-forge.ps1 -Task build`.
 
 ## Baseline and scope
 

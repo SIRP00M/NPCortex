@@ -24,7 +24,7 @@ Windows gameplay evidence: first `/npcortex c1 spawn yui` produces a visible van
 Start from the **repository root**, NOT `forge-mod`:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c1-p0-sync.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

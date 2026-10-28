@@ -35,7 +35,7 @@ P0 builds the platform boundaries before adding further skills:
 ## Build and isolated tests (Windows PowerShell)
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 java -version
 javac -version
 .\scripts\test-c2-p0.ps1

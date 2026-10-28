@@ -89,7 +89,7 @@ final class CPlusE3G2Runtime {
         try {body=payload(src,name,x,y,z);}
         catch(RuntimeException ex){msg(src,"E3 G2 HOLD: "+ex.getMessage());return 0;}
         UUID actor=UUID.fromString(body.get("actor_id").getAsString());
-        if(CPlusTransportRecovery.busy(server,actor) || CPlusE3G3Runtime.pending(server,actor)){msg(src,"HOLD: transport recovery active");return 0;}
+        if(CPlusTransportRecovery.busy(server,actor) || CPlusE3G3Runtime.pending(server,actor) || WorldEffectRuntime.pending(server,actor) || NativeEffectRuntime.pending(server,actor)){msg(src,"HOLD: transport recovery or world action active");return 0;}
         UUID request=UUID.fromString(body.get("request_id").getAsString());
         Map<UUID,UUID> waiting=PENDING.computeIfAbsent(server,ignored->new HashMap<>());
         if(waiting.putIfAbsent(actor,request)!=null) {msg(src,"E3 G2 HOLD: pending local admission");return 0;}

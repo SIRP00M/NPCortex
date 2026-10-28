@@ -2,6 +2,29 @@
 
 NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
 
+## Unreleased — `v0.2.7-alpha.1` · Guarded native block breaking and item pickup (2026-10-28)
+
+**Base:** GitHub `main` commit `b192549` (`v0.2.6-alpha.3`). This source milestone adds opt-in native world actions to the previously guarded navigation and world-inspection foundation; it is not a stable release or automatic AI mining system.
+
+### Added
+
+- **Manager Brk / Pck:** explicit nearby block-break and dropped-item pickup via Preview → Confirm, with per-request operator authorization and a restrictive allowlist. Breaking uses bounded timed mining; pickup uses an explicit action, not an item magnet.
+- **Durable native action ledger:** additive `cplus_wn_*` records, claim exclusion for competing NPC actions, restart fencing, typed receipts, `HOLD` for ambiguous results, and operator-triggered reconciliation. Python backend coordinates records but does not itself mutate the Minecraft world.
+- **Safe effect boundaries:** cross-checks for conflicting movement, inventory, follow/navigation and guarded task states, plus bounded native request processing; existing C1/C2 and E3 contract behavior is preserved.
+- **Native verification tools:** Java contract/self-tests, Python store/HTTP/wire regressions, test datapack and real Forge GameTest harness source. Synthetic SQLite schema fixture is included because migration-compatibility tests require it.
+
+### Testing and limitations
+
+- The owner reported successful Windows single-player native block breaking, explicit pickup into NPC inventory and competing-actor `CLAIM_CONFLICT` in the scenarios tested. The original candidate technical report also documents offline/GameTest runs; these are separate evidence types and do not certify all scenarios in this packaged ZIP.
+- This packaging run: **53/53 milestone static tests**, **72/72 native backend tests**, and **5/5 HTTP request lifecycle tests** passed. Full Python backend discovery was attempted on Python 3.13 but did not complete within the execution limit; GitHub CI's Python 3.11 full-suite result must be checked after publishing. A fresh native JDK 17 Forge build was not run here.
+- **Not implemented/accepted:** automatic walking before Brk/Pck, automatic proximity item pickup, autonomous Qwen task dispatch, broad multiplayer/dedicated-server acceptance, G4 MSPT/performance acceptance, crash-window exactly-once world mutation, and complete TAB display-name verification.
+
+### Public source packaging
+
+- Aligned Forge/runtime `0.2.7-alpha.1` with Python package `0.2.7a1`, refreshed public README/CHANGELOG and added milestone Patch Notes; Java/Python gameplay implementation remains as supplied in `NPCortex(10).rar`.
+- Excluded AI-agent configuration, workstation caches, worlds, real databases, raw evidence/manifests and obsolete G5 `g5n` datapack helpers. Kept tracked public tests, CI, Gradle wrapper, datapack source and **synthetic v4 SQLite fixture**.
+- **GitHub sync caution:** copying a ZIP over a Git checkout does *not* stage deletions of tracked legacy paths. Remove the obsolete `g5n` test-pack files from the Git index/worktree using the accompanying cleanup CMD script before staging and committing. Never delete static contract tests merely to hide a real failure.
+
 ## Unreleased — `v0.2.6-alpha.3` refreshed source snapshot · Read-only world inspection and reliability hardening (2026-10-28)
 
 **Base:** GitHub `main` `cbd9cd9` (`v0.2.6-alpha.2`). This replacement supersedes the earlier prepared `v0.2.6-alpha.3` ZIP **without incrementing the version**. Gameplay code is preserved from `NPCortex(9).rar`; public packaging only filters local artifacts and updates version metadata/docs.

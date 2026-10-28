@@ -22,7 +22,7 @@ This is not a change to `Player.attack`, the knockback equation, Forge attack ev
 2. Run the isolated tests and compile:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c1-r2-combat.ps1
 .\scripts\test-c1-p1-motion.ps1
 .\scripts\test-c1-r0-foundation.ps1
@@ -42,7 +42,7 @@ cd C:\path\to\NPCortex
 Filtered trace in PowerShell:
 
 ```powershell
-Get-Content C:\path\to\NPCortex\forge-mod\run\logs\latest.log |
+Get-Content F:\AI\NPCortex\forge-mod\run\logs\latest.log |
   Select-String 'C1-R2 COMBAT_IMPULSE|C1-R2-FIX1 COMBAT_STEP|motion_done' |
   Select-Object -Last 60
 ```

@@ -2,7 +2,11 @@
 
 **Status: PARTIAL IMPLEMENTATION, NOT READY FOR WORLD MUTATION.**
 
-This is an experimental M04 contract and operator-preview foundation. Its source-level gates and tests are not proof that automatic world mutations are safe or enabled.
+This candidate is derived from the last full source ZIP available in the conversation,
+`NPCortex_M03_AllTests_FunctionLoadFix_FullRepository_CANDIDATE.zip`, plus the
+M03 Live Evidence watcher overlay. The Codex 2026-10-26 source audit described
+an evolving *local* workspace not mounted here. Do not claim that the generated
+ZIP replaces newer local edits in `F:\AI\NPCortex` without a merge review.
 
 ## Implemented in this candidate
 
@@ -30,7 +34,8 @@ This is an experimental M04 contract and operator-preview foundation. Its source
 
 ## Deferred / blockers
 
-- **Gate 0:** The M03 command provenance mismatch found during source audit is not certified fixed. Checking that `CommandSourceStack.getPlayer()`
+- **Gate 0:** The M03 command provenance mismatch from the 2026-10-26 Codex
+  audit is not certified fixed. Checking that `CommandSourceStack.getPlayer()`
   resolves to a live OP does NOT by itself distinguish direct player chat
   from commands executed using `execute as` or via a datapack/command block.
   M04 mutating commands are not registered until authenticated origin is proven.

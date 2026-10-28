@@ -6,7 +6,7 @@ Do not push to GitHub until tests pass. Use Java 17 / Minecraft 1.20.1 Forge.
 ## Build and scripted tests
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c2-stable-trajectory-follow-b.ps1
 .\scripts\test-c2-smooth-follow-hardening-c.ps1
 .\scripts\dev-forge.ps1 -Task build

@@ -15,7 +15,7 @@
 | Windows Minecraft Gameplay | **PENDING** | No post-fix gameplay evidence yet. |
 | Concurrent 1/3/5/10 NPC MSPT | **PENDING** | No real Forge metrics yet. |
 
-**Windows retest** (from `C:\path\to\NPCortex`, after replacing with the patched repository):
+**Windows retest** (from `F:\AI\NPCortex`, after replacing with the patched repository):
 
 ```powershell
 .\scripts\test-c2-persistent-follow-c.ps1

@@ -225,6 +225,7 @@ final class C2AgentRuntime {
         C1IdentityData ids = C1IdentityData.get(server);
         C1IdentityData.Entry id = ids.find(name);
         if (id == null) return "Unknown NPC: " + name;
+        if (NativeEffectRuntime.pending(server, id.actorId())) return "C2 refused: a native world action owns this NPC";
         if (ACTIVE.containsKey(id.actorId())) return "C2 actor busy: " + name;
         if (C2FollowRuntime.hasActiveActor(id.actorId())) return "C2-F1 follow owns NPC; use c2 unfollow first";
         if (ACTIVE.size() >= MAX_ACTORS) return "C2 max 10 concurrent actors";

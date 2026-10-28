@@ -30,6 +30,9 @@ final class ManagerScreen extends Screen implements ManagerClient.Listener {
     private Component status = Component.empty();
     private int statusColor = 0xAAAAAA;
     private boolean needsRefresh = true;
+    /** Stage 4: a server-issued preview waiting for Confirm. The nonce is opaque; the client holds no coordinates. */
+    private String previewNpc = "";
+    private String previewNonce = "";
 
     ManagerScreen(Screen parent) {
         super(Component.translatable("npcortex.manager.title"));
@@ -72,12 +75,62 @@ final class ManagerScreen extends Screen implements ManagerClient.Listener {
             Button action = this.addRenderableWidget(Button.builder(Component.translatable(key), b -> open(row))
                     .bounds(this.width - 100, y + 4, 80, 20).build());
             action.active = pendingOp == 0 && (editable || registrable);
+            // Stage 4: no-op world action (changes nothing in the world) and the release of an unresolved one.
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.noop"),
+                    b -> noop(row, false)).bounds(this.width - 100 - 94, y + 4, 52, 20).build()).active = pendingOp == 0 && row.active();
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.noop.reconcile"),
+                    b -> noop(row, true)).bounds(this.width - 100 - 40, y + 4, 36, 20).build()).active = pendingOp == 0 && row.active();
+            // Stage 4 native world actions: the SERVER picks the target at Preview; Confirm sends only the nonce.
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.break"),
+                    b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_BREAK, "")).bounds(this.width - 100 - 124, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.pickup"),
+                    b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_PICKUP, "")).bounds(this.width - 100 - 156, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
         }
+        if (!previewNonce.isEmpty()) {
+            Row target = rows.stream().filter(r -> r.name().equalsIgnoreCase(previewNpc)).findFirst().orElse(null);
+            if (target != null) {
+                Button confirm = this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.confirm", previewNpc),
+                        b -> nativeRequest(target, ManagerProtocol.NATIVE_CONFIRM, previewNonce)).bounds(this.width / 2 - 104, bottom - 48, 100, 20).build());
+                Button cancel = this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.cancel"),
+                        b -> nativeRequest(target, ManagerProtocol.NATIVE_CANCEL, "")).bounds(this.width / 2 + 4, bottom - 48, 100, 20).build());
+                confirm.active = pendingOp == 0;
+                cancel.active = pendingOp == 0;
+            }
+        }
+    }
+
+    private String lastNativeNpc = "";
+
+    private void nativeRequest(Row row, int action, String nonce) {
+        pendingOp = ManagerClient.nextOpId();
+        sentAt = System.currentTimeMillis();
+        lastNativeNpc = row.name();
+        previewNpc = "";                      // a new request replaces any preview and a confirm is single-use
+        previewNonce = "";
+        if (!ManagerClient.send(new ManagerProtocol.NativeReq(pendingOp, row.name(), action, nonce))) {
+            pendingOp = 0;
+            setStatus(Component.translatable("npcortex.manager.status.notsent"), 0xFF5555);
+        } else {
+            setStatus(Component.translatable("npcortex.manager.status.loading"), 0xFFFF55);
+        }
+        rebuildWidgets();
     }
 
     private void open(Row row) {
         if (row.state() == RowState.OK) this.minecraft.setScreen(ProfileScreen.forEdit(this, row));
         else if (row.state() == RowState.NOT_REGISTERED) this.minecraft.setScreen(ProfileScreen.forRegister(this, row));
+    }
+
+    private void noop(Row row, boolean reconcile) {
+        pendingOp = ManagerClient.nextOpId();
+        sentAt = System.currentTimeMillis();
+        if (!ManagerClient.send(new ManagerProtocol.NoopReq(pendingOp, row.name(), reconcile))) {
+            pendingOp = 0;
+            setStatus(Component.translatable("npcortex.manager.status.notsent"), 0xFF5555);
+        } else {
+            setStatus(Component.translatable("npcortex.manager.status.loading"), 0xFFFF55);
+        }
+        rebuildWidgets();
     }
 
     private void refresh(boolean rebuild) {
@@ -109,6 +162,17 @@ final class ManagerScreen extends Screen implements ManagerClient.Listener {
         if (message instanceof ManagerProtocol.Denied denied) {
             rows = List.of();
             setStatus(Component.translatable("npcortex.manager.status.denied"), 0xFF5555);
+        } else if (message instanceof ManagerProtocol.NativeRep rep) {
+            setStatus(Component.literal("[" + rep.status() + "] " + rep.message()),
+                    rep.status() == ManagerProtocol.Status.OK ? 0x55FF55 : 0xFFAA00);
+            if (!rep.nonce().isEmpty()) { previewNpc = lastNativeNpc; previewNonce = rep.nonce(); }
+            rebuildWidgets();
+            return;
+        } else if (message instanceof ManagerProtocol.OpRep rep && (rep.op() == ManagerProtocol.Op.NOOP || rep.op() == ManagerProtocol.Op.NATIVE)) {
+            setStatus(Component.literal("[" + rep.status() + "] " + rep.message()),
+                    rep.status() == ManagerProtocol.Status.OK ? 0x55FF55 : 0xFFAA00);
+            rebuildWidgets();
+            return;
         } else if (message instanceof ManagerProtocol.ListRep list) {
             rows = new ArrayList<>(list.rows());
             page = Math.min(page, Math.max(0, (rows.size() - 1) / pageSize()));
@@ -140,10 +204,10 @@ final class ManagerScreen extends Screen implements ManagerClient.Listener {
         for (int i = start; i < Math.min(rows.size(), start + pageSize()); i++) {
             Row row = rows.get(i);
             int y = top + (i - start) * ROW_HEIGHT;
-            g.fill(20, y, this.width - 108, y + ROW_HEIGHT - 4, 0x55000000);
+            g.fill(20, y, this.width - 262, y + ROW_HEIGHT - 4, 0x55000000);
             g.drawString(this.font, row.name() + (row.active() ? "" : " (inactive)"), 26, y + 3, 0xFFFFFF);
             g.drawString(this.font, stateText(row), 26, y + 14, stateColor(row.state()));
-            String detail = this.font.plainSubstrByWidth(row.mode() + " | " + row.dimension() + " | " + row.detail(), this.width - 140);
+            String detail = this.font.plainSubstrByWidth(row.mode() + " | " + row.dimension() + " | " + row.detail(), this.width - 296);
             g.drawString(this.font, detail, 26, y + 24 - 2, 0x888888);
         }
         if (rows.size() > pageSize())

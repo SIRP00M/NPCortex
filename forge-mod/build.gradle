@@ -24,6 +24,16 @@ minecraft {
             args '--nogui'
             mods { npcortex { source sourceSets.main } }
         }
+        // Stage 4 Option D (G0): headless Forge GameTest against a real ServerLevel and the real custom avatar. The test
+        // classes live in src/test (never in the distributable jar); `gradlew runGameTestServer` is explicit, not part of `build`.
+        gameTestServer {
+            workingDirectory project.file('run-gametest')
+            property 'forge.logging.console.level', 'info'
+            // `-PgametestNamespace=npcortexreal` selects the tests that need the REAL Python backend (scripts/test-native-real-backend.ps1
+            // starts it on a temporary database). The default namespace runs against the scripted in-process ledger.
+            property 'forge.enabledGameTestNamespaces', (project.findProperty('gametestNamespace') ?: 'npcortex').toString()
+            mods { npcortex { source sourceSets.main; source sourceSets.test } }
+        }
     }
 }
 

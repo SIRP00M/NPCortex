@@ -5,7 +5,7 @@
 ## Build and automated tests (PowerShell)
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c2-f2-fix1-continuous.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

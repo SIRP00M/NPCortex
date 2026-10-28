@@ -1,0 +1,173 @@
+{
+  "happy": {
+    "reserve": {
+      "schema_version": 1,
+      "task_id": "a964c850-3efc-4627-bbea-bb81a9211e03",
+      "request_id": "938cce02-5d58-4617-8b2b-ab80b9daead8",
+      "attempt_id": "03696084-9bf4-43a5-9134-3a35b1c73a6a",
+      "world_id": "d25b3fd7-8d23-48ce-9a01-874a31ba1de6",
+      "actor_id": "4fa02e1e-25fe-4083-9703-91e4487f6e6b",
+      "profile_id": "fb3d4dca-eb9c-4930-bba0-6f5b747bec51",
+      "session_id": "e6476c47-ad65-4588-bd29-00bd8fb8eb52",
+      "requester_id": "e34c7e21-a317-4ec5-926a-12fa7026a23f",
+      "dimension_id": "minecraft:overworld",
+      "action_kind": "noop",
+      "origin": "MANAGER_PACKET",
+      "authorization": {
+        "decision": "ALLOW",
+        "entry_id": "t",
+        "policy_sha256": "e9699fe8150b3c3e6f4c3430998acf0a28f44c102adc8f994eb88bd1910a3e17"
+      }
+    },
+    "start": {
+      "task_id": "a964c850-3efc-4627-bbea-bb81a9211e03",
+      "attempt_id": "03696084-9bf4-43a5-9134-3a35b1c73a6a",
+      "world_id": "d25b3fd7-8d23-48ce-9a01-874a31ba1de6",
+      "actor_id": "4fa02e1e-25fe-4083-9703-91e4487f6e6b",
+      "session_id": "e6476c47-ad65-4588-bd29-00bd8fb8eb52",
+      "requester_id": "e34c7e21-a317-4ec5-926a-12fa7026a23f"
+    },
+    "finalize": {
+      "task_id": "a964c850-3efc-4627-bbea-bb81a9211e03",
+      "attempt_id": "03696084-9bf4-43a5-9134-3a35b1c73a6a",
+      "world_id": "d25b3fd7-8d23-48ce-9a01-874a31ba1de6",
+      "actor_id": "4fa02e1e-25fe-4083-9703-91e4487f6e6b",
+      "session_id": "e6476c47-ad65-4588-bd29-00bd8fb8eb52",
+      "schema_version": 1,
+      "kind": "world_effect_receipt",
+      "result": "NO_EFFECT",
+      "reason": "",
+      "server_tick": 1000,
+      "executed": true,
+      "pre_hash": "a4f9ae3763eb477590e3fa0a3f4a36752ba3730d2dfdea7b594bde164065f67d",
+      "post_hash": "a4f9ae3763eb477590e3fa0a3f4a36752ba3730d2dfdea7b594bde164065f67d",
+      "world_effects": false
+    }
+  },
+  "cancelled": {
+    "reserve": {
+      "schema_version": 1,
+      "task_id": "e009abba-da30-42af-9fec-bb365a4f4225",
+      "request_id": "0cb3d87f-2cfd-4a3f-b827-fc0c85934409",
+      "attempt_id": "97e8f536-0582-4a6f-ab60-730cf60479f1",
+      "world_id": "b1110104-38c0-4aaf-b45b-dae5933f542d",
+      "actor_id": "77cadcd3-a03c-42b0-9eaf-1a5539a8a9a2",
+      "profile_id": "21bdffe2-06d6-4cd4-b749-34a1ae3d9c9f",
+      "session_id": "82a27071-b64d-4fc3-96a1-a7fab39cf4ed",
+      "requester_id": "1880a58e-706a-45d0-aa8d-e93954767b2c",
+      "dimension_id": "minecraft:overworld",
+      "action_kind": "noop",
+      "origin": "MANAGER_PACKET",
+      "authorization": {
+        "decision": "ALLOW",
+        "entry_id": "t",
+        "policy_sha256": "f52404c3c70bc4b969a57d17804c7458196a13cedad5e3bc4adf0fbdd37a01d8"
+      }
+    },
+    "cancel": {
+      "task_id": "e009abba-da30-42af-9fec-bb365a4f4225",
+      "attempt_id": "97e8f536-0582-4a6f-ab60-730cf60479f1",
+      "world_id": "b1110104-38c0-4aaf-b45b-dae5933f542d",
+      "actor_id": "77cadcd3-a03c-42b0-9eaf-1a5539a8a9a2",
+      "session_id": "82a27071-b64d-4fc3-96a1-a7fab39cf4ed",
+      "requester_id": "1880a58e-706a-45d0-aa8d-e93954767b2c",
+      "reason": "REQUESTER_GONE"
+    }
+  },
+  "failed": {
+    "reserve": {
+      "schema_version": 1,
+      "task_id": "81dacfed-560a-41e2-ab2b-a37136984499",
+      "request_id": "a3ea60d1-bca7-43b1-8b69-fe08dd9bb9d5",
+      "attempt_id": "46e16dc9-f5f9-49ad-9f5a-c5e9b72ea628",
+      "world_id": "e38da586-b9e8-46b1-996a-d6abb4fc04d5",
+      "actor_id": "9adc1189-3577-4c38-a299-019a845b6a38",
+      "profile_id": "976e2e93-a00e-4f86-9638-dc9643a0987d",
+      "session_id": "26b65909-5d59-493c-b9aa-c3a88a0a925a",
+      "requester_id": "975f90b3-f577-464f-a4eb-544e5ce0252d",
+      "dimension_id": "minecraft:overworld",
+      "action_kind": "noop",
+      "origin": "MANAGER_PACKET",
+      "authorization": {
+        "decision": "ALLOW",
+        "entry_id": "t",
+        "policy_sha256": "a167ba81a8238524a6c28083bdf8838f89caf3b5311c03b961e4e4ae966f211f"
+      }
+    },
+    "start": {
+      "task_id": "81dacfed-560a-41e2-ab2b-a37136984499",
+      "attempt_id": "46e16dc9-f5f9-49ad-9f5a-c5e9b72ea628",
+      "world_id": "e38da586-b9e8-46b1-996a-d6abb4fc04d5",
+      "actor_id": "9adc1189-3577-4c38-a299-019a845b6a38",
+      "session_id": "26b65909-5d59-493c-b9aa-c3a88a0a925a",
+      "requester_id": "975f90b3-f577-464f-a4eb-544e5ce0252d"
+    },
+    "finalize": {
+      "task_id": "81dacfed-560a-41e2-ab2b-a37136984499",
+      "attempt_id": "46e16dc9-f5f9-49ad-9f5a-c5e9b72ea628",
+      "world_id": "e38da586-b9e8-46b1-996a-d6abb4fc04d5",
+      "actor_id": "9adc1189-3577-4c38-a299-019a845b6a38",
+      "session_id": "26b65909-5d59-493c-b9aa-c3a88a0a925a",
+      "schema_version": 1,
+      "kind": "world_effect_receipt",
+      "result": "PRECONDITION_FAILED",
+      "reason": "PRECONDITION_FAILED",
+      "server_tick": 1000,
+      "executed": false,
+      "pre_hash": "",
+      "post_hash": "",
+      "world_effects": false
+    }
+  },
+  "hold": {
+    "reserve": {
+      "schema_version": 1,
+      "task_id": "c07c8c4a-2d71-438b-a98e-a9862f6daf93",
+      "request_id": "2a05876d-a643-4563-90b7-c0a6bf2c3f90",
+      "attempt_id": "b344d6d4-33cd-4123-a256-ca2a7d90fda5",
+      "world_id": "05f7fc3c-4674-4de7-82b9-1dedee283042",
+      "actor_id": "fe710609-7882-4b33-bbfa-910e1acd6978",
+      "profile_id": "0ce5bca3-35bb-4be1-9d94-788dcdfe371f",
+      "session_id": "5688ab1c-3dfb-435b-a6f6-f9f71e34782d",
+      "requester_id": "d5f39a22-5ee1-44f4-9641-285250d13ee9",
+      "dimension_id": "minecraft:overworld",
+      "action_kind": "noop",
+      "origin": "MANAGER_PACKET",
+      "authorization": {
+        "decision": "ALLOW",
+        "entry_id": "t",
+        "policy_sha256": "1d3758c16ec4c1ac3894787053b6f790992a90d9c68cfac50bf5b6bd690e795d"
+      }
+    },
+    "start": {
+      "task_id": "c07c8c4a-2d71-438b-a98e-a9862f6daf93",
+      "attempt_id": "b344d6d4-33cd-4123-a256-ca2a7d90fda5",
+      "world_id": "05f7fc3c-4674-4de7-82b9-1dedee283042",
+      "actor_id": "fe710609-7882-4b33-bbfa-910e1acd6978",
+      "session_id": "5688ab1c-3dfb-435b-a6f6-f9f71e34782d",
+      "requester_id": "d5f39a22-5ee1-44f4-9641-285250d13ee9"
+    },
+    "hold": {
+      "task_id": "c07c8c4a-2d71-438b-a98e-a9862f6daf93",
+      "attempt_id": "b344d6d4-33cd-4123-a256-ca2a7d90fda5",
+      "world_id": "05f7fc3c-4674-4de7-82b9-1dedee283042",
+      "actor_id": "fe710609-7882-4b33-bbfa-910e1acd6978",
+      "session_id": "5688ab1c-3dfb-435b-a6f6-f9f71e34782d",
+      "requester_id": "d5f39a22-5ee1-44f4-9641-285250d13ee9",
+      "reason": "FIXTURE_CHANGED"
+    }
+  },
+  "reconcile": {
+    "task_id": "506e45f6-dd1e-4b47-b26c-d7f56a22679c",
+    "attempt_id": "7385563e-0e8f-45bf-ace9-5adc89ff0403",
+    "world_id": "bc33a39e-d920-4351-a255-6cb13be2871d",
+    "actor_id": "6dbf198b-59da-4269-8651-55f1d3a8abb3",
+    "session_id": "8a2f5c81-48c5-46e0-846e-3402160a5827",
+    "requester_id": "69f808d7-6441-4a5e-a6bb-b70a2ca41289",
+    "fresh_hash": "a4f9ae3763eb477590e3fa0a3f4a36752ba3730d2dfdea7b594bde164065f67d"
+  },
+  "status": {
+    "world_id": "bc33a39e-d920-4351-a255-6cb13be2871d",
+    "actor_id": "6dbf198b-59da-4269-8651-55f1d3a8abb3"
+  }
+}

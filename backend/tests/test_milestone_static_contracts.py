@@ -135,8 +135,14 @@ class Rev6Contract(unittest.TestCase):
         d1 = [line for line in lines if "C2Diagnostics." in line]
         self.assertEqual(len(d1), 2, "exactly two D1 statements")
         self.assertTrue(all(line.strip().startswith('LOG.info("{}",C2Diagnostics.') for line in d1))
-        without = "\n".join(line for line in lines if "C2Diagnostics." not in line)
-        self.assertEqual(hashlib.sha256(without.encode("utf-8")).hexdigest(), self.C2_BASELINE_SHA256, "C2AgentRuntime changed beyond the two D1 log lines")
+        # Stage 4 Option D (Owner-approved): exactly ONE admission-guard line was added to startInternal. Everything else is still the
+        # Rev5 baseline: remove the two D1 log lines and that one guard line and the hash below must be unchanged.
+        guard = [line for line in lines if "NativeEffectRuntime." in line]
+        self.assertEqual([line.strip() for line in guard],
+                         ['if (NativeEffectRuntime.pending(server, id.actorId())) return "C2 refused: a native world action owns this NPC";'],
+                         "exactly one native admission guard in C2AgentRuntime")
+        without = "\n".join(line for line in lines if "C2Diagnostics." not in line and "NativeEffectRuntime." not in line)
+        self.assertEqual(hashlib.sha256(without.encode("utf-8")).hexdigest(), self.C2_BASELINE_SHA256, "C2AgentRuntime changed beyond the two D1 log lines and the one native guard")
         # D1-B: inside cancel(), after the active run is resolved and BEFORE any mutation
         cancel = source[source.index("static String cancel(MinecraftServer server, String name) {"):]
         cancel = cancel[:cancel.index("\n    }\n")]
@@ -341,10 +347,16 @@ class Stage4ReadOnlyFoundationContract(unittest.TestCase):
         registry = text(JAVA / "C2SkillRegistry.java")
         self.assertIn("only move_to is advertised", registry)
         # The only Forge mentions are the read-only F2 evidence policy and the sampler that asks it; neither can act.
+        # Stage 4 Option D (Owner-approved) added the NATIVE break_block / pickup_item path: its two pure files name the actions.
+        # place_block, use_item and equip_item still appear in NO Forge file except the read-only F2 evidence policy and sampler,
+        # and those two read-only files still cannot act.
         mentions = sorted(path.name for path in JAVA.rglob("*.java")
                           if any(f'"{name}"' in text(path) for name in ("break_block", "place_block", "pickup_item")))
-        self.assertEqual(mentions, ["CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java"])
-        for name in mentions:
+        self.assertEqual(mentions, ["CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java", "NativeActionPolicy.java", "NativeEffectFlow.java"])
+        for name in ("place_block", "use_item", "equip_item"):
+            self.assertEqual(sorted(p.name for p in JAVA.rglob("*.java") if f'"{name}"' in text(p)),
+                             ["CPlusF2ReadOnlyPolicy.java"] if name == "place_block" else [], name)
+        for name in ("CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java"):
             code = text(next(JAVA.rglob(name)))
             for api in ("setBlock", "destroyBlock", "removeBlock", "useItemOn", "addFreshEntity", "gameMode", "playerTouch"):
                 self.assertNotIn(api, code, f"{name} must not call {api}")
@@ -362,6 +374,270 @@ class Stage4ReadOnlyFoundationContract(unittest.TestCase):
         contract = text(ROOT / "docs" / "contracts" / "world_observation_v1.json")
         for outcome in ("OK", "PARTIAL_UNLOADED", "PARTIAL_BUDGET", "CANCELLED", "REJECTED"):
             self.assertIn(f'"{outcome}"', contract)
+
+
+class Stage4NoopFoundationContract(unittest.TestCase):
+    """Stage 4 mutation-safety foundation: a NO-OP world action only. Source-shape pins for what the Java and Python
+    behavioural tests cannot see: no native mutation API anywhere in the new path, authority only from the packet sender."""
+    NEW_JAVA = ("WorldActionPolicy.java", "WorldEffectFlow.java", "WorldEffectRuntime.java")
+    MUTATION_APIS = ("setBlock", "destroyBlock", "removeBlock", "setBlockAndUpdate", "useItemOn", "addFreshEntity", "setChunkForced",
+                     "forceChunk", "addTicket", ".getChunk(", "level.getBlockState", "gameMode", "playerTouch", "setItem(",
+                     "addItem", "removeItem", "setItemSlot", "kill(", "discard(", "teleportTo", "setDeltaMovement", "hurt(")
+    BACKEND = ROOT / "backend" / "src" / "npcortex_backend"
+
+    @staticmethod
+    def code(path):
+        return re.sub(r"/\*.*?\*/|//[^\n]*", "", text(path), flags=re.S)
+
+    def test_new_forge_path_uses_no_mutating_or_chunk_loading_api(self):
+        for name in self.NEW_JAVA:
+            code = self.code(JAVA / name)
+            for forbidden in self.MUTATION_APIS:
+                self.assertNotIn(forbidden, code, f"{name} must not use {forbidden}")
+        runtime = self.code(JAVA / "WorldEffectRuntime.java")
+        self.assertIn("getChunkNow", runtime)
+        self.assertNotIn("getBlockState(at", runtime)
+
+    def test_pure_core_has_no_minecraft_dependency(self):
+        for name in ("WorldActionPolicy.java", "WorldEffectFlow.java"):
+            self.assertNotIn("net.minecraft", text(JAVA / name), f"{name} must stay pure Java")
+
+    def test_only_the_noop_action_exists_anywhere_in_the_new_path(self):
+        self.assertIn('Set.of("noop")', text(JAVA / "WorldActionPolicy.java"))
+        ledger = text(self.BACKEND / "cplus_we_ledger.py")
+        self.assertIn("CHECK (action_kind IN ('noop'))", ledger)
+        self.assertIn("ACTIONS = ('noop',)", ledger)
+        for name in ("break_block", "place_block", "pickup_item", "use_item", "equip_item"):
+            self.assertNotIn(name, ledger)
+            for java in self.NEW_JAVA:
+                self.assertNotIn(f'"{name}"', text(JAVA / java))
+
+    def test_requester_is_the_authenticated_packet_sender_only(self):
+        proto = text(JAVA / "ManagerProtocol.java")
+        self.assertIn("record NoopReq(long opId, String name, boolean reconcile) implements ToServer {}", proto)
+        core = text(JAVA / "ManagerCore.java")
+        self.assertIn("run(player, key, m, noop(player, m))", core)
+        self.assertIn("host.worldAction(player, request.name(), request.reconcile())", core)
+        self.assertIn("current.handle(sender.getUUID(), message)", text(JAVA / "CharacterManagerService.java"))
+        self.assertIn("context.getSender()", text(JAVA / "ManagerNetwork.java"))
+        flow = self.code(JAVA / "WorldEffectFlow.java")
+        self.assertNotIn("getPlayer()", flow)
+        self.assertNotIn("hasPermission", flow)
+        self.assertNotIn("CommandSourceStack", self.code(JAVA / "WorldEffectRuntime.java"))
+
+    def test_no_command_or_datapack_entry_point_reaches_the_world_action(self):
+        referencing = sorted(p.name for p in JAVA.rglob("*.java")
+                             if re.search(r"\bWorldEffect(Runtime|Flow)\b", text(p)) and not p.name.startswith("WorldEffect"))
+        # Stage 4 Option D: the native runtime only READS the no-op pending flag (an ownership check); it never starts a no-op action.
+        self.assertEqual(referencing, ["CPlusE3G2Runtime.java", "CharacterManagerService.java", "ManagerCore.java", "NPCortex.java", "NativeEffectRuntime.java"])
+        self.assertEqual(re.findall(r"WorldEffect(?:Runtime|Flow)\.\w+", self.code(JAVA / "NativeEffectRuntime.java")), ["WorldEffectRuntime.pending"])
+        # E3 G2 only READS the pending flag; NPCortex only registers the stop hook; the packet path is the sole starter.
+        self.assertIn("WorldEffectRuntime.pending(server,actor)", text(JAVA / "CPlusE3G2Runtime.java"))
+        self.assertNotIn("WorldEffectRuntime.request", text(JAVA / "CPlusE3G2Runtime.java"))
+        self.assertNotIn("WorldEffectRuntime.request", text(JAVA / "NPCortex.java"))
+
+    def test_policy_lives_in_an_owner_controlled_config_file_not_in_a_database_or_datapack(self):
+        runtime = text(JAVA / "WorldEffectRuntime.java")
+        self.assertIn('POLICY_FILE = "npcortex-world-actions.json"', runtime)
+        self.assertIn("FMLPaths.CONFIGDIR", runtime)
+        self.assertIn("LinkOption.NOFOLLOW_LINKS", runtime)
+
+    def test_ledger_is_additive_and_never_rewrites_other_stores(self):
+        ledger = text(self.BACKEND / "cplus_we_ledger.py")
+        sql = re.sub(r'"""[\s\S]*?"""', "", ledger)
+        for forbidden in ("ALTER TABLE", "DROP ", "DELETE FROM", "UPDATE cplus_e3", "UPDATE cplus_m04", "UPDATE cplus_e1",
+                          "INSERT INTO cplus_e3", "INSERT INTO cplus_m04", "user_version"):
+            self.assertNotIn(forbidden, sql)
+        for table in re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", ledger):
+            self.assertTrue(table.startswith("cplus_we_"), table)
+
+    def test_cross_store_fence_is_checked_in_both_directions_inside_the_write_transaction(self):
+        g2 = text(self.BACKEND / "cplus_e3_g2_motion.py")
+        self.assertIn("cplus_we_runs", g2)
+        self.assertIn("cplus_m04_runs", g2)
+        self.assertLess(g2.index("BEGIN IMMEDIATE"), g2.index("cplus_we_runs"))
+        self.assertIn("cplus_we_runs", text(self.BACKEND / "cplus_m04_store.py"))
+        ledger = text(self.BACKEND / "cplus_we_ledger.py")
+        for table in ("cplus_e3_g2_moves", "cplus_e1_tasks", "cplus_m04_runs"):
+            self.assertIn(table, ledger)
+        self.assertGreaterEqual(ledger.count("BEGIN IMMEDIATE"), 7)
+
+    def test_backend_routes_are_token_protected_and_grant_no_authority(self):
+        server = text(self.BACKEND / "server.py")
+        self.assertRegex(server, r"if self\.path in WE_ROUTES:\s+if not self\._token_ok\(\):")
+        self.assertIn("WE_ROUTES", server)
+        ledger = text(self.BACKEND / "cplus_we_ledger.py")
+        self.assertIn("the backend never grants authority", ledger)
+        self.assertNotIn("hasPermission", ledger)
+
+    def test_noop_success_is_never_reported_as_cancelled(self):
+        flow = text(JAVA / "WorldEffectFlow.java")
+        self.assertIn('"No-op complete: NO_EFFECT_VERIFIED', flow)
+        self.assertIn('receipt.addProperty("result", "NO_EFFECT")', flow)
+        ledger = text(self.BACKEND / "cplus_we_ledger.py")
+        for state in ("NO_EFFECT_VERIFIED", "FAILED_NO_EFFECT", "CANCELLED_NO_EFFECT", "HOLD_IN_DOUBT"):
+            self.assertIn(f"'{state}'", ledger)
+
+
+class Stage4NativeEffectContract(unittest.TestCase):
+    """Stage 4 Option D: native break_block / pickup_item. Source-shape pins for what the Java, GameTest and Python behavioural
+    tests cannot see: one executor, no marker no call, no server-thread I/O, authority only from the packet sender, accepted
+    persistence contracts untouched, nothing but break and pickup."""
+    BACKEND = ROOT / "backend" / "src" / "npcortex_backend"
+    PURE = ("NativeEffectFlow.java", "NativeActionPolicy.java", "MiningProgress.java")
+    # LF-normalised sha256 of accepted files this milestone must NOT modify (C1 inventory persistence contract, outbox, identity).
+    UNTOUCHED = {
+        "C1InventoryJournal.java": "9373b3dd1e5a7d901c06d5eb0f3c022a75b841e0f35177280196ba51587c4cc3",
+        "C1InventoryData.java": "4696a20f7ce0fa0a9808c4361b90946065be6a4606969c893a17ddbf861c670d",
+        "CPlusOutbox.java": "824bbd916f1e516898fe339d1b1a80ae1780f1b1a31ba85a874b18e7e9f58eff",
+        "C1IdentityData.java": "3184a6a8987ce6303478b0c21f0f26d0fb9927954c5b8ed1b8051212de731b2d",
+    }
+
+    @staticmethod
+    def code(path):
+        return re.sub(r"/\*.*?\*/|//[^\n]*", "", text(path), flags=re.S)
+
+    def test_accepted_persistence_contracts_are_byte_identical(self):
+        import hashlib
+        for name, digest in self.UNTOUCHED.items():
+            body = text(JAVA / name).replace("\r\n", "\n")
+            self.assertEqual(hashlib.sha256(body.encode("utf-8")).hexdigest(), digest, f"{name} is an accepted contract and must not change")
+
+    def test_pure_core_has_no_minecraft_or_io_dependency(self):
+        for name in self.PURE:
+            code = self.code(JAVA / name)
+            self.assertNotIn("net.minecraft", code, f"{name} must stay pure Java")
+            for forbidden in ("java.nio.file", "java.net.", "HttpClient", "Thread.sleep", "synchronized", ".join()", ".get()", ".getNow(", "Files."):
+                self.assertNotIn(forbidden, code, f"{name} must not use {forbidden}: no file, network or blocking wait on the server thread")
+
+    def test_the_native_calls_exist_exactly_once_and_only_in_the_runtime(self):
+        owners = {"destroyBlock(": [], "playerTouch(": []}
+        for path in JAVA.rglob("*.java"):
+            code = self.code(path)
+            for api in owners:
+                if api in code:
+                    owners[api].append(path.name)
+        self.assertEqual(owners, {"destroyBlock(": ["NativeEffectRuntime.java"], "playerTouch(": ["NativeEffectRuntime.java"]})
+        runtime = self.code(JAVA / "NativeEffectRuntime.java")
+        self.assertEqual(runtime.count(".destroyBlock("), 1)
+        self.assertEqual(runtime.count(".playerTouch("), 1)
+        for forbidden in ("setBlock(", "removeBlock(", "useItemOn", "addFreshEntity", "setItemSlot", "equip"):
+            self.assertNotIn(forbidden, runtime, f"the native runtime has no {forbidden}: only break and pickup exist")
+        self.assertNotRegex(runtime, r"\.(?:place|use|useItem|placeBlock|startUsingItem)\(", "no place or use call: only break and pickup exist")
+
+    def test_no_marker_no_executor(self):
+        flow = self.code(JAVA / "NativeEffectFlow.java")
+        self.assertIn("private Started(UUID task)", flow)
+        self.assertEqual(flow.count("new Started("), 1, "the only factory of the proof token")
+        self.assertRegex(flow, r"static Started startAck\(JsonObject reply, JsonObject sent, UUID task\)")
+        self.assertIn("BreakOutcome executeBreak(Started marker,", flow)
+        self.assertIn("PickupOutcome executePickup(Started marker,", flow)
+        runtime = self.code(JAVA / "NativeEffectRuntime.java")
+        self.assertEqual(runtime.count('if (marker == null) throw new IllegalStateException("no durable EXECUTION_STARTED marker");'), 2)
+        # the executor is reached from exactly one place per action, after the final precondition, inside the START reply handler
+        self.assertEqual(flow.count("env.executeBreak("), 1)
+        self.assertEqual(flow.count("env.executePickup("), 1)
+        self.assertLess(flow.index("String why = finalPrecondition(a);"), flow.index("finishBreak(a, marker)"))
+        self.assertIn("if (a.abort || env.tick() - a.startRequestedTick > START_WAIT_TICKS)", flow)
+
+    def test_the_server_thread_does_no_file_or_network_io(self):
+        runtime = self.code(JAVA / "NativeEffectRuntime.java")
+        poller = runtime[runtime.index("private static final class PolicyPoller"):runtime.index("private static final class ForgeEnv")]
+        outside_poller = runtime.replace(poller, "")
+        self.assertTrue("Files." not in outside_poller, "the policy file is read only by the background poller")
+        self.assertEqual(outside_poller.count("CPlusLocalAuth.readToken()"), 1)
+        send = outside_poller[outside_poller.index("private String send("):]
+        self.assertLess(send.index("CPlusLocalAuth.readToken()"), send.index("}"), "the token file is read inside the worker-only send()")
+        self.assertTrue("CompletableFuture.supplyAsync(" in outside_poller)
+        scanned = outside_poller.replace("NPCortexConfig.BACKEND_URL.get()", "")           # a config value, not a future
+        for forbidden in (".join()", ".get()", ".getNow(", "Thread.sleep", ".await("):
+            self.assertTrue(forbidden not in scanned, f"NativeEffectRuntime must not use {forbidden}")
+        self.assertTrue("server.execute(task)" in runtime)
+
+    def test_native_actions_start_only_from_the_authenticated_manager_packet(self):
+        referencing = sorted(p.name for p in JAVA.rglob("*.java")
+                             if re.search(r"NativeEffectRuntime\.(preview|confirm|cancel|reconcile)\(", text(p)))
+        self.assertEqual(referencing, ["CharacterManagerService.java"])
+        proto = text(JAVA / "ManagerProtocol.java")
+        self.assertIn("record NativeReq(long opId, String name, int action, String nonce) implements ToServer {}", proto)
+        core = text(JAVA / "ManagerCore.java")
+        self.assertIn("run(player, key, m, nativeAction(player, m))", core)
+        self.assertIn("host.nativeAction(player, request.name(), request.action(), request.nonce())", core)
+        flow = self.code(JAVA / "NativeEffectFlow.java")
+        for forbidden in ("getPlayer()", "hasPermission", "CommandSourceStack"):
+            self.assertNotIn(forbidden, flow)
+        self.assertIn("Preview pv = previews.remove(previewKey(requester, npcName));", flow)
+        # the backend can record and refuse; no backend reply is ever a command to Forge
+        server = text(self.BACKEND / "server.py")
+        self.assertRegex(server, r"if self\.path in WN_ROUTES:\s+if not self\._token_ok\(\):")
+        store = text(self.BACKEND / "cplus_wn_store.py")
+        self.assertIn("the backend never grants authority", store)
+
+    def test_reverse_guards_are_in_place_in_the_accepted_systems(self):
+        expect = {
+            "C1P1InventoryRuntime.java": "NativeEffectRuntime.pendingProfile(server, avatar.getUUID())",
+            "C1P1MotionRuntime.java": "NativeEffectRuntime.pendingProfile(server, avatar.getUUID())",
+            "C2FollowRuntime.java": "NativeEffectRuntime.pending(server,id.actorId())",
+            "C2AgentRuntime.java": "NativeEffectRuntime.pending(server, id.actorId())",
+            "CPlusE3G2Runtime.java": "NativeEffectRuntime.pending(server,actor)",
+            "WorldEffectRuntime.java": "NativeEffectRuntime.pending(server, a.actorId())",
+        }
+        for name, needle in expect.items():
+            self.assertEqual(text(JAVA / name).count(needle), 1, f"{name}: one native guard")
+        self.assertIn("WorldEffectRuntime.pending(server, a.actorId())", text(JAVA / "NativeEffectRuntime.java"))
+
+    def test_only_break_and_pickup_exist(self):
+        self.assertIn('ACTIONS = Set.of("break_block", "pickup_item")', text(JAVA / "NativeActionPolicy.java"))
+        store = text(self.BACKEND / "cplus_wn_store.py")
+        self.assertIn("ACTIONS = ('break_block', 'pickup_item')", store)
+        self.assertIn("CHECK (action_kind IN ('break_block','pickup_item'))", store)
+        for name in ("place_block", "use_item", "equip_item", "use_block"):
+            self.assertNotIn(name, store)
+            for java in self.PURE + ("NativeEffectRuntime.java",):
+                self.assertNotIn(f'"{name}"', text(JAVA / java))
+        self.assertIn("CHECK (action_kind IN ('noop'))", text(self.BACKEND / "cplus_we_ledger.py"))     # the accepted no-op table is untouched
+
+    def test_store_is_additive_and_atomic(self):
+        store = text(self.BACKEND / "cplus_wn_store.py")
+        sql = re.sub(r'"""[\s\S]*?"""', "", store)
+        for forbidden in ("ALTER TABLE", "DROP ", "DELETE FROM", "UPDATE cplus_e3", "UPDATE cplus_m04", "UPDATE cplus_e1", "UPDATE cplus_we",
+                          "INSERT INTO cplus_e3", "INSERT INTO cplus_m04", "INSERT INTO cplus_we", "user_version"):
+            self.assertNotIn(forbidden, sql)
+        for table in re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", store):
+            self.assertTrue(table.startswith("cplus_wn_"), table)
+        for index in re.findall(r"CREATE (?:UNIQUE )?INDEX IF NOT EXISTS (\w+)", store):
+            self.assertTrue(index.startswith("cplus_wn_"), index)
+        self.assertGreaterEqual(store.count("BEGIN IMMEDIATE"), 12)
+        self.assertIn("WHERE kind='block' AND state IN ('ACTIVE','HELD')", store)
+        self.assertIn("WHERE kind='item' AND state IN ('ACTIVE','HELD')", store)
+        self.assertIn("WHERE state IN ('RESERVED','EXECUTING','HOLD_IN_DOUBT')", store)
+
+    def test_cross_store_fence_is_checked_in_both_directions(self):
+        for name in ("cplus_e3_g2_motion.py", "cplus_m04_store.py", "cplus_we_ledger.py"):
+            self.assertIn("cplus_wn_runs", text(self.BACKEND / name), name)
+        store = text(self.BACKEND / "cplus_wn_store.py")
+        for table in ("cplus_we_runs", "cplus_e3_g2_moves", "cplus_e1_tasks", "cplus_m04_runs"):
+            self.assertIn(table, store)
+
+    def test_transport_gives_critical_messages_their_own_bounded_lane(self):
+        runtime = self.code(JAVA / "NativeEffectRuntime.java")
+        self.assertIn("new ArrayBlockingQueue<>(NativeEffectFlow.SLOTS + 8)", runtime)
+        self.assertNotIn("LinkedBlockingQueue", runtime)
+        flow = self.code(JAVA / "NativeEffectFlow.java")
+        self.assertIn("static final int SLOTS = 16;", flow)
+        self.assertIn("slotsUsed >= SLOTS", flow)
+        self.assertEqual(flow.count("slotsUsed++"), 1)
+        transport = text(JAVA / "cplus" / "CPlusTransport.java")
+        for route in ("bind", "reserve", "start", "finalize", "cancel", "hold", "repair", "reconcile", "status", "active"):
+            self.assertIn(f'"/v1/cplus/wn/{route}"', transport)
+
+    def test_build_gains_a_gametest_run_and_no_dependency(self):
+        gradle = text(ROOT / "forge-mod" / "build.gradle")
+        self.assertIn("gameTestServer {", gradle)
+        self.assertIn("property 'forge.enabledGameTestNamespaces', (project.findProperty('gametestNamespace') ?: 'npcortex').toString()", gradle)
+        dependencies = gradle[gradle.index("dependencies {"):]
+        dependencies = dependencies[:dependencies.index("}")]
+        self.assertEqual(re.findall(r"^\s+(\w+)\s", dependencies, flags=re.M), ["minecraft"], "no new dependency")
 
 
 if __name__ == "__main__":

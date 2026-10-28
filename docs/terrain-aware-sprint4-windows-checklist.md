@@ -8,7 +8,7 @@ Forge Build or live Sprint 4 acceptance yet.
 ## 0. Run regression + start services
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-terrain-s4.ps1
 .\scripts\dev-forge.ps1 -Task build
 # In a SECOND PowerShell:

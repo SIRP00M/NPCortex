@@ -5,7 +5,7 @@ Windows Forge 1.20.1 / Java 17 — **Implementation candidate, not yet gameplay-
 ## Before launching
 
 1. Back up the last user-confirmed C2-P1-C Fix #1 repository and world.
-2. Use PowerShell at `C:\path\to\NPCortex` with Eclipse Temurin **17**.
+2. Use PowerShell at `F:\AI\NPCortex` with Eclipse Temurin **17**.
 3. Run `./scripts/test-c2-p1d.ps1` and `./scripts/dev-forge.ps1 -Task build`; both must pass before gameplay.
 4. Start `./scripts/dev-backend.ps1`, then in a different terminal `./scripts/dev-forge.ps1 -Task runClient`. Confirm Ollama/Qwen health.
 5. Use a flat, already loaded area **within radius 6 blocks** of Yui. Current P1-D handles only B1 cardinal, flat WALK edges. NPCs must be grounded. No new movement/terrain/portal/multi-chunk capability is included.

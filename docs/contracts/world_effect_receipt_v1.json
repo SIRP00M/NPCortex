@@ -1,0 +1,28 @@
+{
+  "contract": "Stage 4 world-effect receipt v1 (NO-OP milestone)",
+  "rules": [
+    "A receipt is a CLAIM by the Forge server about one attempt, recorded durably by the backend. It is not a permission and it does not prove a physical effect.",
+    "result NO_EFFECT: executed=true, reason empty, pre_hash == post_hash (lowercase sha256 of the observed fixtures), accepted only while the ledger row is EXECUTING (the durable EXECUTION_STARTED marker exists). Terminal state NO_EFFECT_VERIFIED.",
+    "result PRECONDITION_FAILED: executed=false, reason one of PRECONDITION_FAILED | START_ACK_LOST | REQUESTER_GONE, pre_hash and post_hash empty. Accepted from RESERVED or EXECUTING. Terminal state FAILED_NO_EFFECT.",
+    "world_effects is always false in this milestone. Different hashes are never a NO_EFFECT receipt: the Forge side reports HOLD instead and nothing is finalized.",
+    "A terminal is stored with the sha256 of the canonical receipt; a replay with the same bytes returns the stored result, any other evidence for a terminal task is refused."
+  ],
+  "required_keys": ["schema_version", "kind", "task_id", "attempt_id", "world_id", "actor_id", "session_id", "result", "reason", "server_tick", "executed", "pre_hash", "post_hash", "world_effects"],
+  "states": ["RESERVED", "EXECUTING", "NO_EFFECT_VERIFIED", "FAILED_NO_EFFECT", "CANCELLED_NO_EFFECT", "HOLD_IN_DOUBT", "RECONCILED_NO_EFFECT"],
+  "example": {
+    "schema_version": 1,
+    "kind": "world_effect_receipt",
+    "task_id": "00000000-0000-4000-8000-000000000001",
+    "attempt_id": "00000000-0000-4000-8000-000000000002",
+    "world_id": "00000000-0000-4000-8000-000000000003",
+    "actor_id": "00000000-0000-4000-8000-000000000004",
+    "session_id": "00000000-0000-4000-8000-000000000005",
+    "result": "NO_EFFECT",
+    "reason": "",
+    "server_tick": 12345,
+    "executed": true,
+    "pre_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "post_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "world_effects": false
+  }
+}

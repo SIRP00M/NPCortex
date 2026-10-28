@@ -28,6 +28,11 @@ final class CPlusF2WorldSampler {
     private static final int MAX_ENTITIES = 8;
     private static final int MAX_DROPS = 8;
     private static final Map<MinecraftServer, UUID> SESSIONS = new WeakHashMap<>();
+
+    /** The per-JVM-lifetime session identity used by every C+ snapshot. Server thread only (WeakHashMap, no locking). */
+    static UUID session(MinecraftServer server) {
+        return SESSIONS.computeIfAbsent(server, ignored -> UUID.randomUUID());
+    }
     private CPlusF2WorldSampler() {}
 
     static JsonObject capture(MinecraftServer server, String name) {

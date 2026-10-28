@@ -9,7 +9,7 @@
 In PowerShell, use the extracted repo root containing `scripts/`, `backend/`, `forge-mod/` (change the example path if needed):
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 java -version
 javac -version
 python --version
@@ -29,14 +29,14 @@ Capture exit code, complete failing test traceback and Gradle output. Do not rep
 Terminal 1 (backend):
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-backend.ps1
 ```
 
 Terminal 2 (Minecraft):
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

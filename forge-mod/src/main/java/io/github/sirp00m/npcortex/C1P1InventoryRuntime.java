@@ -41,6 +41,9 @@ final class C1P1InventoryRuntime {
                                    String fingerprint, Mutation mutation) {
         C1PlayerAvatar avatar = live(server, name);
         if (avatar == null) return "NPC not live: " + name;
+        // Stage 4: a native break/pickup attempt owns the inventory (tool, stacks, journal) until it is settled.
+        if (NativeEffectRuntime.pendingProfile(server, avatar.getUUID()))
+            return "BLOCKED: a native world action owns this NPC's inventory; wait for it or use Rec. in the Manager";
         C1InventoryData data = C1InventoryData.get(server);
         if (data.blockage(avatar.getUUID()) != null) {
             return "BLOCKED corrupt Inventory SavedData: " + data.blockage(avatar.getUUID());

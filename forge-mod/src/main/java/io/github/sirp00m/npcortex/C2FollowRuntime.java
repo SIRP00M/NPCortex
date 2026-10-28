@@ -72,6 +72,7 @@ final class C2FollowRuntime {
         if(server==null || !server.isSameThread()) return "C2-F1 requires server thread";
         C1IdentityData.Entry id=C1IdentityData.get(server).find(npcName);
         if(id==null) return "Unknown NPC: "+npcName;
+        if(NativeEffectRuntime.pending(server,id.actorId())) return "C2-F1 refused: a native world action owns this NPC";
         if(SESSIONS.containsKey(id.actorId())) return "C2-F1 already following; use c2 unfollow first";
         if(SESSIONS.size()>=C2FollowPolicy.MAX_ACTORS) return "C2-F1 maximum 10 following NPCs";
         if(C2AgentRuntime.hasActiveActor(id.actorId())) return "C2-F1 rejected: Navigate owns this NPC";

@@ -31,6 +31,12 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(CPlusEPreviewRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusECoordinatorRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(CPlusE3G2Runtime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(WorldEffectRuntime::onServerStopping);
+        // Stage 4 native break/pickup (Option D / Architecture B+)
+        MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onLevelSave);
+        MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onItemPickup);
         // TEMP Test-5 acceptance harness only.
         MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerStopping);

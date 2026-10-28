@@ -1,0 +1,868 @@
+{
+  "contract": "native_effect_wire_v1",
+  "break_verified": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "d84eedd9-3573-4443-8f8c-31d81e18144e",
+          "session_id": "2fe4ee3b-2b96-4d46-93eb-4bc88e176a41",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "85df14f2-0de9-4975-9153-0654d4ba172f",
+          "request_id": "c0ab90a2-5d01-4c81-b98f-42ec35f9a176",
+          "attempt_id": "32368d00-efe7-4c06-80b5-798f3cf7a599",
+          "world_id": "d84eedd9-3573-4443-8f8c-31d81e18144e",
+          "actor_id": "a395f624-1091-42d5-9dca-c45b58f9f4b9",
+          "profile_id": "e8b1ba06-6d6d-40d1-afda-038056206e44",
+          "session_id": "2fe4ee3b-2b96-4d46-93eb-4bc88e176a41",
+          "requester_id": "1ec9aeb9-65ad-41dd-97d0-b4523dba0e8b",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "break_block",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "8d886f1a84218be52203c7f6fc1b869fc6d66ef31b133856c54a94176316fb0b"
+          },
+          "target": {
+            "kind": "block",
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "block_id": "minecraft:oak_log",
+            "state_sha256": "962902d95a2a7dd291de0539c1053eb45ce00ed9f02774c1344908d3e75d29fb"
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "85df14f2-0de9-4975-9153-0654d4ba172f",
+          "attempt_id": "32368d00-efe7-4c06-80b5-798f3cf7a599",
+          "world_id": "d84eedd9-3573-4443-8f8c-31d81e18144e",
+          "actor_id": "a395f624-1091-42d5-9dca-c45b58f9f4b9",
+          "session_id": "2fe4ee3b-2b96-4d46-93eb-4bc88e176a41",
+          "requester_id": "1ec9aeb9-65ad-41dd-97d0-b4523dba0e8b"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "85df14f2-0de9-4975-9153-0654d4ba172f",
+          "attempt_id": "32368d00-efe7-4c06-80b5-798f3cf7a599",
+          "world_id": "d84eedd9-3573-4443-8f8c-31d81e18144e",
+          "actor_id": "a395f624-1091-42d5-9dca-c45b58f9f4b9",
+          "session_id": "2fe4ee3b-2b96-4d46-93eb-4bc88e176a41",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "5e17dfb7-58c8-4949-b714-37a0698f90b6",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "5e3f89d2a6d15a93b53b2a6110a31ddbe6303dcf8452a145de20b3a443262111"
+      }
+    ]
+  },
+  "break_hold_reconciled": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "49b7a43e-2316-4e62-9555-653158349806",
+          "request_id": "db0c58aa-ad39-4a4d-b17e-daf3a31d99c4",
+          "attempt_id": "51e2b89c-fd5e-4045-8ca6-cf4fed956340",
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "actor_id": "446346c0-6407-4554-80d1-f5748f123cee",
+          "profile_id": "c3c2793c-25a1-4daf-992d-3fe7fee9065e",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "requester_id": "9dba090f-faf3-47ce-b6ff-c3c7d16cf070",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "break_block",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "1f5d2559c69e065cafebf1dde980c480827594ef3881572b33badb85fbd6ba94"
+          },
+          "target": {
+            "kind": "block",
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "block_id": "minecraft:oak_log",
+            "state_sha256": "962902d95a2a7dd291de0539c1053eb45ce00ed9f02774c1344908d3e75d29fb"
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "49b7a43e-2316-4e62-9555-653158349806",
+          "attempt_id": "51e2b89c-fd5e-4045-8ca6-cf4fed956340",
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "actor_id": "446346c0-6407-4554-80d1-f5748f123cee",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "requester_id": "9dba090f-faf3-47ce-b6ff-c3c7d16cf070"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "hold",
+        "body": {
+          "task_id": "49b7a43e-2316-4e62-9555-653158349806",
+          "attempt_id": "51e2b89c-fd5e-4045-8ca6-cf4fed956340",
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "actor_id": "446346c0-6407-4554-80d1-f5748f123cee",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "requester_id": "9dba090f-faf3-47ce-b6ff-c3c7d16cf070",
+          "reason": "EXECUTOR_EXCEPTION",
+          "intended": {}
+        },
+        "reply_state": "HOLD_IN_DOUBT",
+        "digest": "e9b1b54b94f551e8d7b4c67d37ed8ea99164594101efcb529fddf83ce9d455fa"
+      },
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 1,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "active",
+        "body": {
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "actor_id": "446346c0-6407-4554-80d1-f5748f123cee",
+          "requester_id": "9dba090f-faf3-47ce-b6ff-c3c7d16cf070"
+        },
+        "reply_state": "HOLD_IN_DOUBT"
+      },
+      {
+        "route": "reconcile",
+        "body": {
+          "task_id": "49b7a43e-2316-4e62-9555-653158349806",
+          "attempt_id": "51e2b89c-fd5e-4045-8ca6-cf4fed956340",
+          "world_id": "8acb8ec7-2c6f-4086-a560-6146962ef760",
+          "actor_id": "446346c0-6407-4554-80d1-f5748f123cee",
+          "session_id": "2bbd740f-a367-4245-ac74-2a494582e32c",
+          "requester_id": "9dba090f-faf3-47ce-b6ff-c3c7d16cf070",
+          "evidence_class": "EFFECT_OBSERVED",
+          "observed": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "state_sha256": "d67e2e944994496c8d8ec76eed0cf9f09679448d584b532bebf941852a37f5ed"
+          }
+        },
+        "reply_state": "RECONCILED_EFFECT_OBSERVED",
+        "digest": "dfcb1b289c57a29102c11791e453b924f679099efcd41f245321ad125cbf9eee"
+      }
+    ]
+  },
+  "pickup_partial": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "640d57ca-80cf-4c33-a325-4f3f295561cc",
+          "session_id": "80e66dce-c258-433a-b734-0b7697100fbd",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "1add9d08-5e8c-489b-94c3-2f28d2262fc9",
+          "request_id": "966f174f-e9fa-4a49-8296-dd4959a50857",
+          "attempt_id": "5c0f0adf-0e09-435f-8aee-bfccef760311",
+          "world_id": "640d57ca-80cf-4c33-a325-4f3f295561cc",
+          "actor_id": "da824b41-c3d1-4454-9d35-e62de24bc09c",
+          "profile_id": "dd238a7d-2343-4d45-bb3a-407a301e4e02",
+          "session_id": "80e66dce-c258-433a-b734-0b7697100fbd",
+          "requester_id": "c68d78e4-4d46-4068-9ca3-a75e7aa13cd0",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "pickup_item",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "a7ea91bcc3657dcfa5442fc936a6877e297d43b7976ffc6112ba5c1dbfd120e3"
+          },
+          "target": {
+            "kind": "item",
+            "entity_uuid": "79991b88-df50-4115-b935-414f13086d32",
+            "item_key": "minecraft:oak_log",
+            "nbt_sha256": "31612b0997d65a3e2c535d5f995427a9df86bcf952f7e937f3e55e7c219bed59",
+            "count": 4,
+            "x": 5.5,
+            "y": 64.0,
+            "z": 5.5,
+            "pre_count": 2
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "1add9d08-5e8c-489b-94c3-2f28d2262fc9",
+          "attempt_id": "5c0f0adf-0e09-435f-8aee-bfccef760311",
+          "world_id": "640d57ca-80cf-4c33-a325-4f3f295561cc",
+          "actor_id": "da824b41-c3d1-4454-9d35-e62de24bc09c",
+          "session_id": "80e66dce-c258-433a-b734-0b7697100fbd",
+          "requester_id": "c68d78e4-4d46-4068-9ca3-a75e7aa13cd0"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "1add9d08-5e8c-489b-94c3-2f28d2262fc9",
+          "attempt_id": "5c0f0adf-0e09-435f-8aee-bfccef760311",
+          "world_id": "640d57ca-80cf-4c33-a325-4f3f295561cc",
+          "actor_id": "da824b41-c3d1-4454-9d35-e62de24bc09c",
+          "session_id": "80e66dce-c258-433a-b734-0b7697100fbd",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "pickup_item",
+          "result": "EFFECT_PARTIAL",
+          "reason": "",
+          "server_tick": 1000,
+          "executed": true,
+          "evidence": {
+            "entity_uuid": "79991b88-df50-4115-b935-414f13086d32",
+            "item_key": "minecraft:oak_log",
+            "entity_count_before": 4,
+            "entity_count_after": 2,
+            "delta": 2,
+            "event_count": 0,
+            "pre_count": 2,
+            "post_count": 4,
+            "journal": "COMMITTED"
+          }
+        },
+        "reply_state": "EFFECT_PARTIAL",
+        "digest": "db7523e8e44546545c9c5d5a33a6476ccf636ef2d55a19e1b3dc287afd3531fd"
+      }
+    ]
+  },
+  "pickup_journal_failed_repaired": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+          "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "fa8a4573-04c4-402a-bcff-5644a82ae37c",
+          "request_id": "9cb45efd-f9ad-41d5-ad0b-9d6cc8e5d792",
+          "attempt_id": "99a8c7c2-851c-4b44-82d1-ec6bf3d8d786",
+          "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+          "actor_id": "f29ef6d8-094f-4015-892b-9e047dfa07fc",
+          "profile_id": "f68f6cd4-c4bc-486f-8d07-107bd0cc1004",
+          "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+          "requester_id": "5f96c535-48bb-4e84-ace0-e5778290ef75",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "pickup_item",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "0cbfaf233de92897074fd7f71b9dcd366f2a9ec72c13a75b1c788035d5ac3d75"
+          },
+          "target": {
+            "kind": "item",
+            "entity_uuid": "79991b88-df50-4115-b935-414f13086d32",
+            "item_key": "minecraft:oak_log",
+            "nbt_sha256": "31612b0997d65a3e2c535d5f995427a9df86bcf952f7e937f3e55e7c219bed59",
+            "count": 4,
+            "x": 5.5,
+            "y": 64.0,
+            "z": 5.5,
+            "pre_count": 2
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "fa8a4573-04c4-402a-bcff-5644a82ae37c",
+          "attempt_id": "99a8c7c2-851c-4b44-82d1-ec6bf3d8d786",
+          "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+          "actor_id": "f29ef6d8-094f-4015-892b-9e047dfa07fc",
+          "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+          "requester_id": "5f96c535-48bb-4e84-ace0-e5778290ef75"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "hold",
+        "body": {
+          "task_id": "fa8a4573-04c4-402a-bcff-5644a82ae37c",
+          "attempt_id": "99a8c7c2-851c-4b44-82d1-ec6bf3d8d786",
+          "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+          "actor_id": "f29ef6d8-094f-4015-892b-9e047dfa07fc",
+          "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+          "requester_id": "5f96c535-48bb-4e84-ace0-e5778290ef75",
+          "reason": "INVENTORY_COMMIT_FAILED",
+          "intended": {
+            "task_id": "fa8a4573-04c4-402a-bcff-5644a82ae37c",
+            "attempt_id": "99a8c7c2-851c-4b44-82d1-ec6bf3d8d786",
+            "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+            "actor_id": "f29ef6d8-094f-4015-892b-9e047dfa07fc",
+            "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+            "schema_version": 1,
+            "kind": "native_effect_receipt",
+            "action_kind": "pickup_item",
+            "result": "EFFECT_VERIFIED",
+            "reason": "",
+            "server_tick": 1000,
+            "executed": true,
+            "evidence": {
+              "entity_uuid": "79991b88-df50-4115-b935-414f13086d32",
+              "item_key": "minecraft:oak_log",
+              "entity_count_before": 4,
+              "entity_count_after": 0,
+              "delta": 4,
+              "event_count": 4,
+              "pre_count": 2,
+              "post_count": 6,
+              "journal": "COMMITTED"
+            }
+          }
+        },
+        "reply_state": "HOLD_IN_DOUBT",
+        "digest": "346d2ced531ef26ea31f8af17d6697224739ad96d413a2c20657bb1f74a1950c",
+        "intended_digest": "21ef2b913b999cdc09dedf67ebd22dad8f24c8acc8ca120741c9ee5c4bf612e3"
+      },
+      {
+        "route": "repair",
+        "body": {
+          "task_id": "fa8a4573-04c4-402a-bcff-5644a82ae37c",
+          "attempt_id": "99a8c7c2-851c-4b44-82d1-ec6bf3d8d786",
+          "world_id": "e0741666-6b9d-45df-9b6b-a2d14a02c9ba",
+          "actor_id": "f29ef6d8-094f-4015-892b-9e047dfa07fc",
+          "session_id": "5b6bdf11-f4ae-48a5-980b-19907ebfa804",
+          "requester_id": "5f96c535-48bb-4e84-ace0-e5778290ef75",
+          "intended_sha256": "21ef2b913b999cdc09dedf67ebd22dad8f24c8acc8ca120741c9ee5c4bf612e3"
+        },
+        "reply_state": "EFFECT_VERIFIED"
+      }
+    ]
+  },
+  "break_cancelled": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "417c7a4d-cd36-43b2-8037-a4f6f8629f0c",
+          "session_id": "74ec38ab-3913-436a-aea9-3f825c92c116",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "c301fd87-23e8-43f9-a72d-e677ceb973e7",
+          "request_id": "0ed772f0-3fd4-4854-a6ba-720061199d22",
+          "attempt_id": "4fa72ae5-2cdd-470a-b51e-057f78f6fa7a",
+          "world_id": "417c7a4d-cd36-43b2-8037-a4f6f8629f0c",
+          "actor_id": "a28737d1-35fb-4d43-85c0-5d50a5b52f01",
+          "profile_id": "158d0bfc-5689-4a1c-be29-b0794a9ff505",
+          "session_id": "74ec38ab-3913-436a-aea9-3f825c92c116",
+          "requester_id": "2ca3bb29-7095-43a3-a626-ce524348f183",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "break_block",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "e2125d7cc69a330b2982e7486c7fcaca51592cb0073587b7403c59b2edbb1402"
+          },
+          "target": {
+            "kind": "block",
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "block_id": "minecraft:oak_log",
+            "state_sha256": "962902d95a2a7dd291de0539c1053eb45ce00ed9f02774c1344908d3e75d29fb"
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "cancel",
+        "body": {
+          "task_id": "c301fd87-23e8-43f9-a72d-e677ceb973e7",
+          "attempt_id": "4fa72ae5-2cdd-470a-b51e-057f78f6fa7a",
+          "world_id": "417c7a4d-cd36-43b2-8037-a4f6f8629f0c",
+          "actor_id": "a28737d1-35fb-4d43-85c0-5d50a5b52f01",
+          "session_id": "74ec38ab-3913-436a-aea9-3f825c92c116",
+          "requester_id": "2ca3bb29-7095-43a3-a626-ce524348f183",
+          "reason": "OPERATOR"
+        },
+        "reply_state": "CANCELLED_NO_EFFECT",
+        "digest": "9a5e03d06a1f0420c007ff08b0e324296a3f2aaf3a5f385acdda3d2ed9378761"
+      }
+    ]
+  },
+  "break_failed_before_effect": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "c296a667-68e0-4d02-9df2-d94f90915737",
+          "session_id": "a7dcd7b9-2afd-4451-916c-908ad69df564",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "fdf61915-3a25-4abe-be93-14723f99be54",
+          "request_id": "8bbdc40d-ad18-46f3-9c4c-fb1bd3f55615",
+          "attempt_id": "d9818f93-16cd-403b-b8ab-03b2900e36bc",
+          "world_id": "c296a667-68e0-4d02-9df2-d94f90915737",
+          "actor_id": "4cf34d15-336f-4228-b75b-eaa3fbc62c1b",
+          "profile_id": "d5ceeb79-8a00-48ee-a21c-26315509083f",
+          "session_id": "a7dcd7b9-2afd-4451-916c-908ad69df564",
+          "requester_id": "8a5ef9b3-32a2-44b0-ac82-5d7a4afef153",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "break_block",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "a71d7f33ed59a2651a7baeff4dcc90eac1f3c3bf2f4e1b3cf2133054f80089ff"
+          },
+          "target": {
+            "kind": "block",
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "block_id": "minecraft:oak_log",
+            "state_sha256": "962902d95a2a7dd291de0539c1053eb45ce00ed9f02774c1344908d3e75d29fb"
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "fdf61915-3a25-4abe-be93-14723f99be54",
+          "attempt_id": "d9818f93-16cd-403b-b8ab-03b2900e36bc",
+          "world_id": "c296a667-68e0-4d02-9df2-d94f90915737",
+          "actor_id": "4cf34d15-336f-4228-b75b-eaa3fbc62c1b",
+          "session_id": "a7dcd7b9-2afd-4451-916c-908ad69df564",
+          "requester_id": "8a5ef9b3-32a2-44b0-ac82-5d7a4afef153"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "fdf61915-3a25-4abe-be93-14723f99be54",
+          "attempt_id": "d9818f93-16cd-403b-b8ab-03b2900e36bc",
+          "world_id": "c296a667-68e0-4d02-9df2-d94f90915737",
+          "actor_id": "4cf34d15-336f-4228-b75b-eaa3fbc62c1b",
+          "session_id": "a7dcd7b9-2afd-4451-916c-908ad69df564",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "PRECONDITION_FAILED",
+          "reason": "PERMISSION_WITHDRAWN",
+          "server_tick": 1004,
+          "executed": false,
+          "evidence": {}
+        },
+        "reply_state": "FAILED_NO_EFFECT",
+        "digest": "84fc023f020d192172e0e5264658399d8db817090378387e0f852575735b75ac"
+      }
+    ]
+  },
+  "break_terminal_adopted_by_hash": {
+    "steps": [
+      {
+        "route": "bind",
+        "body": {
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "folder_key": "W",
+          "epoch": 0,
+          "contract": "native-effects-v1"
+        },
+        "reply_state": "BOUND"
+      },
+      {
+        "route": "reserve",
+        "body": {
+          "schema_version": 1,
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "request_id": "8fc0a880-a3dc-4059-b08d-583c4df7ec39",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "profile_id": "b1a0d341-eed2-42e9-939a-2b5ddcec3868",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "requester_id": "487e83d6-55ce-49a7-9248-699545c85457",
+          "dimension_id": "minecraft:overworld",
+          "action_kind": "break_block",
+          "origin": "MANAGER_PACKET",
+          "authorization": {
+            "decision": "ALLOW",
+            "entry_id": "t",
+            "policy_sha256": "0057c8a11b6793dc23f6ed9ab62d4b39da220389042899e33ae3970c61671959"
+          },
+          "target": {
+            "kind": "block",
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "block_id": "minecraft:oak_log",
+            "state_sha256": "962902d95a2a7dd291de0539c1053eb45ce00ed9f02774c1344908d3e75d29fb"
+          }
+        },
+        "reply_state": "RESERVED"
+      },
+      {
+        "route": "start",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "requester_id": "487e83d6-55ce-49a7-9248-699545c85457"
+        },
+        "reply_state": "EXECUTING"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "finalize",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "schema_version": 1,
+          "kind": "native_effect_receipt",
+          "action_kind": "break_block",
+          "result": "EFFECT_VERIFIED",
+          "reason": "",
+          "server_tick": 1004,
+          "executed": true,
+          "evidence": {
+            "x": 10,
+            "y": 64,
+            "z": 5,
+            "before_block": "minecraft:oak_log",
+            "after_block": "minecraft:air",
+            "destroy_returned": true,
+            "tool_before": "minecraft:air",
+            "tool_after": "minecraft:air",
+            "tool_broke": false,
+            "drops": [
+              {
+                "uuid": "b2977d09-ca82-4611-b46d-9498202d3fdb",
+                "item": "minecraft:oak_log",
+                "count": 1
+              }
+            ],
+            "collateral": "NONE",
+            "journal": "NOT_REQUIRED"
+          }
+        },
+        "reply_state": "EFFECT_VERIFIED",
+        "digest": "b231f728ebdccdd4f10da516154bc7902403e3adebd6005fd28a21e5d4c70a64"
+      },
+      {
+        "route": "status",
+        "body": {
+          "task_id": "398665da-96c7-413c-9254-b323c0cdca1b",
+          "attempt_id": "5ac7d914-7aad-4077-8d5d-db6c85d28ae5",
+          "world_id": "636f0357-1e42-41f8-b839-a3607ef2c0d2",
+          "actor_id": "700f23d4-1c0a-42a9-8b36-9a2bc767f69e",
+          "session_id": "00d49cdb-6515-485f-a0a2-9ac61f4d7b6a",
+          "requester_id": "487e83d6-55ce-49a7-9248-699545c85457"
+        },
+        "reply_state": "EFFECT_VERIFIED"
+      }
+    ]
+  }
+}

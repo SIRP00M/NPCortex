@@ -92,5 +92,24 @@ final class CharacterManagerService {
         }
 
         @Override public void log(String message) { LOG.info("NPCortex Manager: {}", message); }
+
+        @Override public CompletableFuture<WorldEffectFlow.Result> worldAction(UUID requester, String npcName, boolean reconcile) {
+            if (!reconcile) return WorldEffectRuntime.request(minecraft, requester, npcName, false);
+            // Rec.: a native attempt (break/pickup) is judged first; anything else is the accepted no-op reconcile, unchanged.
+            return NativeEffectRuntime.reconcile(minecraft, requester, npcName).thenCompose(result ->
+                    "NO_NATIVE_ATTEMPT".equals(result.state())
+                            ? WorldEffectRuntime.request(minecraft, requester, npcName, true)
+                            : CompletableFuture.completedFuture(new WorldEffectFlow.Result(
+                                    WorldEffectFlow.Kind.valueOf(result.kind().name()), result.message(), result.state())));
+        }
+
+        @Override public CompletableFuture<NativeEffectFlow.Result> nativeAction(UUID requester, String npcName, int action, String nonce) {
+            return switch (action) {
+                case ManagerProtocol.NATIVE_PREVIEW_BREAK -> NativeEffectRuntime.preview(minecraft, requester, npcName, NativeEffectFlow.Action.BREAK);
+                case ManagerProtocol.NATIVE_PREVIEW_PICKUP -> NativeEffectRuntime.preview(minecraft, requester, npcName, NativeEffectFlow.Action.PICKUP);
+                case ManagerProtocol.NATIVE_CONFIRM -> NativeEffectRuntime.confirm(minecraft, requester, npcName, nonce);
+                default -> NativeEffectRuntime.cancel(minecraft, requester, npcName);
+            };
+        }
     }
 }

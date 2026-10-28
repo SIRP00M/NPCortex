@@ -16,7 +16,7 @@ HOLD/uncertainty leaves existing task, world data, SQLite and outbox untouched f
 2. Open PowerShell at repo root; set JDK 17 for Forge.
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 java -version
 .\scripts\test-test5-harness.ps1
 .\scripts\dev-forge.ps1 -Task build

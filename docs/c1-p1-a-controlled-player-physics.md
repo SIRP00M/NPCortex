@@ -15,7 +15,7 @@ Date: 2026-10-15. Status: **candidate / Windows Forge gameplay quality gate open
 
 ## Windows commands
 
-From Repository root (`C:\path\to\NPCortex`):
+From Repository root (`F:\AI\NPCortex`):
 
 ```powershell
 .\scripts\test-c1-p0-sync.ps1

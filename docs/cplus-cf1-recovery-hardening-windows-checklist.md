@@ -4,7 +4,7 @@ Use a **throwaway single-player world**. Back up the world and backend SQLite be
 
 ## 1. Build and test
 
-From `C:\path\to\NPCortex`:
+From `F:\AI\NPCortex`:
 
 ```powershell
 .\scripts\test-cplus-f1-recovery-hardening.ps1
@@ -17,7 +17,7 @@ From `C:\path\to\NPCortex`:
 
 Backend PowerShell (same Windows user):
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 $env:PYTHONPATH = (Resolve-Path .\backend\src).Path
 python -m npcortex_backend
@@ -25,7 +25,7 @@ python -m npcortex_backend
 
 Minecraft PowerShell (second window):
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 Remove-Item Env:NPCORTEX_CPLUS_F1_TOKEN -ErrorAction SilentlyContinue
 .\scripts\dev-forge.ps1 -Task runClient
 ```

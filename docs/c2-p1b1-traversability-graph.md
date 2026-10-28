@@ -36,10 +36,10 @@ adapter. It does NOT implement A* search (B2), region-level routing (B3),
 
 ## Windows commands and acceptance
 
-Run in PowerShell after extracting the FULL repository to `C:\path\to\NPCortex`:
+Run in PowerShell after extracting the FULL repository to `F:\AI\NPCortex`:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c2-p1b1.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-backend.ps1

@@ -62,7 +62,7 @@ human identity. Actor UUID is currently not registered with the Python C0 API.
 ## P0 manual acceptance checks (record evidence for EACH)
 
 1. **Compile / launch**: On Windows, use JDK 17. From the repository root
-   (`C:\path\to\NPCortex`), run `./scripts/dev-forge.ps1 -Task build` and retain
+   (`F:\AI\NPCortex`), run `./scripts/dev-forge.ps1 -Task build` and retain
    the complete output. After Build succeeds, launch with
    `./scripts/dev-forge.ps1 -Task runClient` on Minecraft 1.20.1 / Forge 47.4.10.
    These commands invoke the existing `forge-mod/gradlew.bat` wrapper internally.

@@ -1,0 +1,29 @@
+{
+  "contract": "native_effect_receipt_v1",
+  "note": "Summary. The authoritative byte-level examples are backend/tests/fixtures/native_effect_wire_v1.json (written by NativeEffectFlowSelfTest, replayed by test_cplus_wn_java_wire.py).",
+  "canonical_json": "sorted keys, separators (',',':'), ASCII only: everything outside 0x20..0x7e is \\u-escaped (including DEL 0x7f); identical in Java and Python",
+  "routes": ["bind", "saved", "rebind", "reserve", "start", "cancel", "finalize", "hold", "repair", "reconcile", "status", "active"],
+  "route_prefix": "/v1/cplus/wn/",
+  "action_kind": ["break_block", "pickup_item"],
+  "origin": "MANAGER_PACKET",
+  "receipt": {
+    "kind": "native_effect_receipt",
+    "schema_version": 1,
+    "fields": ["task_id", "attempt_id", "world_id", "actor_id", "session_id", "action_kind", "result", "reason", "executed", "evidence", "server_tick"],
+    "result": ["EFFECT_VERIFIED", "EFFECT_PARTIAL", "NO_EFFECT", "PRECONDITION_FAILED"],
+    "no_effect_reasons": ["BREAK_REFUSED", "NO_TRANSFER"],
+    "failure_reasons": ["PRECONDITION_FAILED", "START_ACK_LOST", "REQUESTER_GONE", "ENTITY_GONE", "TARGET_CHANGED", "TOOL_CHANGED"],
+    "hold_reasons": ["EXECUTOR_EXCEPTION", "AMBIGUOUS_EVIDENCE", "INVENTORY_COMMIT_FAILED", "UNEXPECTED_STATE"],
+    "cancel_reasons": ["REQUESTER_GONE", "OPERATOR", "SERVER_STOPPING"],
+    "max_evidence_bytes": 4096
+  },
+  "ledger_states": ["RESERVED", "EXECUTING", "EFFECT_VERIFIED", "EFFECT_PARTIAL", "FAILED_NO_EFFECT", "CANCELLED_NO_EFFECT", "HOLD_IN_DOUBT",
+                    "RECONCILED_PERSISTED_TRANSFER", "RECONCILED_PERSISTED_STATE_UNCHANGED", "RECONCILED_EFFECT_OBSERVED"],
+  "claims": {"states": ["ACTIVE", "HELD", "RELEASED"], "block": "exclusive per (world, dimension, x, y, z)", "item": "entity uuid, plus same item_key within 2.0 horizontal / 1.0 vertical"},
+  "rules": [
+    "Forge may dispatch the native call only after the START reply that echoes task_id, attempt_id, world_id, actor_id, session_id",
+    "retries resend identical bytes; a changed payload under the same request_id is refused",
+    "status is answered per attempt with the exact identity and receipt_hash; another actor's latest terminal is never adopted",
+    "an HTTP ACK never claims world durability (applied in memory / recorded locally / backend-confirmed / world-persisted are distinct)"
+  ]
+}

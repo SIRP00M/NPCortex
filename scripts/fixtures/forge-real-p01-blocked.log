@@ -1,35 +1,35 @@
-[27Oct2026 06:35:22.003] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=5320d611-b942-5e66-902b-f24d174a1c20 actor=09038967-c7f6-51cd-87d0-bf9f1c1508d9 dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
-[27Oct2026 06:35:28.258] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [TestPlayer] [G5] START ALL
+[27Oct2026 06:35:22.003] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 actor=266e4167-de95-4624-8c66-91856a2272db dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
+[27Oct2026 06:35:28.258] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Dev] [G5] START ALL
 [27Oct2026 06:35:28.264] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] Executed 11 command(s) from function 'npcortex_g5:start'
-[27Oct2026 06:35:28.267] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [TestPlayer] [G5] START ALL
+[27Oct2026 06:35:28.267] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Dev] [G5] START ALL
 [27Oct2026 06:35:28.755] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] BEGIN p01_spawn_probe C1 spawn and entity selector probe
-[27Oct2026 06:35:28.756] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_STOP viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20
+[27Oct2026 06:35:28.756] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_STOP viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
 [27Oct2026 06:35:28.758] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] BEGIN p01_spawn_probe C1 spawn and entity selector probe
-[27Oct2026 06:35:28.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 HANDSHAKE_BEGIN viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 id=30
-[27Oct2026 06:35:28.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_START viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=30
-[27Oct2026 06:35:28.764] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=5320d611-b942-5e66-902b-f24d174a1c20 actor=09038967-c7f6-51cd-87d0-bf9f1c1508d9 dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
-[27Oct2026 06:35:28.767] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PREPARE npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=30
-[27Oct2026 06:35:28.802] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PROFILE_READY npc=5320d611-b942-5e66-902b-f24d174a1c20
-[27Oct2026 06:35:28.802] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 PROFILE_READY viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20
-[27Oct2026 06:35:28.810] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_VERIFY npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=30
-[27Oct2026 06:35:28.852] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT npc=5320d611-b942-5e66-902b-f24d174a1c20 id=30
-[27Oct2026 06:35:28.853] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 repairs=0
+[27Oct2026 06:35:28.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 HANDSHAKE_BEGIN viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 id=30
+[27Oct2026 06:35:28.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_START viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=30
+[27Oct2026 06:35:28.764] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 actor=266e4167-de95-4624-8c66-91856a2272db dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
+[27Oct2026 06:35:28.767] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PREPARE npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=30
+[27Oct2026 06:35:28.802] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PROFILE_READY npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
+[27Oct2026 06:35:28.802] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 PROFILE_READY viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
+[27Oct2026 06:35:28.810] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_VERIFY npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=30
+[27Oct2026 06:35:28.852] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 id=30
+[27Oct2026 06:35:28.853] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 repairs=0
 [27Oct2026 06:35:30.255] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] OBS p01_spawn_probe BLOCKED_NPC_NOT_SELECTABLE
 [27Oct2026 06:35:30.262] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] OBS p01_spawn_probe BLOCKED_NPC_NOT_SELECTABLE
 [27Oct2026 06:35:32.255] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] END p01_spawn_probe
 [27Oct2026 06:35:32.263] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] END p01_spawn_probe
 [27Oct2026 06:35:32.754] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] BEGIN p02_navlong_20 navlong 20 blocks
-[27Oct2026 06:35:32.754] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_STOP viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20
-[27Oct2026 06:35:32.755] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 HANDSHAKE_BEGIN viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 id=32
-[27Oct2026 06:35:32.755] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_START viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=32
+[27Oct2026 06:35:32.754] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_STOP viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
+[27Oct2026 06:35:32.755] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 HANDSHAKE_BEGIN viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 id=32
+[27Oct2026 06:35:32.755] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 TRACK_START viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=32
 [27Oct2026 06:35:32.758] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] BEGIN p02_navlong_20 navlong 20 blocks
-[27Oct2026 06:35:32.759] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PREPARE npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=32
-[27Oct2026 06:35:32.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=5320d611-b942-5e66-902b-f24d174a1c20 actor=09038967-c7f6-51cd-87d0-bf9f1c1508d9 dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
-[27Oct2026 06:35:32.803] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PROFILE_READY npc=5320d611-b942-5e66-902b-f24d174a1c20
-[27Oct2026 06:35:32.805] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 PROFILE_READY viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20
-[27Oct2026 06:35:32.811] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_VERIFY npc=5320d611-b942-5e66-902b-f24d174a1c20 entityId=32
-[27Oct2026 06:35:32.855] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT npc=5320d611-b942-5e66-902b-f24d174a1c20 id=32
-[27Oct2026 06:35:32.856] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT viewer=TestPlayer npc=5320d611-b942-5e66-902b-f24d174a1c20 repairs=0
+[27Oct2026 06:35:32.759] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PREPARE npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=32
+[27Oct2026 06:35:32.759] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 ServerLevel.addNewPlayer returned yui profile=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 actor=266e4167-de95-4624-8c66-91856a2272db dim=minecraft:overworld pos=(2.0,-60.0,2.0) (client unverified)
+[27Oct2026 06:35:32.803] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_PROFILE_READY npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
+[27Oct2026 06:35:32.805] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 PROFILE_READY viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702
+[27Oct2026 06:35:32.811] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_VERIFY npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 entityId=32
+[27Oct2026 06:35:32.855] [Render thread/INFO] [io.github.sirp00m.npcortex.C1P0ClientSync/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 id=32
+[27Oct2026 06:35:32.856] [Server thread/INFO] [io.github.sirp00m.npcortex.C1P0Runtime/]: NPCortex C1-P0 CLIENT_ENTITY_PRESENT viewer=Dev npc=3fc91efa-faf0-4ee2-901a-7d53b0a3d702 repairs=0
 [27Oct2026 06:35:34.256] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] OBS p02_navlong_20 BLOCKED_NPC_NOT_SELECTABLE
 [27Oct2026 06:35:34.257] [Render thread/INFO] [net.minecraft.client.gui.components.ChatComponent/]: [System] [CHAT] [Server] [G5] OBS p02_navlong_20 BLOCKED_NPC_NOT_SELECTABLE
 [27Oct2026 06:35:36.255] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: [Not Secure] [Server] [G5] END p02_navlong_20

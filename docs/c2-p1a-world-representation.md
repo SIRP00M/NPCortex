@@ -32,10 +32,10 @@ C2-P0's trusted `C2WorldSensor.snapshot()` has `blocks: {}`. `C2MoveExecutor` co
 
 ## Windows build and Acceptance checklist
 
-Unzip the entire repository into `C:\path\to\NPCortex`, keeping a backup of the current verified version. Open PowerShell with Temurin Java 17:
+Unzip the entire repository into `F:\AI\NPCortex`, keeping a backup of the current verified version. Open PowerShell with Temurin Java 17:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c2-p1a.ps1
 .\scripts\test-c2-p0.ps1
 .\scripts\dev-forge.ps1 -Task build

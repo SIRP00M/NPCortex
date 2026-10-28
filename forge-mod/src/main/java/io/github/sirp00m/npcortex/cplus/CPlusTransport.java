@@ -16,7 +16,14 @@ public final class CPlusTransport {
             .connectTimeout(Duration.ofSeconds(2)).build();
     private static final Set<String> RETRY=Set.of("/v1/cplus/e3/reserve",
             "/v1/cplus/e3/report","/v1/cplus/e3/finalize","/v1/cplus/e3/cancel-begin",
-            "/v1/cplus/e3/cancel-ack","/v1/cplus/e3/abandon","/v1/cplus/e3/status");
+            "/v1/cplus/e3/cancel-ack","/v1/cplus/e3/abandon","/v1/cplus/e3/status",
+            // Stage 4 world-effect routes are idempotent by (task, evidence hash); one retry is safe.
+            "/v1/cplus/we/reserve","/v1/cplus/we/start","/v1/cplus/we/finalize","/v1/cplus/we/cancel",
+            "/v1/cplus/we/hold","/v1/cplus/we/reconcile","/v1/cplus/we/status",
+            // Stage 4 native routes: idempotent by (task, canonical evidence hash); IDENTICAL bytes are re-sent, never new evidence.
+            "/v1/cplus/wn/bind","/v1/cplus/wn/saved","/v1/cplus/wn/reserve","/v1/cplus/wn/start","/v1/cplus/wn/finalize",
+            "/v1/cplus/wn/cancel","/v1/cplus/wn/hold","/v1/cplus/wn/repair","/v1/cplus/wn/reconcile","/v1/cplus/wn/status",
+            "/v1/cplus/wn/active");
     public static final class Rejected extends IOException {
         public final int status;
         Rejected(int status,String detail){super("C+ HTTP="+status+" "+detail);this.status=status;}

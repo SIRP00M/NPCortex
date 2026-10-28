@@ -4,7 +4,7 @@
 
 Build (Temurin 17):
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 

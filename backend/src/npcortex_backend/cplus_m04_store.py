@@ -129,6 +129,16 @@ class M04Store:
                          (world, actor, *_BUSY_G2)).fetchone()
         if old:
             raise M04Blocked(f'old G2 attempt {old[0]} still {old[1]}; preserve fence')
+        if M04Store._table(db, 'cplus_we_runs'):
+            held = db.execute("SELECT task_id FROM cplus_we_runs WHERE world_id=? AND actor_id=? AND state IN "
+                              "('RESERVED','EXECUTING','HOLD_IN_DOUBT') LIMIT 1", (world, actor)).fetchone()
+            if held:
+                raise M04Blocked(f'world-effect attempt {held[0]} owns this actor')
+        if M04Store._table(db, 'cplus_wn_runs'):
+            held = db.execute("SELECT task_id FROM cplus_wn_runs WHERE world_id=? AND actor_id=? AND state IN "
+                              "('RESERVED','EXECUTING','HOLD_IN_DOUBT') LIMIT 1", (world, actor)).fetchone()
+            if held:
+                raise M04Blocked(f'native world-effect attempt {held[0]} owns this actor')
         if M04Store._table(db, 'cplus_e1_tasks'):
             unresolved = db.execute("SELECT 1 FROM cplus_e1_tasks WHERE world_id=? AND actor_id=? "
                                     "AND state IN ('QUEUED','HOLD','DISPATCHING','CANCEL_PENDING') LIMIT 1",

@@ -4,7 +4,7 @@
 
 - Windows, Python 3.10+, JDK **17**, Forge 1.20.1 / Forge 47.4.10.
 - Ollama running with `qwen3:8b` available (`ollama list`).
-- Extract FULL ZIP outside Program Files, e.g. `C:\path\to\NPCortex-B1`.
+- Extract FULL ZIP outside Program Files, e.g. `F:\AI\NPCortex-B1`.
 - **Back up `backend\data\npcortex.sqlite3`** before changing builds or storage
   settings. Do not store personal secrets in NPC messages. There is no authentication.
 

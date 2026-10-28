@@ -48,7 +48,14 @@ final class ManagerProtocol {
 
     enum Status { OK, NOT_REGISTERED, CONFLICT, OFFLINE, REJECTED, ERROR, DENIED, BUSY, UNKNOWN }
     enum RowState { OK, NOT_REGISTERED, LEGACY, OFFLINE }
-    enum Op { LIST, CREATE, REGISTER, LOAD, SAVE }
+    /** NOOP is appended: ordinals are on the wire. */
+    enum Op { LIST, CREATE, REGISTER, LOAD, SAVE, NOOP, NATIVE }
+
+    /** Stage 4 native action requests. Ordinals are on the wire. The client names an NPC and, for CONFIRM, echoes an opaque nonce
+     * the server issued: it never sends a coordinate, a block, an item or an identity. */
+    static final int NATIVE_PREVIEW_BREAK = 0, NATIVE_PREVIEW_PICKUP = 1, NATIVE_CONFIRM = 2, NATIVE_CANCEL = 3;
+    static final int NONCE_LENGTH = 32;
+    private static final Pattern NONCE = Pattern.compile("[0-9a-f]{32}");
 
     /** The editable part of a Character Profile. Exactly one of the two text shapes is used. */
     record Draft(boolean structured, String displayName, String personality, String speechStyle,
@@ -64,14 +71,21 @@ final class ManagerProtocol {
     record Row(String name, String dimension, boolean active, String mode, RowState state, String detail,
                int revision, String source, String displayName, String composition) {}
 
-    sealed interface ToServer permits ListReq, CreateReq, RegisterReq, LoadReq, SaveReq { long opId(); }
+    sealed interface ToServer permits ListReq, CreateReq, RegisterReq, LoadReq, SaveReq, NoopReq, NativeReq { long opId(); }
     record ListReq(long opId) implements ToServer {}
     record CreateReq(long opId, String name, Draft draft) implements ToServer {}
     record RegisterReq(long opId, String name, Draft draft) implements ToServer {}
     record LoadReq(long opId, String name) implements ToServer {}
     record SaveReq(long opId, String name, int expectedRevision, Draft draft) implements ToServer {}
+    /** Stage 4 no-op world action (or reconcile of an unresolved one). Carries ONLY an NPC name: the requester is the
+     * authenticated packet sender and every other identity is derived by the server. */
+    record NoopReq(long opId, String name, boolean reconcile) implements ToServer {}
+    /** Stage 4 native break/pickup: preview (server picks the target), confirm (nonce only) or cancel. */
+    record NativeReq(long opId, String name, int action, String nonce) implements ToServer {}
 
-    sealed interface ToClient permits Denied, ListRep, OpRep { long opId(); }
+    sealed interface ToClient permits Denied, ListRep, OpRep, NativeRep { long opId(); }
+    /** Answer to a NativeReq. {@code nonce} is non-empty only for an accepted preview (the server keeps the target). */
+    record NativeRep(long opId, Status status, String message, String nonce) implements ToClient {}
     record Denied(long opId, String message) implements ToClient {}
     record ListRep(long opId, Status status, String message, boolean truncated, List<Row> rows) implements ToClient {}
     /** {@code row} non-null means the NPC exists locally (even when {@code status} reports a failure). */
@@ -135,8 +149,16 @@ final class ManagerProtocol {
 
     // ---- codec ----
 
-    private static final int T_LIST = 1, T_CREATE = 2, T_REGISTER = 3, T_LOAD = 4, T_SAVE = 5;
-    private static final int T_DENIED = 101, T_LIST_REP = 102, T_OP_REP = 103;
+    private static final int T_LIST = 1, T_CREATE = 2, T_REGISTER = 3, T_LOAD = 4, T_SAVE = 5, T_NOOP = 6, T_NATIVE = 7;
+    private static final int T_DENIED = 101, T_LIST_REP = 102, T_OP_REP = 103, T_NATIVE_REP = 104;
+
+    /** @return an English error message, or null when the native request is well-formed. */
+    static String validateNative(NativeReq m) {
+        if (m.action() < NATIVE_PREVIEW_BREAK || m.action() > NATIVE_CANCEL) return "Unknown native action.";
+        String nonce = m.nonce() == null ? "" : m.nonce();
+        if (m.action() == NATIVE_CONFIRM ? !NONCE.matcher(nonce).matches() : !nonce.isEmpty()) return "Malformed native request.";
+        return null;
+    }
 
     private static void writeText(DataOutputStream out, String value, int maxChars) throws IOException {
         String text = value == null ? "" : value;
@@ -237,6 +259,12 @@ final class ManagerProtocol {
         } else if (message instanceof SaveReq m) {
             out.writeByte(T_SAVE); out.writeLong(m.opId()); writeText(out, m.name(), NAME_MAX);
             out.writeInt(m.expectedRevision()); writeDraft(out, m.draft());
+        } else if (message instanceof NoopReq m) {
+            out.writeByte(T_NOOP); out.writeLong(m.opId()); writeText(out, m.name(), NAME_MAX); out.writeBoolean(m.reconcile());
+        } else if (message instanceof NativeReq m) {
+            if (validateNative(m) != null) throw new ProtocolException("malformed native request");
+            out.writeByte(T_NATIVE); out.writeLong(m.opId()); writeText(out, m.name(), NAME_MAX);
+            out.writeByte(m.action()); writeText(out, m.nonce() == null ? "" : m.nonce(), NONCE_LENGTH);
         } else {
             throw new ProtocolException("unknown message");
         }
@@ -255,6 +283,12 @@ final class ManagerProtocol {
             case T_REGISTER -> new RegisterReq(op, readText(in, NAME_MAX), readDraft(in));
             case T_LOAD -> new LoadReq(op, readText(in, NAME_MAX));
             case T_SAVE -> new SaveReq(op, readText(in, NAME_MAX), in.readInt(), readDraft(in));
+            case T_NOOP -> new NoopReq(op, readText(in, NAME_MAX), in.readBoolean());
+            case T_NATIVE -> {
+                NativeReq request = new NativeReq(op, readText(in, NAME_MAX), in.readUnsignedByte(), readText(in, NONCE_LENGTH));
+                if (validateNative(request) != null) throw new ProtocolException("malformed native request");
+                yield request;
+            }
             default -> throw new ProtocolException("unknown type");
         };
         if (in.available() != 0) throw new ProtocolException("trailing bytes");
@@ -279,6 +313,9 @@ final class ManagerProtocol {
             out.writeInt(m.revision()); out.writeInt(m.currentRevision());
             out.writeBoolean(m.row() != null); if (m.row() != null) writeRow(out, m.row());
             out.writeBoolean(m.draft() != null); if (m.draft() != null) writeDraft(out, m.draft());
+        } else if (message instanceof NativeRep m) {
+            out.writeByte(T_NATIVE_REP); out.writeLong(m.opId()); out.writeByte(m.status().ordinal());
+            writeText(out, m.message(), MESSAGE_MAX); writeText(out, m.nonce() == null ? "" : m.nonce(), NONCE_LENGTH);
         } else {
             throw new ProtocolException("unknown message");
         }
@@ -312,6 +349,13 @@ final class ManagerProtocol {
                 Row row = in.readBoolean() ? readRow(in) : null;
                 Draft draft = in.readBoolean() ? readDraft(in) : null;
                 message = new OpRep(op, operation, status, text, revision, current, row, draft);
+            }
+            case T_NATIVE_REP -> {
+                Status status = readEnum(in, Status.values());
+                String text = readText(in, MESSAGE_MAX);
+                String nonce = readText(in, NONCE_LENGTH);
+                if (!nonce.isEmpty() && !NONCE.matcher(nonce).matches()) throw new ProtocolException("malformed nonce");
+                message = new NativeRep(op, status, text, nonce);
             }
             default -> throw new ProtocolException("unknown type");
         }

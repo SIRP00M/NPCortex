@@ -38,7 +38,7 @@ An **optional final transaction UUID** may be appended to `give`, `equip`, `clea
 ### Windows commands
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c1-p0-sync.ps1
 .\scripts\test-c1-p1-motion.ps1
 .\scripts\test-c1-p1-rotation.ps1

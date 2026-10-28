@@ -1,63 +1,42 @@
-# Python
+# Python / editor caches
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 .venv/
 venv/
-.env
-# Editor / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-# Forge / Gradle
+
+# Gradle / Forge runtime outputs
 .gradle/
 **/build/
-**/run/
-**/runs/
 **/out/
-# NPCortex local generated data (do not commit player data)
-/data/
+/forge-mod/run/
+/forge-mod/run-gametest/
+/forge-mod/logs/
+
+# Local NPCortex and AI development artifacts
+/.claude/
+/CLAUDE.md
+/graphify-out/
+/g5-results/
 /backend/data/
-logs/
-# models should never be committed
+/backend/logs/
+/docs/m03-final/
+/PENDING_TESTS.txt
+/*MANIFEST.json
+
+# Local secrets and models
+.env
+.env.*
 *.gguf
 *.safetensors
+*.pem
+*.key
 
-# Local AI engineering/working-session artifacts (not public source)
-.claude/
-CLAUDE.md
-graphify-out/
-g5-results/
-PENDING_TESTS.txt
-CANDIDATE_MANIFEST.json
-M04_*MANIFEST.json
-docs/m03-final/runs/
-docs/m03-final/focused-*/
-docs/m04/*VALIDATION.json
-docs/m04/acceptance-record.json
-*.sqlite3
-*.sqlite3-shm
-*.sqlite3-wal
-!backend/tests/fixtures/v4_baseline.sqlite3
-
-# Additional generated local acceptance records
-docs/m03-final/*-record.json
-docs/m03-final/*-inventory.json
-docs/m03-final/*-state.json
-docs/m03-final/*-hashes.json
-docs/m03-final/changed-files.*
-docs/m03-final/preservation-check.json
-docs/g5-test-harness/VALIDATION-RESULTS.md
-docs/m04/*AUDIT.md
-docs/m04/acceptance-record.json
-docs/m04/*VALIDATION.json
-docs/transport-e-changed-files.txt
-# Local verification/workstation artifacts
-forge-mod/run/
-forge-mod/logs/
-backend/data/
-**/__pycache__/
-**/*.pyc
-**/.gradle/
+# Distinct synthetic test fixtures under backend/tests/fixtures are source-controlled.
+# Do not ignore all data/ or *.sqlite3, which would hide Minecraft datapacks
+# and required synthetic SQLite migration test fixtures.

@@ -29,7 +29,7 @@ public final class ManagerCoreSelfTest {
 
     interface Backend { CompletableFuture<Http> call(String method, String path, JsonObject body); }
 
-    static final class FakeHost implements ManagerCore.Host {
+    static class FakeHost implements ManagerCore.Host {
         final UUID world = UUID.randomUUID();
         final List<Npc> npcs = new ArrayList<>();
         final List<String> requests = new ArrayList<>();
@@ -41,6 +41,9 @@ public final class ManagerCoreSelfTest {
         String spawnError;
         int spawns;
         Backend backend = (m, p, b) -> CompletableFuture.completedFuture(new Http(500, new JsonObject()));
+        final List<Object[]> worldCalls = new ArrayList<>();
+        java.util.function.Supplier<CompletableFuture<WorldEffectFlow.Result>> worldScript =
+                () -> CompletableFuture.completedFuture(new WorldEffectFlow.Result(WorldEffectFlow.Kind.OK, "done", "NO_EFFECT_VERIFIED"));
 
         @Override public boolean authorized(UUID player) { return allowed.contains(player); }
         @Override public List<Npc> npcs() { return List.copyOf(npcs); }
@@ -61,6 +64,10 @@ public final class ManagerCoreSelfTest {
             return backend.call(method, path, body);
         }
         @Override public void log(String message) { }
+        @Override public CompletableFuture<WorldEffectFlow.Result> worldAction(UUID requester, String npcName, boolean reconcile) {
+            worldCalls.add(new Object[]{requester, npcName, reconcile});
+            return worldScript.get();
+        }
         void drain() { while (!serverQueue.isEmpty()) serverQueue.poll().run(); }
         ManagerProtocol.ToClient last() { return replies.get(replies.size() - 1); }
     }
@@ -349,6 +356,84 @@ public final class ManagerCoreSelfTest {
         Row legacyRow = ManagerCore.rowFor(new Npc("Mika", UUID.randomUUID(), "minecraft:overworld", true, "", ""), null);
         check(legacyRow.state() == RowState.NOT_REGISTERED && legacyRow.detail().contains("'mika'"), "legacy NPC detail names the pack it would use");
         check(ManagerCore.rowFor(new Npc("X", UUID.randomUUID(), "d", true, "invalid", ""), null).detail().contains("unreadable"), "invalid saved mode is visible");
+        // ---------------- Stage 4 NOOP world action: the requester is the packet sender, never message content
+        FakeHost wa = new FakeHost();
+        ManagerCore waCore = new ManagerCore(wa);
+        UUID sender = UUID.randomUUID();
+        wa.npcs.add(new Npc("Reika", UUID.randomUUID(), "minecraft:overworld", true, C1IdentityData.MODE_CUSTOM, ""));
+        waCore.handle(stranger, new NoopReq(70, "Reika", false));
+        check(wa.last() instanceof Denied && wa.worldCalls.isEmpty(), "unauthorized sender never reaches the world-action path");
+        wa.allowed.add(sender);
+        waCore.handle(sender, new NoopReq(71, "Nobody", false));
+        check(op(wa).status() == Status.REJECTED && op(wa).op() == Op.NOOP && wa.worldCalls.isEmpty(), "unknown NPC is rejected before the flow");
+        waCore.handle(sender, new NoopReq(72, "reika", false));
+        check(wa.worldCalls.size() == 1 && wa.worldCalls.get(0)[0].equals(sender) && wa.worldCalls.get(0)[2].equals(false),
+                "flow receives the authenticated sender UUID");
+        check(op(wa).status() == Status.OK && op(wa).op() == Op.NOOP, "OK result maps to OK");
+        waCore.handle(sender, new NoopReq(73, "Reika", true));
+        check(wa.worldCalls.get(1)[2].equals(true), "reconcile flag is passed through");
+        for (WorldEffectFlow.Kind kind : WorldEffectFlow.Kind.values()) {
+            wa.worldScript = () -> CompletableFuture.completedFuture(new WorldEffectFlow.Result(kind, "m", ""));
+            waCore.handle(sender, new NoopReq(80, "Reika", false));
+            Status expected = Status.valueOf(kind.name());
+            check(op(wa).status() == expected, "kind " + kind + " maps to status " + expected);
+        }
+        wa.worldScript = () -> CompletableFuture.failedFuture(new IllegalStateException("boom"));
+        waCore.handle(sender, new NoopReq(81, "Reika", false));
+        check(op(wa).status() == Status.UNKNOWN && op(wa).message().contains("Reconcile"), "a crashed flow is UNKNOWN, never success");
+        CompletableFuture<WorldEffectFlow.Result> gate = new CompletableFuture<>();
+        wa.worldScript = () -> gate;
+        waCore.handle(sender, new NoopReq(82, "Reika", false));
+        int before = wa.worldCalls.size();
+        waCore.handle(sender, new NoopReq(83, "Reika", false));
+        check(wa.worldCalls.size() == before && op(wa).status() == Status.BUSY, "a second request while one runs is BUSY, flow not entered");
+        gate.complete(new WorldEffectFlow.Result(WorldEffectFlow.Kind.OK, "ok", ""));
+        waCore.handle(sender, new NoopReq(84, "Reika", false));
+        check(wa.worldCalls.size() == before + 1, "busy flag released after completion");
+
+        // ---------------- Stage 4 native break/pickup: the requester is the packet sender; the client sends a name, an action, a nonce
+        List<Object[]> nativeCalls = new ArrayList<>();
+        FakeHost nh = new FakeHost() {
+            @Override public CompletableFuture<NativeEffectFlow.Result> nativeAction(UUID requester, String npcName, int action, String nonce) {
+                nativeCalls.add(new Object[]{requester, npcName, action, nonce});
+                return CompletableFuture.completedFuture(new NativeEffectFlow.Result(NativeEffectFlow.Kind.OK, "Preview: x", "PREVIEW", action == 0 ? "0123456789abcdef0123456789abcdef" : ""));
+            }
+        };
+        ManagerCore nCore = new ManagerCore(nh);
+        nh.npcs.add(new Npc("Reika", UUID.randomUUID(), "minecraft:overworld", true, C1IdentityData.MODE_CUSTOM, ""));
+        nCore.handle(stranger, new ManagerProtocol.NativeReq(90, "Reika", 0, ""));
+        check(nh.last() instanceof Denied && nativeCalls.isEmpty(), "an unauthorized sender never reaches the native path");
+        nh.allowed.add(sender);
+        nCore.handle(sender, new ManagerProtocol.NativeReq(91, "Nobody", 0, ""));
+        check(op(nh).status() == Status.REJECTED && op(nh).op() == Op.NATIVE && nativeCalls.isEmpty(), "unknown NPC rejected before the flow");
+        nCore.handle(sender, new ManagerProtocol.NativeReq(92, "Reika", 0, ""));
+        check(nativeCalls.size() == 1 && nativeCalls.get(0)[0].equals(sender) && nativeCalls.get(0)[2].equals(0), "the flow receives the authenticated sender UUID");
+        check(nh.last() instanceof ManagerProtocol.NativeRep nr && nr.status() == Status.OK && nr.nonce().length() == 32, "the preview nonce goes back to the sender");
+        nCore.handle(sender, new ManagerProtocol.NativeReq(93, "Reika", ManagerProtocol.NATIVE_CONFIRM, "ffffffffffffffffffffffffffffffff"));
+        check(nativeCalls.size() == 2 && nativeCalls.get(1)[3].equals("ffffffffffffffffffffffffffffffff"), "confirm passes the nonce through unchanged");
+        nCore.handle(sender, new ManagerProtocol.NativeReq(94, "Reika", ManagerProtocol.NATIVE_CONFIRM, "not-a-nonce"));
+        check(nativeCalls.size() == 2 && op(nh).status() == Status.REJECTED, "a malformed confirm never reaches the flow");
+        for (NativeEffectFlow.Kind kind : NativeEffectFlow.Kind.values()) {
+            FakeHost kh = new FakeHost() {
+                @Override public CompletableFuture<NativeEffectFlow.Result> nativeAction(UUID requester, String npcName, int action, String nonce) {
+                    return CompletableFuture.completedFuture(new NativeEffectFlow.Result(kind, "m", ""));
+                }
+            };
+            kh.npcs.add(new Npc("Reika", UUID.randomUUID(), "minecraft:overworld", true, C1IdentityData.MODE_CUSTOM, ""));
+            kh.allowed.add(sender);
+            new ManagerCore(kh).handle(sender, new ManagerProtocol.NativeReq(95, "Reika", 3, ""));
+            check(kh.last() instanceof ManagerProtocol.NativeRep r2 && r2.status() == Status.valueOf(kind.name()), "native kind " + kind + " maps to its status");
+        }
+        FakeHost ch = new FakeHost() {
+            @Override public CompletableFuture<NativeEffectFlow.Result> nativeAction(UUID requester, String npcName, int action, String nonce) {
+                return CompletableFuture.failedFuture(new IllegalStateException("boom"));
+            }
+        };
+        ch.npcs.add(new Npc("Reika", UUID.randomUUID(), "minecraft:overworld", true, C1IdentityData.MODE_CUSTOM, ""));
+        ch.allowed.add(sender);
+        new ManagerCore(ch).handle(sender, new ManagerProtocol.NativeReq(96, "Reika", 2, "0123456789abcdef0123456789abcdef"));
+        check(op(ch).status() == Status.UNKNOWN, "a crashed native flow is UNKNOWN, never success");
+
         System.out.println("PASS ManagerCoreSelfTest (" + n + " assertions)");
     }
 }

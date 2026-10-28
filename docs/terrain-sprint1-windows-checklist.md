@@ -10,10 +10,10 @@ enable STEP_UP, STEP_DOWN, JUMP or DROP edges, or any new movement action.
 ## Windows setup
 
 Back up the previously accepted P1-D repository and world first. Extract the new full
-repository to `C:\path\to\NPCortex`, then use PowerShell with Temurin Java 17:
+repository to `F:\AI\NPCortex`, then use PowerShell with Temurin Java 17:
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-terrain-s1.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

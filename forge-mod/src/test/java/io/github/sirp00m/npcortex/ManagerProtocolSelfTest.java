@@ -44,7 +44,8 @@ public final class ManagerProtocolSelfTest {
         // ---- round trips
         for (ManagerProtocol.ToServer message : List.<ManagerProtocol.ToServer>of(
                 new ListReq(1), new CreateReq(2, "Reika", structured), new RegisterReq(3, "Reika", raw),
-                new LoadReq(4, "Reika"), new SaveReq(5, "Reika", 7, structured))) {
+                new LoadReq(4, "Reika"), new SaveReq(5, "Reika", 7, structured),
+                new NoopReq(6, "Reika", false), new NoopReq(7, "Reika", true))) {
             check(ManagerProtocol.decodeToServer(ManagerProtocol.encode(message)).equals(message), "round trip " + message);
         }
         Row row = new Row("Reika", "minecraft:overworld", true, "custom", RowState.OK, "Profile revision 2.", 2, "inline", "Reika", "structured");
@@ -130,6 +131,63 @@ public final class ManagerProtocolSelfTest {
                         record.getSimpleName() + " must not name actor/world ids");
             }
         }
-        System.out.println("PASS ManagerProtocolSelfTest (" + n + " assertions)");
+                // Stage 4: the no-op request carries a name and a flag only; ordinals of the existing ops are unchanged.
+        check(Op.LIST.ordinal() == 0 && Op.SAVE.ordinal() == 4 && Op.NOOP.ordinal() == 5, "NOOP appended without shifting old ordinals");
+        byte[] noopBytes = ManagerProtocol.encode(new NoopReq(9, "Reika", true));
+        check(noopBytes.length == 1 + 1 + 8 + 2 + 5 + 1, "no UUID, token or coordinates on the wire: " + noopBytes.length);
+        try { ManagerProtocol.decodeToServer(java.util.Arrays.copyOf(noopBytes, noopBytes.length - 1)); check(false, "truncated"); }
+        catch (java.io.IOException expected) { check(true, "truncated noop rejected"); }
+        byte[] padded = java.util.Arrays.copyOf(noopBytes, noopBytes.length + 1);
+        try { ManagerProtocol.decodeToServer(padded); check(false, "trailing"); }
+        catch (java.io.IOException expected) { check(true, "trailing byte rejected"); }
+        try { ManagerProtocol.encode(new NoopReq(9, "x".repeat(17), false)); check(false, "long name"); }
+        catch (java.io.IOException expected) { check(true, "over-long name refused at encode"); }
+        // Stage 4 native break/pickup: a name, an action and (for CONFIRM only) an opaque nonce; never a coordinate or an identity.
+        check(Op.NATIVE.ordinal() == 6 && Op.NOOP.ordinal() == 5, "NATIVE appended after NOOP");
+        String nonce = "0123456789abcdef0123456789abcdef";
+        for (ManagerProtocol.ToServer m : List.<ManagerProtocol.ToServer>of(
+                new ManagerProtocol.NativeReq(20, "Reika", ManagerProtocol.NATIVE_PREVIEW_BREAK, ""),
+                new ManagerProtocol.NativeReq(21, "Reika", ManagerProtocol.NATIVE_PREVIEW_PICKUP, ""),
+                new ManagerProtocol.NativeReq(22, "Reika", ManagerProtocol.NATIVE_CONFIRM, nonce),
+                new ManagerProtocol.NativeReq(23, "Reika", ManagerProtocol.NATIVE_CANCEL, "")))
+            check(ManagerProtocol.decodeToServer(ManagerProtocol.encode(m)).equals(m), "native round trip " + m);
+        byte[] nativeBytes = ManagerProtocol.encode(new ManagerProtocol.NativeReq(24, "Reika", ManagerProtocol.NATIVE_PREVIEW_BREAK, ""));
+        check(nativeBytes.length == 1 + 1 + 8 + 2 + 5 + 1 + 2, "a preview request carries no coordinate, block, item or UUID: " + nativeBytes.length);
+        for (ManagerProtocol.NativeReq bad : List.of(
+                new ManagerProtocol.NativeReq(1, "Reika", 9, ""), new ManagerProtocol.NativeReq(1, "Reika", -1, ""),
+                new ManagerProtocol.NativeReq(1, "Reika", ManagerProtocol.NATIVE_PREVIEW_BREAK, nonce),   // a preview never carries a nonce
+                new ManagerProtocol.NativeReq(1, "Reika", ManagerProtocol.NATIVE_CONFIRM, ""),               // a confirm must
+                new ManagerProtocol.NativeReq(1, "Reika", ManagerProtocol.NATIVE_CONFIRM, nonce.toUpperCase()),
+                new ManagerProtocol.NativeReq(1, "Reika", ManagerProtocol.NATIVE_CONFIRM, nonce + "0"),
+                new ManagerProtocol.NativeReq(1, "Reika", ManagerProtocol.NATIVE_CONFIRM, "../../etc/passwd/../../xxxxxxxx"))) {
+            check(ManagerProtocol.validateNative(bad) != null, "validateNative refuses " + bad);
+            try { ManagerProtocol.encode(bad); check(false, "encode " + bad); } catch (java.io.IOException expected) { check(true, "refused at encode"); }
+        }
+        // hand-built wire bytes that bypass the encoder are refused by the decoder too
+        for (int action : new int[]{4, 255}) {
+            java.io.ByteArrayOutputStream wire = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream out = new java.io.DataOutputStream(wire);
+            out.writeByte(ManagerProtocol.VERSION); out.writeByte(7); out.writeLong(30); out.writeShort(5); out.write("Reika".getBytes());
+            out.writeByte(action); out.writeShort(0);
+            try { ManagerProtocol.decodeToServer(wire.toByteArray()); check(false, "forged action " + action); }
+            catch (java.io.IOException expected) { check(true, "forged action " + action + " refused"); }
+        }
+        java.io.ByteArrayOutputStream forged = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream fout = new java.io.DataOutputStream(forged);
+        fout.writeByte(ManagerProtocol.VERSION); fout.writeByte(7); fout.writeLong(31); fout.writeShort(5); fout.write("Reika".getBytes());
+        fout.writeByte(ManagerProtocol.NATIVE_PREVIEW_BREAK); fout.writeShort(3); fout.write("abc".getBytes());
+        try { ManagerProtocol.decodeToServer(forged.toByteArray()); check(false, "preview with a nonce"); }
+        catch (java.io.IOException expected) { check(true, "preview with a nonce refused by the decoder"); }
+        ManagerProtocol.NativeRep rep = new ManagerProtocol.NativeRep(40, Status.OK, "Preview: break minecraft:oak_log", nonce);
+        check(ManagerProtocol.decodeToClient(ManagerProtocol.encode(rep)).equals(rep), "native reply round trip");
+        ManagerProtocol.NativeRep plain = new ManagerProtocol.NativeRep(41, Status.REJECTED, "no", "");
+        check(ManagerProtocol.decodeToClient(ManagerProtocol.encode(plain)).equals(plain), "native reply without a nonce");
+        for (Class<?> record : new Class<?>[]{ManagerProtocol.NativeReq.class, ManagerProtocol.NativeRep.class})
+            for (java.lang.reflect.RecordComponent c : record.getRecordComponents()) {
+                check(c.getType() != UUID.class && c.getType() != double.class && c.getType() != int[].class && c.getType() != float.class,
+                        record.getSimpleName() + "." + c.getName() + " carries no UUID or coordinate type");
+                check(!c.getName().toLowerCase().matches(".*(coord|pos|block|item|uuid|actor|world|token|secret).*"), record.getSimpleName() + "." + c.getName());
+            }
+System.out.println("PASS ManagerProtocolSelfTest (" + n + " assertions)");
     }
 }

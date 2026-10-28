@@ -5,7 +5,7 @@ Baseline: Sprint 4 Fix #1 Full Repository; Minecraft Forge 1.20.1, JDK 17, Windo
 ## Build
 
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-c2-f1-follow.ps1
 .\scripts\dev-forge.ps1 -Task build
 .\scripts\dev-forge.ps1 -Task runClient

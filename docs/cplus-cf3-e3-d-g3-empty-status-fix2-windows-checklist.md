@@ -8,7 +8,7 @@ Use the **actual extracted repository root** (the folder containing `scripts`, `
 
 ### 1. Focused tests (do not require Minecraft)
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\test-cplus-e3-g3-big.ps1 -BackendOnly
 # After BackendOnly passes, also validate real Java/Gson contracts:
 .\scripts\test-cplus-e3-g3-big.ps1
@@ -17,14 +17,14 @@ Expected for BackendOnly: six Python test modules finish with `OK`, no `WinError
 
 ### 2. Forge Build (separate)
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task build
 ```
 Expected: `BUILD SUCCESSFUL`. Do not assume prior Build PASS proves this package passes; the Forge source is unchanged, but always verify the clean extraction.
 
 ### 3. Backend (keep running in its own terminal)
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-backend.ps1
 ```
 Optional health check from another terminal:
@@ -35,7 +35,7 @@ Confirm startup is using your intended **test** Backend DB, not a live save you 
 
 ### 4. Minecraft (separate terminal)
 ```powershell
-cd C:\path\to\NPCortex
+cd F:\AI\NPCortex
 .\scripts\dev-forge.ps1 -Task runClient
 ```
 

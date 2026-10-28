@@ -257,6 +257,8 @@ final class C1P1MotionRuntime {
         ServerThread.require(server, "C1 move");
         C1PlayerAvatar avatar = resolve(server, name);
         if (avatar == null) return "NPC not live: " + name;
+        if (NativeEffectRuntime.pendingProfile(server, avatar.getUUID()))
+            return "Native world action active; motion refused until it is settled (Rec. in the Manager)";
         C1P1MotionPlan.Direction direction;
         try {
             direction = C1P1MotionPlan.Direction.valueOf(directionText.toUpperCase(java.util.Locale.ROOT));
