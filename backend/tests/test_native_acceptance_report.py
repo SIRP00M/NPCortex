@@ -251,6 +251,10 @@ class SafetyAndCli(Harness):
         self.assertEqual((data['overall'], len(data['scenarios'])), (rep.FAIL, 9))
 
 
+@unittest.skipUnless(
+    os.name == "nt" and shutil.which("powershell"),
+    "Windows PowerShell 5.1 required; tested separately on GitHub Actions Windows",
+)
 class PowerShellWrapper(unittest.TestCase):
     """Fail-closed checks of scripts/native-acceptance.ps1 that need no game, no backend and touch no config."""
 

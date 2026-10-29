@@ -2,6 +2,12 @@
 
 NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
 
+## CI follow-up — `v0.2.7-alpha.1` (no version bump)
+
+- Split native acceptance safety tests by operating system: Ubuntu continues running the full Python backend suite (Windows-only PowerShell cases are explicitly skipped there), while a dedicated Windows GitHub Actions job exercises the Native Acceptance report and PowerShell wrapper checks.
+- Preserved all four PowerShell safety tests (normal backend port refusal, no-session actions, unsafe world-name refusal, reused-PID protection). **No test was deleted or replaced by an unconditional skip.**
+- This changes only test platform selection and CI configuration, not Minecraft/Forge gameplay, backend runtime logic, native action execution, or the claimed acceptance status. Windows CI success is still to be confirmed after pushing this follow-up.
+
 ## Unreleased — `v0.2.7-alpha.1` · Guarded native block breaking and item pickup (2026-10-28)
 
 **Base:** GitHub `main` commit `b192549` (`v0.2.6-alpha.3`). This source milestone adds opt-in native world actions to the previously guarded navigation and world-inspection foundation; it is not a stable release or automatic AI mining system.

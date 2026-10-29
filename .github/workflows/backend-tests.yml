@@ -14,3 +14,20 @@ jobs:
         env:
           PYTHONPATH: backend/src
         run: python -m unittest discover -s backend/tests -v
+
+  powershell-acceptance:
+    name: Windows PowerShell acceptance safety
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify Windows PowerShell 5.1 is available
+        shell: cmd
+        run: powershell -NoProfile -Command "$PSVersionTable.PSVersion.ToString()"
+      - name: Run native acceptance collector and PowerShell wrapper tests
+        shell: cmd
+        env:
+          PYTHONPATH: backend/src
+        run: python -m unittest discover -s backend/tests -p "test_native_acceptance_report.py" -v
