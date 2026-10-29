@@ -85,12 +85,12 @@ Ledger latency (observation, 10 hammering actors): p50 ~5 ms, p95 <= ~150 ms, ma
 
 ## 6b. Independent review round (2026-10-28, candidate r2)
 
-Independent source review: the binding folder key used only the world folder's basename. Now `NativeWorldKey.folderKey` = readable basename +
+GPT-6 review: the binding folder key used only the world folder's basename. Now `NativeWorldKey.folderKey` = readable basename +
 16 hex of SHA-256 over the full real path (negative test: same basename, different parents). Still an accident guard, not identity:
 a copy at the same path or an unresolved link/case change is not detected. Existing native bindings (test databases only) need
 `scripts\native-rebind.ps1` once; the Forge log prints `world binding folder key <key> (path <path>)` at the first bind.
 
-Independent source-review findings (12 findings; the START gate, claims and hash parity remained unchanged). Fixed and tested:
+Reviewer pass (Sonnet `reviewer`, source-only, 12 findings; none touched the START gate, claims or hash parity). Fixed + tested:
 1. Rec. dead end after a lost cancel ACK or a restart sweep: `/active` = none, or a status hash mismatch, now falls through to
    the observation-based discover, and the stale local fence and completion slot are released (never adopts a foreign hash).
 2. Unexpected runtime errors after a good START ACK (outside the native-call try/catch) no longer strand the attempt: before the

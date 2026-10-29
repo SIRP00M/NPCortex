@@ -4,7 +4,8 @@
 
 Technical ID: **C-F3 Option E · E3-D G3 + Transport E**.
 One integrated source candidate. **Not release-ready; M04 is not implemented.**
-Detailed generated run evidence is kept outside this public source package. Historical gameplay tests are scope-limited; do not infer a pass for this build.
+Read `final-acceptance.md` for the actual run results. Historical gameplay
+Tests 1–6A are retained as user-confirmed evidence, not a pass for this build.
 
 ## Install and run automated gates
 
@@ -262,7 +263,7 @@ requirements before PASS. Compile/synthetic actors do not prove 10-NPC stability
 ## Collect, acceptance, cleanup
 
 ```powershell
-python scripts/m03_final.py collect --world 'C:\path\to\NPCortex\forge-mod\run\saves\COPIED_WORLD' --database 'F:\acceptance\m03-copy.sqlite3' --output 'F:\acceptance\capture-1'
+python scripts/m03_final.py collect --world 'F:\AI\NPCortex\forge-mod\run\saves\COPIED_WORLD' --database 'F:\acceptance\m03-copy.sqlite3' --output 'F:\acceptance\capture-1'
 ```
 
 Collector copies M03/transport evidence and NPC SavedData, hashes it, and exports

@@ -352,10 +352,11 @@ class Stage4ReadOnlyFoundationContract(unittest.TestCase):
         # and those two read-only files still cannot act.
         mentions = sorted(path.name for path in JAVA.rglob("*.java")
                           if any(f'"{name}"' in text(path) for name in ("break_block", "place_block", "pickup_item")))
-        self.assertEqual(mentions, ["CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java", "NativeActionPolicy.java", "NativeEffectFlow.java"])
+        # PAP-G5 (Owner-approved): PlayerActionFlow is the pure place_block / use_block pipeline (separate ledger cplus_pap_*).
+        self.assertEqual(mentions, ["CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java", "NativeActionPolicy.java", "NativeEffectFlow.java", "PlayerActionFlow.java"])
         for name in ("place_block", "use_item", "equip_item"):
             self.assertEqual(sorted(p.name for p in JAVA.rglob("*.java") if f'"{name}"' in text(p)),
-                             ["CPlusF2ReadOnlyPolicy.java"] if name == "place_block" else [], name)
+                             ["CPlusF2ReadOnlyPolicy.java", "NativeActionPolicy.java", "PlayerActionFlow.java"] if name == "place_block" else [], name)
         for name in ("CPlusF2ReadOnlyPolicy.java", "CPlusF2WorldSampler.java"):
             code = text(next(JAVA.rglob(name)))
             for api in ("setBlock", "destroyBlock", "removeBlock", "useItemOn", "addFreshEntity", "gameMode", "playerTouch"):
@@ -557,7 +558,12 @@ class Stage4NativeEffectContract(unittest.TestCase):
     def test_native_actions_start_only_from_the_authenticated_manager_packet(self):
         referencing = sorted(p.name for p in JAVA.rglob("*.java")
                              if re.search(r"NativeEffectRuntime\.(preview|confirm|cancel|reconcile)\(", text(p)))
-        self.assertEqual(referencing, ["CharacterManagerService.java"])
+        # PAP-G5 (Owner-approved): the chat path is the second authenticated source. Its requester is the chat SENDER and it checks the
+        # Owner allow-list before it does anything; no backend reply, command or model output reaches these calls.
+        self.assertEqual(referencing, ["CharacterManagerService.java", "PlayerTaskRuntime.java"])
+        task = text(JAVA / "PlayerTaskRuntime.java")
+        self.assertIn("policy.allowsRequester(requester, id.dimension(), id.character())", task)
+        self.assertIn("handleChat(p.getServer(), p.getUUID(),", task)
         proto = text(JAVA / "ManagerProtocol.java")
         self.assertIn("record NativeReq(long opId, String name, int action, String nonce) implements ToServer {}", proto)
         core = text(JAVA / "ManagerCore.java")
@@ -587,13 +593,16 @@ class Stage4NativeEffectContract(unittest.TestCase):
         self.assertIn("WorldEffectRuntime.pending(server, a.actorId())", text(JAVA / "NativeEffectRuntime.java"))
 
     def test_only_break_and_pickup_exist(self):
-        self.assertIn('ACTIONS = Set.of("break_block", "pickup_item")', text(JAVA / "NativeActionPolicy.java"))
+        # PAP-G2/G5 (Owner-approved) added place_block / use_block to the Owner's allow-list file; the NATIVE LEDGER below stays break/pickup only.
+        self.assertIn('ACTIONS = Set.of("break_block", "pickup_item", "place_block", "use_block")', text(JAVA / "NativeActionPolicy.java"))
         store = text(self.BACKEND / "cplus_wn_store.py")
         self.assertIn("ACTIONS = ('break_block', 'pickup_item')", store)
         self.assertIn("CHECK (action_kind IN ('break_block','pickup_item'))", store)
         for name in ("place_block", "use_item", "equip_item", "use_block"):
             self.assertNotIn(name, store)
             for java in self.PURE + ("NativeEffectRuntime.java",):
+                if java == "NativeActionPolicy.java" and name in ("place_block", "use_block"):
+                    continue                           # PAP-G5: the Owner allow-list file names the two new kinds (the ledger and the executor above do not)
                 self.assertNotIn(f'"{name}"', text(JAVA / java))
         self.assertIn("CHECK (action_kind IN ('noop'))", text(self.BACKEND / "cplus_we_ledger.py"))     # the accepted no-op table is untouched
 

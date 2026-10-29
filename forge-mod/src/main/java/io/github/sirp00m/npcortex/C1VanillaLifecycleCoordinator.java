@@ -58,6 +58,8 @@ final class C1VanillaLifecycleCoordinator {
     }
 
     static void beforeDetach(MinecraftServer server, C1PlayerAvatar avatar) {
+        if (avatar != null) C1PlayerListRegistry.unregister(server, avatar);   // LoggedOut + LEAVE_GAME first, so the save below includes it
+        C1VanillaStatePersistence.save(avatar);
         C1P1MotionRuntime.beforeDespawn(server, avatar);
     }
 
@@ -75,6 +77,8 @@ final class C1VanillaLifecycleCoordinator {
         // deaths as TRANSITION without auto-recreating an ambiguous player.
         // Release active F1-owned C1 tickets while the Vanilla avatar is still live.
         C2FollowRuntime.beforeServerStop(event.getServer());
+        C1PlayerListRegistry.unregisterAll(event.getServer());   // before PlayerList.removeAll (it would disconnect() through a Connection the avatar lacks)
+        C1VanillaStatePersistence.beforeServerStop(event.getServer());
         C1P0Runtime.onServerStopping(event);
         C1P1CLifecycleRuntime.onServerStopping(event);
         C2AgentRuntime.beforeServerStop(event.getServer());

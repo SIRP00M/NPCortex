@@ -54,7 +54,7 @@ public final class NativeActionPolicySelfTest {
         denyAll(parse("{\"schema_version\":1,\"entries\":[],\"entries\":[" + both + "]}"), "duplicate root key");
         denyAll(parse(file(both.replace("}", ",\"extra\":1}"))), "unknown entry key");
         denyAll(parse("{\"schema_version\":1,\"entries\":[],\"x\":1}"), "unknown root key");
-        for (String action : new String[]{"place_block", "use_item", "equip_item", "noop", "*", "BREAK_BLOCK", ""})
+        for (String action : new String[]{"use_item", "equip_item", "select_tool", "craft", "noop", "*", "BREAK_BLOCK", "PLACE_BLOCK", ""})
             denyAll(parse(file(entry(owner, "[\"" + action + "\"]", "[\"Reika\"]", "[\"minecraft:oak_log\"]", "[\"minecraft:oak_log\"]", BOX))), "action " + action);
         denyAll(parse(file(entry(owner, "[]", "[\"Reika\"]", "[\"minecraft:oak_log\"]", null, BOX))), "empty actions");
         denyAll(parse(file(entry(owner, "[\"break_block\"]", "[\"Reika\"]", null, null, BOX))), "break_block without blocks");

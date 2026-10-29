@@ -40,3 +40,8 @@ Thumbs.db
 # Distinct synthetic test fixtures under backend/tests/fixtures are source-controlled.
 # Do not ignore all data/ or *.sqlite3, which would hide Minecraft datapacks
 # and required synthetic SQLite migration test fixtures.
+
+# Generated parity and PAP experiment traces (public harness source remains tracked)
+/docs/parity/evidence/
+/docs/pap/x0-evidence/
+/forge-mod/run-gametest/

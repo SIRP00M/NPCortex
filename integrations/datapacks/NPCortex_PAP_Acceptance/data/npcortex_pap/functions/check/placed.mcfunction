@@ -1,0 +1,1 @@
+execute at @e[type=minecraft:marker,tag=npcx_pap_anchor,limit=1] run tellraw @s {"text":"Placed blocks are visible in the world; compare with the NPC's chat report (EFFECT_VERIFIED) and scripts\pap\verify-pap-live.ps1.","color":"gray"}

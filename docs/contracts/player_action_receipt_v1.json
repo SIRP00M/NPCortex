@@ -1,0 +1,26 @@
+{
+  "$comment": "PAP-G2 wire contract for place_block / use_block (routes /v1/cplus/pa/*). Binding (world/session) is the accepted native handshake /v1/cplus/wn/bind. Canonical JSON (sorted keys, compact, ensure_ascii) is byte-identical in Forge (PlayerActionFlow) and Python (cplus_pap_store); the receipt_hash is its sha256. A receipt is a CLAIM by Forge about one attempt, never a permission and never proof of exactly-once physical effect.",
+  "schema_version": 1,
+  "capability": "player-actions-v1",
+  "routes": ["reserve", "start", "finalize", "cancel", "hold", "reconcile", "status", "active"],
+  "action_kinds": ["place_block", "use_block"],
+  "reserve_target": {
+    "common": {"kind": "block", "x": "int", "y": "int [-4096,4096]", "z": "int", "block_id": "namespaced id (place: the block that must appear; use: the used block)", "state_sha256": "sha256 of the target cell state at preview", "face": "down|up|north|south|west|east"},
+    "place_block": {"support_x": "int", "support_y": "int", "support_z": "int", "item_key": "namespaced id", "item_count": "int 1..64", "selected_slot": "int 0..8"},
+    "use_block": {}
+  },
+  "claims": "every cell in {target cell, support cell (place only)} gets one ACTIVE claim; the cell must have no ACTIVE/HELD claim in cplus_pap_claims OR cplus_wn_claims (checked in the same BEGIN IMMEDIATE transaction by BOTH stores)",
+  "receipt": {
+    "kind": "player_action_receipt",
+    "result": ["EFFECT_VERIFIED", "NO_EFFECT", "PRECONDITION_FAILED"],
+    "no_effect_reason": {"place_block": "PLACE_REFUSED", "use_block": "USE_REFUSED"},
+    "evidence_place": {"x": "int", "y": "int", "z": "int", "before_block": "id", "after_block": "id", "interaction": "SUCCESS|CONSUME|PASS|FAIL", "item_key": "id", "item_before": "int", "item_after": "int", "selected_slot": "int", "journal": "COMMITTED|NOT_REQUIRED"},
+    "evidence_use": {"x": "int", "y": "int", "z": "int", "block_id": "id", "state_before_sha256": "sha256", "state_after_sha256": "sha256", "interaction": "SUCCESS|CONSUME|PASS|FAIL", "journal": "NOT_REQUIRED"},
+    "verified_place": "interaction SUCCESS|CONSUME, after_block == target.block_id != before_block, item_before - item_after == 1, journal COMMITTED",
+    "verified_use": "interaction SUCCESS|CONSUME, state_after != state_before, journal NOT_REQUIRED",
+    "refused": "interaction PASS|FAIL and nothing changed (block, state, item count), journal NOT_REQUIRED"
+  },
+  "hold": {"reasons": ["EXECUTOR_EXCEPTION", "AMBIGUOUS_EVIDENCE", "INVENTORY_COMMIT_FAILED", "UNEXPECTED_STATE"], "intended": "{} (no persist-only repair is offered for player actions)", "meaning": "a real world effect may exist; it is neither rolled back nor repeated; claims stay HELD and the actor stays fenced until an operator reconcile from OBSERVED state"},
+  "reconcile": {"evidence_class": ["EFFECT_OBSERVED", "PERSISTED_STATE_UNCHANGED"], "observed": {"x": "int", "y": "int", "z": "int", "block_id": "id", "state_sha256": "sha256"}, "terminal": ["RECONCILED_EFFECT_OBSERVED", "RECONCILED_PERSISTED_STATE_UNCHANGED"], "rule": "the observed state must support the class; the backend never claims the original attempt happened or not"},
+  "restart_sweep": {"RESERVED": "FAILED_NO_EFFECT, claims RELEASED", "EXECUTING": "HOLD_IN_DOUBT, claims HELD"}
+}

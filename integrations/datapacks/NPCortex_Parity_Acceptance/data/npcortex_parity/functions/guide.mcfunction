@@ -1,0 +1,1 @@
+tellraw @s {"text":"[NPCortex parity] 1 /reload  2 /function npcortex_parity:setup/t01 (then t02 .. t25)  3 follow the printed steps  4 the printed check function (check/t01 ...)  5 /function npcortex_parity:status  6 /function npcortex_parity:reset. Test world only. Read docs/parity/PARITY_OWNER_GUIDE.md","color":"gold"}

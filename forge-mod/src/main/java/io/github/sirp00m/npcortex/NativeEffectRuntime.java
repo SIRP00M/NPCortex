@@ -92,14 +92,35 @@ final class NativeEffectRuntime {
     private NativeEffectRuntime() {}
 
     // ------------------------------------------------------------------------------------------------ public surface
+    /** Any world action of this NPC is unresolved: native break/pickup OR a PAP place/use. Every other subsystem asks this one. */
     static boolean pending(MinecraftServer server, UUID actorId) {
-        NativeEffectFlow flow = FLOWS.get(server);
-        return flow != null && flow.pending(actorId);
+        return nativeFlowPending(server, actorId) || PlayerActionRuntime.pending(server, actorId);
     }
 
     static boolean pendingProfile(MinecraftServer server, UUID profileId) {
         NativeEffectFlow flow = FLOWS.get(server);
-        return flow != null && flow.pendingProfile(profileId);
+        return (flow != null && flow.pendingProfile(profileId)) || PlayerActionRuntime.pendingProfile(server, profileId);
+    }
+
+    static boolean nativeFlowPending(MinecraftServer server, UUID actorId) {
+        NativeEffectFlow flow = FLOWS.get(server);
+        return flow != null && flow.pending(actorId);
+    }
+
+    /** PAP-G5: the shared environment (transport lanes, policy snapshot, identity resolution) for the place/use flow. */
+    static NativeEffectFlow.Env env(MinecraftServer server) { return new ForgeEnv(server); }
+
+    /** The other-subsystem ownership checks, without the PAP flow (it asks this itself and must not block on its own attempt). */
+    static String ownershipBlockBase(MinecraftServer server, NativeEffectFlow.Actor a) {
+        if (WorldEffectRuntime.pending(server, a.actorId())) return "no-op world action active";
+        if (C2AgentRuntime.hasActiveActor(a.actorId())) return "C2 goal active";
+        if (C2FollowRuntime.hasActiveActor(a.actorId())) return "Follow active";
+        if (CPlusE3G2Runtime.pending(server, a.actorId())) return "E3 G2 admission pending";
+        if (CPlusE3G3Runtime.pending(server, a.actorId())) return "E3 G3 operation pending";
+        if (CPlusTransportRecovery.busy(server, a.actorId())) return "transport recovery busy";
+        if (C1P1MotionRuntime.c2Receipt(a.profileId()).active()) return "C1/C2 motion receipt active";
+        C2ActionJournal.Row old = C2ActionJournal.get(server).find(a.actorId());
+        return old != null && old.uncertain() ? "C2 journal unresolved" : null;
     }
 
     static NativeEffectFlow flow(MinecraftServer server) {
@@ -191,6 +212,9 @@ final class NativeEffectRuntime {
     }
     private static volatile Watch watch;
 
+    /** True only while executePickup drives the vanilla playerTouch path (the explicit, ledgered pickup). */
+    static boolean pickupInProgress() { return watch != null; }
+
     static void onItemPickup(PlayerEvent.ItemPickupEvent event) {
         Watch w = watch;
         if (w != null && event.getEntity() != null && event.getEntity().getUUID().equals(w.player)
@@ -253,7 +277,7 @@ final class NativeEffectRuntime {
         @Override public CompletableFuture<JsonObject> post(String route, JsonObject body, boolean critical) {
             final String payload = body.toString();
             final boolean record = critical && body.has("task_id")
-                    && !route.equals(NativeEffectFlow.REPAIR) && !route.equals(NativeEffectFlow.RECONCILE);
+                    && !route.equals(NativeEffectFlow.REPAIR) && !route.equals(NativeEffectFlow.RECONCILE) && !route.equals(PlayerActionFlow.RECONCILE);
             ThreadPoolExecutor lane = critical ? lanes(server).critical : lanes(server).normal;
             try {
                 final long queuedAt = System.nanoTime();
@@ -313,15 +337,8 @@ final class NativeEffectRuntime {
         }
 
         @Override public String ownershipBlock(NativeEffectFlow.Actor a) {
-            if (WorldEffectRuntime.pending(server, a.actorId())) return "no-op world action active";
-            if (C2AgentRuntime.hasActiveActor(a.actorId())) return "C2 goal active";
-            if (C2FollowRuntime.hasActiveActor(a.actorId())) return "Follow active";
-            if (CPlusE3G2Runtime.pending(server, a.actorId())) return "E3 G2 admission pending";
-            if (CPlusE3G3Runtime.pending(server, a.actorId())) return "E3 G3 operation pending";
-            if (CPlusTransportRecovery.busy(server, a.actorId())) return "transport recovery busy";
-            if (C1P1MotionRuntime.c2Receipt(a.profileId()).active()) return "C1/C2 motion receipt active";
-            C2ActionJournal.Row old = C2ActionJournal.get(server).find(a.actorId());
-            return old != null && old.uncertain() ? "C2 journal unresolved" : null;
+            String other = ownershipBlockBase(server, a);
+            return other != null || !PlayerActionRuntime.pending(server, a.actorId()) ? other : "player action (place/use) active";
         }
 
         @Override public NativeActionPolicy policy(boolean fresh) {
@@ -378,11 +395,12 @@ final class NativeEffectRuntime {
             final ServerLevel level;
             final BlockPos pos;
             java.util.function.Function<NativeEffectFlow.Actor, BlockPos> forced = lookOverride;       // GameTest seam only
-            if (forced != null) {
+            BlockPos pinned = forced == null ? PlayerTaskRuntime.pinnedBlock(actor.actorId()) : null;   // PAP-G3: the block an approach walked to
+            if (forced != null || pinned != null) {
                 C1PlayerAvatar who = avatar(actor);
                 if (who == null) return NativeEffectFlow.Pick.no("The NPC is not live.");
                 level = who.serverLevel();
-                pos = forced.apply(actor);
+                pos = forced != null ? forced.apply(actor) : pinned;
             } else {
                 ServerPlayer p = server.getPlayerList().getPlayer(requester);
                 if (p == null) return NativeEffectFlow.Pick.no("The requester is not online.");

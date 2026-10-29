@@ -1,0 +1,25 @@
+{
+  "candidate": "NPCortex M04 Option D - One-Command Automated Acceptance",
+  "baseline_source": "NPCortex_M04_OptionD_Integrated_FullRepository_CANDIDATE(2).zip",
+  "scope": "Read-only automated QA orchestrator, Windows launcher, CI child PYTHONPATH fix, docs, tests; no world mutation",
+  "verification": {
+    "m04_static_boundaries": "PASS: 11 assertions",
+    "option_d_harness": "PASS: 13 checks",
+    "m04_backend_focused": "PASS: 26",
+    "m04_readonly_review_fixtures": "PASS: 4",
+    "runner_self_tests": "PASS: 7",
+    "java_17_m04_contract": "PASS: 13 assertions",
+    "full_backend_suite": "PASS: 426 tests (Python, direct runner with proper PYTHONPATH)",
+    "forge_build": "NOT EXECUTED IN AUTHORING ENVIRONMENT; PENDING ON WINDOWS",
+    "in_game_gameplay": "HOLD; NOT TESTED",
+    "native_mining_and_pickup": "NOT IMPLEMENTED / HOLD"
+  },
+  "safety": [
+    "never accesses mutable world/DB in normal offline run",
+    "read-only review requires exact world and DB",
+    "logs include no world/DB copies",
+    "no Git/GitHub operation",
+    "existing old M04 manifests are historical"
+  ],
+  "generated_utc": "2026-10-26T09:31:09.556793+00:00"
+}

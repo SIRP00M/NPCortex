@@ -68,13 +68,45 @@ final class C1PlayerAvatar extends ServerPlayer {
         // connection-phase player simulation and would duplicate P1-A motion.
         if (!C1VanillaLifecycleCoordinator.mayRunWorldTick(this)) return;
         super.tick();
+        // Parity P1: vanilla runs doTick() from the connection tick right after the level tick; do the same here.
+        if (C1SurvivalParity.survivalTick && isAlive() && !isRemoved()) {
+            inSurvivalPhase = true;
+            try {
+                super.doTick();
+            } finally {
+                inSurvivalPhase = false;
+            }
+        }
         C1VanillaLifecycleCoordinator.afterWorldTick(this);
     }
 
     @Override
     public void doTick() {
-        // Deliberate separation: ServerPlayer.doTick() expects a real client
-        // connection and performs Player.tick() in the network/movement phase.
-        // This feasibility build retains P1-A as the only travel owner.
+        // Nobody calls this (no connection tick); tick() runs the vanilla phase explicitly so it cannot run twice per tick.
     }
+
+    /** Player.aiStep calls travel() every tick. Inside the survival phase that would be a second physics integration. */
+    @Override
+    public void travel(Vec3 travelVector) {
+        if (inSurvivalPhase) return;
+        super.travel(travelVector);
+    }
+
+    /** Portal / end-gateway transfers need a real PlayerList session (respawn packets, player-list updates). Fail closed until Phase 3. */
+    @Override
+    public net.minecraft.world.entity.Entity changeDimension(ServerLevel destination, net.minecraftforge.common.util.ITeleporter teleporter) {
+        com.mojang.logging.LogUtils.getLogger().warn("NPCortex parity: vanilla dimension change refused for {} (use the controlled transfer)", getUUID());
+        return null;
+    }
+
+    /** The last message vanilla sent this player (e.g. "You can only sleep at night"): there is no client to read it, so actions report it. */
+    volatile String lastSystemMessage = "";
+
+    @Override
+    public void sendSystemMessage(net.minecraft.network.chat.Component message, boolean overlay) {
+        lastSystemMessage = message.getString();
+        super.sendSystemMessage(message, overlay);
+    }
+
+    private boolean inSurvivalPhase;
 }

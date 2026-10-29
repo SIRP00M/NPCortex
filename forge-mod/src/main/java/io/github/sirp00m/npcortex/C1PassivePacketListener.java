@@ -16,7 +16,18 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
  */
 final class C1PassivePacketListener extends ServerGamePacketListenerImpl {
     C1PassivePacketListener(MinecraftServer server, C1PlayerAvatar avatar) {
-        super(server, new Connection(PacketFlow.SERVERBOUND), avatar);
+        super(server, virtualConnection(), avatar);
+    }
+
+    /**
+     * D3: once the avatar is a PlayerList member, Forge's PlayerLoggedInEvent handlers (TierSortingRegistry.syncToPlayer ->
+     * NetworkHooks.getConnectionData) dereference Connection.channel() - a bare Connection has none (NPE seen in GameTests). An
+     * EmbeddedChannel supplies a channel with empty attributes ("remote not present"). Nothing is ever written to it: send() below is dropped.
+     */
+    private static Connection virtualConnection() {
+        Connection connection = new Connection(PacketFlow.SERVERBOUND);
+        new io.netty.channel.embedded.EmbeddedChannel(connection);
+        return connection;
     }
 
     @Override

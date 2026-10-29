@@ -85,6 +85,11 @@ final class ManagerScreen extends Screen implements ManagerClient.Listener {
                     b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_BREAK, "")).bounds(this.width - 100 - 124, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
             this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.pickup"),
                     b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_PICKUP, "")).bounds(this.width - 100 - 156, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
+            // PAP-G5: place a hotbar block against the face the player looks at / use a lever or button the player looks at.
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.place"),
+                    b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_PLACE, "")).bounds(this.width - 100 - 188, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
+            this.addRenderableWidget(Button.builder(Component.translatable("npcortex.manager.native.use"),
+                    b -> nativeRequest(row, ManagerProtocol.NATIVE_PREVIEW_USE, "")).bounds(this.width - 100 - 220, y + 4, 28, 20).build()).active = pendingOp == 0 && row.active();
         }
         if (!previewNonce.isEmpty()) {
             Row target = rows.stream().filter(r -> r.name().equalsIgnoreCase(previewNpc)).findFirst().orElse(null);

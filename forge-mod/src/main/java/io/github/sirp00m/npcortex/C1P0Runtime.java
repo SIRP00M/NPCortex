@@ -151,6 +151,10 @@ final class C1P0Runtime {
         NpcNameNetwork.announce(server, entry);
         C1PlayerAvatar avatar = new C1PlayerAvatar(server, level,
                 new GameProfile(entry.profileId(), entry.profileName()));
+        // The profile name is internal ("N<name>_<uuid prefix>"), so vanilla selectors cannot reach the NPC by its character name:
+        // scoreboard tags give commands/data packs a stable handle (@e[type=player,tag=npcortex_<name>]) without touching identity.
+        avatar.addTag("npcortex");
+        avatar.addTag("npcortex_" + entry.character());
         // Restore full Vanilla ItemStacks before ChunkMap can track this avatar.
         C1VanillaLifecycleCoordinator.beforeSpawn(server, avatar);
         C1RotationState rotation = entry.rotation();
@@ -165,6 +169,7 @@ final class C1P0Runtime {
             level.addNewPlayer(avatar);
             LIVE.put(entry.profileId(), avatar);
             C1VanillaLifecycleCoordinator.afterSpawn(avatar);
+            C1PlayerListRegistry.register(server, avatar);
             LOG.info("NPCortex C1-P0 ServerLevel.addNewPlayer returned {} profile={} actor={} dim={} pos=({},{},{}) (client unverified)",
                     entry.character(), entry.profileId(), entry.actorId(), entry.dimension(),
                     entry.x(), entry.y(), entry.z());
@@ -172,6 +177,7 @@ final class C1P0Runtime {
             for (ServerPlayer viewer : viewers) {
                 viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(entry.profileId())));
             }
+            C1PlayerListRegistry.unregister(server, avatar);
             if (!avatar.isRemoved()) avatar.discard();
             // afterSpawn may fail after LIVE.put; drop only this attempt's own entry, never a replacement.
             if (LIVE.get(entry.profileId()) == avatar) LIVE.remove(entry.profileId());
@@ -188,7 +194,7 @@ final class C1P0Runtime {
         C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
         for (Map<UUID, C1P0SyncState> viewers : TRACKED.values()) viewers.remove(entry.profileId());
         if (avatar != null && !avatar.isRemoved()) avatar.discard();
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(entry.profileId())));
         }
         identities.deactivate(name);
@@ -202,7 +208,7 @@ final class C1P0Runtime {
         C1VanillaLifecycleCoordinator.beforeDetach(server, avatar);
         for (Map<UUID, C1P0SyncState> viewers : TRACKED.values()) viewers.remove(profileId);
         if (avatar != null && !avatar.isRemoved()) avatar.discard();
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(profileId)));
         }
     }
@@ -218,6 +224,11 @@ final class C1P0Runtime {
 
     static C1PlayerAvatar liveAvatar(UUID profileId) {
         return LIVE.get(profileId);
+    }
+
+    /** Snapshot of the registered avatars (server thread only, like LIVE itself). */
+    static List<C1PlayerAvatar> liveAvatars() {
+        return List.copyOf(LIVE.values());
     }
 
     /** Persist observed server position; never infer success from a client packet. */
@@ -246,7 +257,7 @@ final class C1P0Runtime {
         if (npc == null || npc.isRemoved()) return;
         MinecraftServer server = npc.getServer();
         if (server == null) return;
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             C1P0SyncState state = TRACKED.getOrDefault(viewer.getUUID(), Map.of()).get(npc.getUUID());
             if (state != null && state.phase == C1P0SyncState.Phase.PRESENT
                     && validatedSession(viewer, npc.getUUID(), npc.getId(), state.token) == state) {
@@ -260,7 +271,7 @@ final class C1P0Runtime {
         if (npc == null || npc.isRemoved()) return;
         MinecraftServer server = npc.getServer();
         if (server == null) return;
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             C1P0SyncState state = TRACKED.getOrDefault(viewer.getUUID(), Map.of()).get(npc.getUUID());
             if (state != null && state.phase == C1P0SyncState.Phase.PRESENT
                     && validatedSession(viewer, npc.getUUID(), npc.getId(), state.token) == state) {
@@ -276,7 +287,7 @@ final class C1P0Runtime {
         if (npc == null || npc.isRemoved()) return;
         MinecraftServer server = npc.getServer();
         if (server == null || !C1P1CLifecycleRuntime.isPresenting(npc.getUUID())) return;
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             C1P0SyncState state = TRACKED.getOrDefault(viewer.getUUID(), Map.of()).get(npc.getUUID());
             if (state != null && state.phase == C1P0SyncState.Phase.PRESENT
                     && validatedSession(viewer, npc.getUUID(), npc.getId(), state.token) == state) {
@@ -334,7 +345,7 @@ final class C1P0Runtime {
         C1IdentityData.Entry entry = C1IdentityData.get(server).find(name);
         if (entry == null) return "No saved C1-P0 actor named " + name;
         List<String> results = new ArrayList<>();
-        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+        for (ServerPlayer viewer : humanViewers(server)) {
             C1P0SyncState state = TRACKED.getOrDefault(viewer.getUUID(), Map.of()).get(entry.profileId());
             results.add(viewer.getGameProfile().getName() + "="
                     + (state == null ? "NOT_TRACKING" : state.phase + "/repairs=" + state.repairs
@@ -521,7 +532,12 @@ final class C1P0Runtime {
         }
     }
 
+    /** The NPCs are PlayerList members since D3: everything that talks to CLIENTS must skip them. */
+    static List<ServerPlayer> humanViewers(MinecraftServer server) {
+        return server.getPlayerList().getPlayers().stream().filter(p -> !(p instanceof C1PlayerAvatar)).toList();
+    }
+
     private static List<ServerPlayer> realViewers(MinecraftServer server, ServerLevel level) {
-        return server.getPlayerList().getPlayers().stream().filter(player -> player.serverLevel() == level).toList();
+        return humanViewers(server).stream().filter(player -> player.serverLevel() == level).toList();
     }
 }

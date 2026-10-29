@@ -1,5 +1,34 @@
 # Changelog
 
+NPCortex uses milestone-based alpha versioning. This is a source-development milestone, not a stable release or full gameplay certification. Historical entries and previous patch notes are preserved below.
+
+## Unreleased — `v0.3.0-alpha.1` · Player parity, native interactions and survival simulation (2026-10-29)
+
+**Compared with GitHub `main` at `f1e48a4` (`v0.2.7-alpha.1`).** This begins the 0.3 development line because NPCs now participate in additional Vanilla player lifecycle/selection semantics rather than being limited to earlier movement and explicit break/pickup operations.
+
+### Added / changed
+
+- **Vanilla-style player simulation:** C1 avatars now execute a bounded `ServerPlayer.doTick` survival phase without double-integrating custom C1 motion. Covers fire/lava, drowning, food/regeneration, item use and related events in headless GameTests. Includes configurable touch pickup with actor-wide safeguards for pending native actions.
+- **Player presence and world simulation:** native chunk tracking follows section movement; optional controlled `PlayerList` membership supports player selectors and login/logout hooks, with rollback and disposal fencing. NPCs can affect server player counts and third-party login handlers.
+- **Vanilla persistence:** statistics and advancement persistence uses the appropriate Vanilla or C1 lifecycle writer; avoid competing writes when avatars are listed.
+- **Operator player actions:** attack, select/use items, sleep/wake and limited container actions through server-side policy checks. These are operator actions; they are not yet autonomously dispatched or universally ledgered by AI.
+- **Guarded placement and block use:** PAP research/implementation added explicit place/use action contracts, ledger/fences, native claim checks and limited Manager controls. Place/use supports a restricted set of interactions; it is not unrestricted world editing.
+- **Public verification:** parity GameTests, datapack and PowerShell campaign, PAP tests, bounded 1/3/5/10-NPC benchmark scaffolding and typed receipts. Test files are part of the public source; raw worlds, run logs and benchmarking evidence are excluded.
+
+### CI and packaging
+
+- Preserved the **already green** GitHub `main` Linux Backend and Windows PowerShell CI configuration and the Windows-only unittest guard rather than reverting to the RAR's older single-Ubuntu workflow.
+- Retained Java/Python source, test fixtures and public datapack sources; removed workstation secrets, world saves, binary caches, AI-agent workspace, raw parity measurements and local reports. Updated Forge/Python versions to `0.3.0-alpha.1` / `0.3.0a1`.
+- The public package keeps prior release notes; it does not make a GitHub commit, tag or push.
+
+### Verification boundaries / known limitations
+
+- Developer-source reports include repeated Forge GameTest and backend regression PASS for the new subsystems, but the **current public ZIP requires a fresh Windows JDK 17 Forge build and Owner gameplay acceptance** before asserting an end-to-end parity release.
+- Human-vs-NPC behavior under identical conditions, connected-player networking, dedicated server, full portal/respawn semantics, real Save/Quit persistence, non-overlapping 1/3/5/10 MSPT acceptance and crash-window world-mutation idempotency remain unverified or partial.
+- `PlayerList` members count toward player limits; TAB may display internal profile names. Vanilla `playerdata` writes are not authoritative for C1 inventory. PAP deterministic approach movement is blocked pending a C2/AI decision; limited interaction/placement is not automatic resource gathering.
+
+---
+
 NPCortex follows **milestone-based alpha versioning**; entries document features added to the public source and verification boundaries, not production certification. Older milestones and exact commits remain available in the [GitHub history](https://github.com/SIRP00M/NPCortex/commits/main).
 
 ## CI follow-up — `v0.2.7-alpha.1` (no version bump)

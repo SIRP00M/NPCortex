@@ -37,6 +37,14 @@ public final class NPCortex {
         MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onLevelSave);
         MinecraftForge.EVENT_BUS.addListener(NativeEffectRuntime::onItemPickup);
+        MinecraftForge.EVENT_BUS.addListener(C1SurvivalParity::onItemPickup);
+        MinecraftForge.EVENT_BUS.addListener(C1SurvivalParity::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(C1VanillaStatePersistence::onLevelSave);
+        MinecraftForge.EVENT_BUS.addListener(PlayerActionRuntime::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(PlayerActionRuntime::onServerStopping);
+        MinecraftForge.EVENT_BUS.addListener(PlayerTaskRuntime::onChat);
+        MinecraftForge.EVENT_BUS.addListener(PlayerTaskRuntime::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(PlayerTaskRuntime::onServerStopping);
         // TEMP Test-5 acceptance harness only.
         MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(CPlusTest5Runtime::onServerStopping);
@@ -81,6 +89,7 @@ public final class NPCortex {
                                 .then(C1P1CLifecycleCommands.knockback())
                                 .then(C1P1CLifecycleCommands.kill())
                                 .then(C1P1CLifecycleCommands.respawn())
+                                .then(C1ActionCommands.build())
                                 .then(C1P1CLifecycleCommands.dimension())
                                 .then(C1P1InventoryCommands.build())
                         .then(C1P1InventoryCommands.equipment())

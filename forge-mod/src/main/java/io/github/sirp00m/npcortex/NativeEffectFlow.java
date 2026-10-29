@@ -235,7 +235,7 @@ final class NativeEffectFlow {
 
     // ------------------------------------------------------------------------------------------------ binding
     /** Server thread. Starts the handshake when needed; completes with null on success or the refusal text. */
-    private CompletableFuture<String> ensureBound(Actor actor) {
+    CompletableFuture<String> ensureBound(Actor actor) {
         if (bound(actor.session())) return CompletableFuture.completedFuture(null);
         if (binding) return CompletableFuture.completedFuture("Binding with the backend is in progress; try again in a moment.");
         if (bindProblem != null && env.tick() < bindRetryTick) return CompletableFuture.completedFuture(bindProblem);
@@ -1075,26 +1075,26 @@ final class NativeEffectFlow {
     }
 
     // ------------------------------------------------------------------------------------------------ helpers
-    private static JsonObject identity(JsonObject reserve) {
+    static JsonObject identity(JsonObject reserve) {
         JsonObject o = new JsonObject();
         for (String key : new String[]{"task_id", "attempt_id", "world_id", "actor_id", "session_id", "requester_id"}) o.add(key, reserve.get(key));
         return o;
     }
 
-    private static boolean echoes(JsonObject reply, JsonObject sent, String state) {
+    static boolean echoes(JsonObject reply, JsonObject sent, String state) {
         if (reply == null || !state.equals(str(reply, "state"))) return false;
         for (String key : new String[]{"task_id", "attempt_id", "world_id", "actor_id", "session_id"})
             if (!sent.has(key) || !sent.get(key).equals(reply.get(key))) return false;
         return !sent.has("requester_id") || !reply.has("requester_id") || sent.get("requester_id").equals(reply.get("requester_id"));
     }
 
-    private static boolean refused(Throwable error) {
+    static boolean refused(Throwable error) {
         for (int depth = 0; error != null && depth < 8; depth++, error = error.getCause())
             if (error instanceof BackendRefusal) return true;
         return false;
     }
 
-    private static String describe(Throwable error) {
+    static String describe(Throwable error) {
         for (Throwable t = error; t != null && t.getCause() != t; t = t.getCause())
             if (t instanceof BackendRefusal r) return clip(r.getMessage());
         return error == null ? "unexpected reply" : "transport failure: " + clip(error.toString());

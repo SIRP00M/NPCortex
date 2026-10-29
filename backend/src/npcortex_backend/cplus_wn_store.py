@@ -329,7 +329,8 @@ class NativeEffectStore(ReadOnlyGraph):
                 ('cplus_we_runs', ('RESERVED', 'EXECUTING', 'HOLD_IN_DOUBT'), 'a no-op world-effect attempt'),
                 ('cplus_e3_g2_moves', ('RESERVED', 'C2_ACCEPTED', 'HOLD', 'CANCEL_PENDING'), 'an E3 movement attempt'),
                 ('cplus_e1_tasks', ('QUEUED', 'HOLD', 'DISPATCHING', 'CANCEL_PENDING'), 'an E1 FIFO task'),
-                ('cplus_m04_runs', ('RESERVED', 'ACTIVE', 'HOLD'), 'an M04 task')):
+                ('cplus_m04_runs', ('RESERVED', 'ACTIVE', 'HOLD'), 'an M04 task'),
+                ('cplus_pap_runs', ('RESERVED', 'EXECUTING', 'HOLD_IN_DOUBT'), 'a PAP place/use attempt')):
             if has(table) and db.execute(
                     f"SELECT 1 FROM {table} WHERE world_id=? AND actor_id=? AND state IN ({','.join('?' for _ in states)}) LIMIT 1",
                     (world, actor, *states)).fetchone():
@@ -417,6 +418,11 @@ class NativeEffectStore(ReadOnlyGraph):
     def _claim(db, body, target, now):
         world, dim = body['world_id'], body['dimension_id']
         if target['kind'] == 'block':
+            # PAP-G2: place/use claims live in cplus_pap_claims; consult them in THIS transaction before ours is inserted.
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cplus_pap_claims'").fetchone() and db.execute(
+                    "SELECT 1 FROM cplus_pap_claims WHERE world_id=? AND dimension_id=? AND bx=? AND by=? AND bz=? "
+                    "AND state IN ('ACTIVE','HELD')", (world, dim, target['x'], target['y'], target['z'])).fetchone():
+                raise GraphConflict('CLAIM_CONFLICT: that block cell is claimed by a place/use action')
             try:
                 db.execute('''INSERT INTO cplus_wn_claims (task_id,world_id,dimension_id,actor_id,kind,bx,by,bz,state,created_at,
                     updated_at) VALUES (?,?,?,?, 'block',?,?,?, 'ACTIVE',?,?)''',

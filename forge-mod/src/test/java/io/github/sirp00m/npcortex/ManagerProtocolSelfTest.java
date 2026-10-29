@@ -149,7 +149,9 @@ public final class ManagerProtocolSelfTest {
                 new ManagerProtocol.NativeReq(20, "Reika", ManagerProtocol.NATIVE_PREVIEW_BREAK, ""),
                 new ManagerProtocol.NativeReq(21, "Reika", ManagerProtocol.NATIVE_PREVIEW_PICKUP, ""),
                 new ManagerProtocol.NativeReq(22, "Reika", ManagerProtocol.NATIVE_CONFIRM, nonce),
-                new ManagerProtocol.NativeReq(23, "Reika", ManagerProtocol.NATIVE_CANCEL, "")))
+                new ManagerProtocol.NativeReq(23, "Reika", ManagerProtocol.NATIVE_CANCEL, ""),
+                new ManagerProtocol.NativeReq(25, "Reika", ManagerProtocol.NATIVE_PREVIEW_PLACE, ""),
+                new ManagerProtocol.NativeReq(26, "Reika", ManagerProtocol.NATIVE_PREVIEW_USE, "")))
             check(ManagerProtocol.decodeToServer(ManagerProtocol.encode(m)).equals(m), "native round trip " + m);
         byte[] nativeBytes = ManagerProtocol.encode(new ManagerProtocol.NativeReq(24, "Reika", ManagerProtocol.NATIVE_PREVIEW_BREAK, ""));
         check(nativeBytes.length == 1 + 1 + 8 + 2 + 5 + 1 + 2, "a preview request carries no coordinate, block, item or UUID: " + nativeBytes.length);
@@ -164,7 +166,7 @@ public final class ManagerProtocolSelfTest {
             try { ManagerProtocol.encode(bad); check(false, "encode " + bad); } catch (java.io.IOException expected) { check(true, "refused at encode"); }
         }
         // hand-built wire bytes that bypass the encoder are refused by the decoder too
-        for (int action : new int[]{4, 255}) {
+        for (int action : new int[]{6, 7, 255}) {
             java.io.ByteArrayOutputStream wire = new java.io.ByteArrayOutputStream();
             java.io.DataOutputStream out = new java.io.DataOutputStream(wire);
             out.writeByte(ManagerProtocol.VERSION); out.writeByte(7); out.writeLong(30); out.writeShort(5); out.write("Reika".getBytes());

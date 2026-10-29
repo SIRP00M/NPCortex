@@ -13,6 +13,7 @@ from .cplus_e3_preview import MovePreviewStore
 from .cplus_e3_g2_motion import GuardedMotionStore
 from .cplus_we_ledger import WorldEffectStore
 from .cplus_wn_store import NativeEffectStore
+from .cplus_pap_store import PlayerActionStore
 from .cplus_local_auth import read_secret
 import re
 import sqlite3
@@ -43,6 +44,9 @@ WE_ROUTES = tuple('/v1/cplus/we/' + n for n in ('reserve', 'start', 'finalize', 
 # Stage 4 native break/pickup ledger (additive; the D+ no-op routes above are unchanged).
 WN_OPS = ('bind', 'saved', 'rebind', 'reserve', 'start', 'finalize', 'cancel', 'hold', 'repair', 'reconcile', 'status', 'active')
 WN_ROUTES = tuple('/v1/cplus/wn/' + n for n in WN_OPS)
+# PAP-G2 place_block / use_block ledger (additive; binding is shared with the native store, so there is no pa/bind).
+PA_OPS = ('reserve', 'start', 'finalize', 'cancel', 'hold', 'reconcile', 'status', 'active')
+PA_ROUTES = tuple('/v1/cplus/pa/' + n for n in PA_OPS)
 ACTOR_GET = re.compile(r"^/v1/actors/([^/]+)$")
 PROFILE_GET = re.compile(r"^/v1/actors/([^/]+)/profile$")
 PROFILE_REVISIONS = re.compile(r"^/v1/actors/([^/]+)/profile/revisions$")
@@ -127,6 +131,12 @@ def make_handler(service):
             if "wn" not in bridge_holder:
                 bridge_holder["wn"] = NativeEffectStore(service._require_world_store().db_path)
             return bridge_holder["wn"]
+
+    def cplus_pa_store():
+        with initialization_lock:
+            if "pa" not in bridge_holder:
+                bridge_holder["pa"] = PlayerActionStore(service._require_world_store().db_path)
+            return bridge_holder["pa"]
 
     class Handler(BaseHTTPRequestHandler):
         def _json(self, status: int, payload: dict):
@@ -303,7 +313,7 @@ def make_handler(service):
         def do_POST(self):
             if not self._host_ok(body_follows=True):
                 return
-            known_route = (self.path in WE_ROUTES or self.path in WN_ROUTES or self.path in (
+            known_route = (self.path in WE_ROUTES or self.path in WN_ROUTES or self.path in PA_ROUTES or self.path in (
                 "/v1/chat", "/v1/worlds", "/v1/actors", "/v1/actor-chat",
                 "/v1/dialogues", "/v1/social-runs", "/v1/agent/goals",
                 "/v1/cplus/f1/events", "/v1/cplus/f1/status", "/v1/cplus/f1/confirm", "/v1/cplus/f1/recovery",
@@ -351,7 +361,7 @@ def make_handler(service):
             except ValueError:
                 self.close_connection = True
                 return self._error(400, "invalid_request", "Invalid Content-Length")
-            max_body = 24000 if self.path in WE_ROUTES or self.path in WN_ROUTES or self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
+            max_body = 24000 if self.path in WE_ROUTES or self.path in WN_ROUTES or self.path in PA_ROUTES or self.path in ("/v1/cplus/e/preview", "/v1/cplus/e1/submit", "/v1/cplus/e2/dispatch", "/v1/cplus/e2/verify", "/v1/cplus/e3/preview",
                 "/v1/cplus/e3/reserve", "/v1/cplus/e3/report", "/v1/cplus/e3/status",
                 "/v1/cplus/e3/abandon", "/v1/cplus/e3/finalize", "/v1/cplus/e3/cancel-begin", "/v1/cplus/e3/cancel-ack") else MAX_BODY
             if self.path == "/v1/actors" or PROFILE_REVISIONS.fullmatch(self.path):
@@ -384,6 +394,13 @@ def make_handler(service):
                     return self._json(200, getattr(ledger, op)(data))
                 except GraphConflict as exc:
                     return self._error(409, "we_conflict", str(exc))
+            if self.path in PA_ROUTES:
+                if not self._token_ok():
+                    return self._error(403, "forbidden", "C+ local diagnostic bridge not authorized")
+                try:
+                    return self._json(200, getattr(cplus_pa_store(), self.path.rsplit("/", 1)[1])(data))
+                except GraphConflict as exc:
+                    return self._error(409, "pa_conflict", str(exc))
             if self.path in WN_ROUTES:
                 if not self._token_ok():
                     return self._error(403, "forbidden", "C+ local diagnostic bridge not authorized")

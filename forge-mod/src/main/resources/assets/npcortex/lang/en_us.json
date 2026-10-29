@@ -7,6 +7,8 @@
   "npcortex.manager.noop.reconcile": "Rec.",
   "npcortex.manager.native.break": "Brk",
   "npcortex.manager.native.pickup": "Pck",
+  "npcortex.manager.native.place": "Plc",
+  "npcortex.manager.native.use": "Use",
   "npcortex.manager.native.confirm": "Confirm %s",
   "npcortex.manager.native.cancel": "Cancel",
   "npcortex.manager.refresh": "Refresh",

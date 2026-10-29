@@ -98,7 +98,11 @@ final class CharacterManagerService {
             // Rec.: a native attempt (break/pickup) is judged first; anything else is the accepted no-op reconcile, unchanged.
             return NativeEffectRuntime.reconcile(minecraft, requester, npcName).thenCompose(result ->
                     "NO_NATIVE_ATTEMPT".equals(result.state())
-                            ? WorldEffectRuntime.request(minecraft, requester, npcName, true)
+                            ? PlayerActionRuntime.reconcile(minecraft, requester, npcName).thenCompose(pap ->
+                                    "NO_PLAYER_ACTION".equals(pap.state())
+                                            ? WorldEffectRuntime.request(minecraft, requester, npcName, true)
+                                            : CompletableFuture.completedFuture(new WorldEffectFlow.Result(
+                                                    WorldEffectFlow.Kind.valueOf(pap.kind().name()), pap.message(), pap.state())))
                             : CompletableFuture.completedFuture(new WorldEffectFlow.Result(
                                     WorldEffectFlow.Kind.valueOf(result.kind().name()), result.message(), result.state())));
         }
@@ -107,8 +111,15 @@ final class CharacterManagerService {
             return switch (action) {
                 case ManagerProtocol.NATIVE_PREVIEW_BREAK -> NativeEffectRuntime.preview(minecraft, requester, npcName, NativeEffectFlow.Action.BREAK);
                 case ManagerProtocol.NATIVE_PREVIEW_PICKUP -> NativeEffectRuntime.preview(minecraft, requester, npcName, NativeEffectFlow.Action.PICKUP);
-                case ManagerProtocol.NATIVE_CONFIRM -> NativeEffectRuntime.confirm(minecraft, requester, npcName, nonce);
-                default -> NativeEffectRuntime.cancel(minecraft, requester, npcName);
+                case ManagerProtocol.NATIVE_PREVIEW_PLACE -> PlayerActionRuntime.preview(minecraft, requester, npcName, PlayerActionFlow.Action.PLACE);
+                case ManagerProtocol.NATIVE_PREVIEW_USE -> PlayerActionRuntime.preview(minecraft, requester, npcName, PlayerActionFlow.Action.USE);
+                case ManagerProtocol.NATIVE_CONFIRM -> PlayerActionRuntime.hasPreview(minecraft, requester, npcName)
+                        ? PlayerActionRuntime.confirm(minecraft, requester, npcName, nonce)
+                        : NativeEffectRuntime.confirm(minecraft, requester, npcName, nonce);
+                default -> {                                           // a preview lives in exactly one of the two flows; cancel both
+                    PlayerActionRuntime.cancel(minecraft, requester, npcName);
+                    yield NativeEffectRuntime.cancel(minecraft, requester, npcName);
+                }
             };
         }
     }

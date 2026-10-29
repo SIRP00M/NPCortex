@@ -1,0 +1,51 @@
+{
+  "milestone": "M04 — First Real World Interaction",
+  "strategy": "Hybrid D-Lite + E, E-M04-1 scope",
+  "date": "2026-10-26",
+  "baseline": "NPCortex_M03_AllTests_FunctionLoadFix_FullRepository_CANDIDATE.zip + M03 Live Evidence Kit overlay",
+  "latest_codex_local_workspace_accessed": false,
+  "quality_gates": {
+    "Gate0_auth_claims": {
+      "status": "BLOCKED",
+      "reason": "Original command provenance and durable actor/target claims not implemented/verified"
+    },
+    "Gate1_observation_permission": {
+      "status": "PARTIAL",
+      "reason": "Read-only target preview implemented; mutation permission UNKNOWN"
+    },
+    "Gate2_equip_unequip": {
+      "status": "IMPLEMENTED_SOURCE_PENDING_GAMEPLAY",
+      "reason": "C1 non-destructive unequip and commit/sync split; Forge Build and real gameplay pending"
+    },
+    "Gate3_native_mining": {
+      "status": "NOT_IMPLEMENTED",
+      "reason": "Native cancellation/quiescence unverified"
+    },
+    "Gate4_pickup": {
+      "status": "NOT_IMPLEMENTED",
+      "reason": "Native physical pickup and custody not implemented"
+    },
+    "Gate5_effect_recovery": {
+      "status": "CONTRACT_ONLY",
+      "reason": "Pure step contract, no durable live effect coordinator"
+    },
+    "Gate6_end_to_end": {
+      "status": "NOT_IMPLEMENTED",
+      "reason": "Prerequisite safety gates not accepted"
+    },
+    "GateP_performance": {
+      "status": "NOT_TESTED",
+      "reason": "No 1/3/5/10 NPC runtime tests"
+    }
+  },
+  "observed_checks": {
+    "pure_java_m04_contract": "PASS_13_ASSERTIONS",
+    "python_m04_contract": "PASS_5_TESTS",
+    "python_m04_source_boundary": "PASS_11_CHECKS",
+    "existing_g3_contract": "PASS_8_TESTS",
+    "forge_build": "BLOCKED_GRADLE_8_8_DISTRIBUTION_NOT_AVAILABLE",
+    "full_backend_suite": "TIMEOUT",
+    "minecraft_gameplay": "PENDING"
+  },
+  "safety": "No new world mutation entrypoints, no pending records cleared, no GitHub operations"
+}

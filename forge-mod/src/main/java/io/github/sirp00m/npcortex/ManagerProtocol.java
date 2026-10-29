@@ -53,7 +53,8 @@ final class ManagerProtocol {
 
     /** Stage 4 native action requests. Ordinals are on the wire. The client names an NPC and, for CONFIRM, echoes an opaque nonce
      * the server issued: it never sends a coordinate, a block, an item or an identity. */
-    static final int NATIVE_PREVIEW_BREAK = 0, NATIVE_PREVIEW_PICKUP = 1, NATIVE_CONFIRM = 2, NATIVE_CANCEL = 3;
+    static final int NATIVE_PREVIEW_BREAK = 0, NATIVE_PREVIEW_PICKUP = 1, NATIVE_CONFIRM = 2, NATIVE_CANCEL = 3,
+            NATIVE_PREVIEW_PLACE = 4, NATIVE_PREVIEW_USE = 5;   // PAP-G5: additive codes; 0..3 keep their accepted meaning
     static final int NONCE_LENGTH = 32;
     private static final Pattern NONCE = Pattern.compile("[0-9a-f]{32}");
 
@@ -154,7 +155,7 @@ final class ManagerProtocol {
 
     /** @return an English error message, or null when the native request is well-formed. */
     static String validateNative(NativeReq m) {
-        if (m.action() < NATIVE_PREVIEW_BREAK || m.action() > NATIVE_CANCEL) return "Unknown native action.";
+        if (m.action() < NATIVE_PREVIEW_BREAK || m.action() > NATIVE_PREVIEW_USE) return "Unknown native action.";
         String nonce = m.nonce() == null ? "" : m.nonce();
         if (m.action() == NATIVE_CONFIRM ? !NONCE.matcher(nonce).matches() : !nonce.isEmpty()) return "Malformed native request.";
         return null;

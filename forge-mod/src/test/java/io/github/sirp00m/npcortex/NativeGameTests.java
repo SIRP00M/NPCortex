@@ -78,6 +78,9 @@ public final class NativeGameTests {
             this.level = helper.getLevel();
             this.server = level.getServer();
             this.prefix = "G" + RUN + (++counter);
+            // The accepted native/PAP pickup fixtures stage a drop at the NPC and then run the explicit ledgered pickup; vanilla touch pickup
+            // (default since D1) would take it first. Parity tests of pickup itself re-enable it AFTER building their fixture.
+            C1SurvivalParity.autoPickup = false;
             // The test world is natural terrain: gravel just above the cleared arena can fall into it when disturbed and block an NPC's
             // line of sight (seen in the real-backend run and, rarely, here). Cap the arena; fixture only, no product change.
             for (int x = 0; x < 32; x++) for (int z = 0; z < 32; z++) for (int y = 9; y <= 10; y++)
@@ -201,11 +204,17 @@ public final class NativeGameTests {
         List<ItemEntity> drops(BlockPos around, double r) { return level.getEntitiesOfClass(ItemEntity.class, new AABB(around).inflate(r)); }
 
         void finish() {
+            releaseAvatars();
+            NativeEffectRuntime.clearOverrides();
+            helper.succeed();
+        }
+
+        /** Despawn this fixture's avatars without ending the test (multi-step tests). */
+        void releaseAvatars() {
             for (C1PlayerAvatar av : avatars) {
                 try { C1P0Runtime.despawn(server, nameOf(av)); } catch (RuntimeException ignored) { }
             }
-            NativeEffectRuntime.clearOverrides();
-            helper.succeed();
+            avatars.clear();
         }
 
         private String nameOf(C1PlayerAvatar av) {
@@ -238,6 +247,7 @@ public final class NativeGameTests {
         ItemEntity drop = drops.get(0);
         drop.setNoPickUpDelay();
         int before = f.itemCount(avatar, Items.OAK_LOG);
+        C1SurvivalParity.autoPickup = true;   // this spike proves raw vanilla playerTouch; the fixture pinned the explicit contract
         drop.playerTouch(avatar);
         need(f.itemCount(avatar, Items.OAK_LOG) == before + 1, "playerTouch did not move the log into the inventory");
         f.finish();

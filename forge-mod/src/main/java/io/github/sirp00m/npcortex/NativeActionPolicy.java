@@ -40,7 +40,23 @@ final class NativeActionPolicy {
     static final int MAX_LIST = 16;
     static final int MAX_REGIONS = 8;
     static final long COORD = 30_000_000L;
-    static final Set<String> ACTIONS = Set.of("break_block", "pickup_item");
+    static final Set<String> ACTIONS = Set.of("break_block", "pickup_item", "place_block", "use_block");
+
+    /** PAP-G5 code-level ceiling, applied on top of the Owner's file (a listed block is still refused here). place_block: blocks whose
+     * placement can spread, fall, explode, open a portal, create automation or a container. use_block: ONLY these block families. */
+    static final Set<String> PLACE_DENY = Set.of("minecraft:tnt", "minecraft:fire", "minecraft:soul_fire", "minecraft:lava", "minecraft:water",
+            "minecraft:bedrock", "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block",
+            "minecraft:structure_block", "minecraft:jigsaw", "minecraft:structure_void", "minecraft:barrier", "minecraft:light",
+            "minecraft:end_portal", "minecraft:end_portal_frame", "minecraft:end_gateway", "minecraft:nether_portal", "minecraft:spawner",
+            "minecraft:respawn_anchor", "minecraft:dispenser", "minecraft:dropper", "minecraft:hopper", "minecraft:piston",
+            "minecraft:sticky_piston", "minecraft:observer", "minecraft:sand", "minecraft:red_sand", "minecraft:gravel", "minecraft:anvil",
+            "minecraft:chipped_anvil", "minecraft:damaged_anvil", "minecraft:dragon_egg", "minecraft:scaffolding", "minecraft:redstone_block");
+    static boolean placeCeilingDenies(String blockId) {
+        return PLACE_DENY.contains(blockId) || blockId.endsWith("_concrete_powder") || blockId.endsWith("_shulker_box");
+    }
+    static boolean useCeilingAllows(String blockId) {
+        return blockId.equals("minecraft:lever") || (blockId.startsWith("minecraft:") && blockId.endsWith("_button"));
+    }
 
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9_-]{1,64}");
     private static final Pattern DIMENSION = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
@@ -147,7 +163,7 @@ final class NativeActionPolicy {
             if (!actor.equals("*") && !ACTOR.matcher(actor).matches()) throw new IllegalArgumentException("bad actor name");
             actors.add(actor.equals("*") ? "*" : actor.toLowerCase(Locale.ROOT));
         }
-        Set<String> blocks = list(o, "blocks", RESOURCE, actions.contains("break_block"));
+        Set<String> blocks = list(o, "blocks", RESOURCE, actions.contains("break_block") || actions.contains("place_block") || actions.contains("use_block"));
         Set<String> items = list(o, "items", RESOURCE, actions.contains("pickup_item"));
         return new Entry(id, uuid, Set.copyOf(actions), Set.copyOf(dimensions), Set.copyOf(actors), Set.copyOf(blocks),
                 Set.copyOf(items), regions(o));
@@ -287,6 +303,43 @@ final class NativeActionPolicy {
         if (!sawResource) return deny("that " + (action.equals("break_block") ? "block" : "item") + " is not on the allow-list");
         return deny(action.equals("break_block") ? "target and its 3x3x3 neighbourhood are not inside an allowed region"
                 : "item is not inside an allowed region");
+    }
+
+    /** Fail-closed decision for one block placement: {@code blockId} is the block that must appear at (x,y,z), (sx,sy,sz) the clicked
+     * support block. The whole 3x3x3 neighbourhood of the placed cell must lie inside an allowed region. */
+    Decision decidePlace(UUID requester, String dimension, String actorName, String blockId, int x, int y, int z, int sx, int sy, int sz) {
+        if (blockId != null && placeCeilingDenies(blockId)) return deny("placing " + clip(blockId) + " is refused by the built-in safety ceiling");
+        return decideBlock("place_block", requester, dimension, actorName, blockId, x, y, z, 1, sx, sy, sz);
+    }
+
+    /** Fail-closed decision for one block use (lever or button only). The 5x5x5 neighbourhood must lie inside an allowed region,
+     * because redstone power reaches two blocks (a strongly powered block powers its neighbours). Wiring beyond it is not bounded. */
+    Decision decideUse(UUID requester, String dimension, String actorName, String blockId, int x, int y, int z) {
+        if (blockId != null && !useCeilingAllows(blockId)) return deny("using " + clip(blockId) + " is refused by the built-in safety ceiling (lever and buttons only)");
+        return decideBlock("use_block", requester, dimension, actorName, blockId, x, y, z, 2, x, y, z);
+    }
+
+    private Decision decideBlock(String action, UUID requester, String dimension, String actorName, String blockId, int x, int y, int z,
+                                 int radius, int sx, int sy, int sz) {
+        if (loadProblem != null) return deny("policy unavailable: " + loadProblem);
+        if (requester == null || dimension == null || actorName == null || blockId == null) return deny("incomplete request");
+        String actor = actorName.toLowerCase(Locale.ROOT);
+        boolean sawRequester = false, sawAction = false, sawBlock = false;
+        for (Entry e : entries) {
+            if (!e.requester().equals(requester)) continue;
+            sawRequester = true;
+            if (!e.actions().contains(action) || !e.dimensions().contains(dimension)
+                    || !(e.actors().contains("*") || e.actors().contains(actor))) continue;
+            sawAction = true;
+            if (!e.blocks().contains(blockId)) continue;
+            sawBlock = true;
+            for (Region region : e.regions())
+                if (region.containsBox(x, y, z, radius) && region.contains(sx, sy, sz)) return new Decision(true, "allowed by entry " + e.id(), e.id(), sha256);
+        }
+        if (!sawRequester) return deny("requester is not on the native allow-list");
+        if (!sawAction) return deny("no allow-list entry covers this action, dimension and actor");
+        if (!sawBlock) return deny("that block is not on the allow-list for " + action);
+        return deny("the target neighbourhood is not inside an allowed region");
     }
 
     private Decision deny(String reason) { return new Decision(false, reason, "", sha256); }

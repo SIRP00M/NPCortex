@@ -1,0 +1,2 @@
+tellraw @s {"text":"[NPCortex PAP] 1 /function npcortex_pap:arena  2 install the allow-list  3 give the NPC blocks: /npcortex c1 give <npc> ...  4 look at a block and chat: <npc>, place cobblestone | <npc>, use the lever | <npc>, break that log","color":"gold"}
+tellraw @s {"text":"Every world effect needs your answer: <npc>, confirm  (or <npc>, cancel). Nothing happens without it. Then run /function npcortex_pap:check/all","color":"gray"}

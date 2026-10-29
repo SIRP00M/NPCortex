@@ -8,7 +8,7 @@
 
 ### Windows instructions
 1. Back up the full repository and work on a COPY of the test world. Replace the previous code with this full Candidate while preserving local `.env`, SQLite, world saves, logs and config. Do not delete HOLD/Outbox records.
-2. `cd C:\path\to\NPCortex` then `python .\scripts\test_m03_alltests.py` and `.\scripts\dev-forge.ps1 -Task build` (JDK 17).
+2. `cd F:\AI\NPCortex` then `python .\scripts\test_m03_alltests.py` and `.\scripts\dev-forge.ps1 -Task build` (JDK 17).
 3. Restart Minecraft/runClient so it uses the freshly built mod (build alone doesn't hot-reload Java). Datapack content is unchanged; reinstall only if the world does not contain it.
 4. Join as an OP, run `/reload` and check `forge-mod/run/logs/latest.log` for function parse errors.
 5. Run `/function npcortex_m03_suite:enable`, then `/function npcortex_m03_suite:status` and `/function npcortex_m03_suite:menu`. Expected: bridge enabled message + menu, and no Unknown Function. If enable says `HOLD: already enabled`, the session is already enabled; verify status.

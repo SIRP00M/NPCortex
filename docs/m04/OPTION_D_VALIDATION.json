@@ -1,0 +1,36 @@
+{
+  "milestone": "M04 \u2014 First Real World Interaction",
+  "option": "D \u2014 Big Sprint + Automated Gameplay Harness",
+  "date": "2026-10-26",
+  "current_status": "PARTIAL / MUTATION DISABLED; GATES 3-6 HOLD",
+  "baseline": "NPCortex_M04_Hybrid_DLite_E_Foundation_FullRepository_CANDIDATE.zip (not local F: drive)",
+  "changes": {
+    "backend_store": "Implemented offline/additive/dormant SQLite metadata store",
+    "forge_capture": "Added read-only capture, preview-auto; Forge compile pending",
+    "datapack": "Added optional 1.20.1 read-only acceptance menu",
+    "evidence_report": "Added read-only cross-system correlation script",
+    "world_mutation": "NOT IMPLEMENTED; no break/pickup/permission grant"
+  },
+  "verification": {
+    "python_m04_contract_and_store": "PASS: 26 tests",
+    "python_m04_evidence_reviewer": "PASS: 4 tests",
+    "static_m04_foundation": "PASS: 11 checks",
+    "static_m04_option_d": "PASS: 13 checks",
+    "pure_java_m04_contract": "PASS: 13 assertions, javac --release 17 JDK21 runtime",
+    "forge_build": "BLOCKED: gradle 8.8 unavailable/unresolvable",
+    "backend_full_suite": "TIMEOUT after 120 seconds; no passing result",
+    "minecraft_gameplay": "PENDING",
+    "real_native_mining_pickup": "NOT IMPLEMENTED / HOLD"
+  },
+  "preserve": "No Git/GitHub operations, no SQLite or world modifications, no replay/reset/release of M03 HOLD records",
+  "quality_gates": {
+    "G0": "PARTIAL/HOLD",
+    "G1": "PARTIAL/HOLD",
+    "G2": "SOURCE IMPLEMENTED; GAMEPLAY PENDING",
+    "G3": "HOLD - native cancellation unproven",
+    "G4": "HOLD - pickup unavailable",
+    "G5": "METADATA IMPLEMENTED; LIVE EFFECT RECOVERY HOLD",
+    "G6": "HOLD",
+    "Performance": "PENDING"
+  }
+}

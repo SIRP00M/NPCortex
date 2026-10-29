@@ -967,6 +967,8 @@ final class C1P1MotionRuntime {
                     || !C1P1CLifecycleRuntime.mayRestore(server, avatar.getUUID())) continue;
             Vec3 d = step.displacement();
             avatar.doCheckFallDamage(d.x, d.y, d.z, step.onGround());
+            // The real movement-packet handler also feeds walk/sprint/jump statistics and exhaustion (hunger parity).
+            avatar.checkMovementStatistics(d.x, d.y, d.z);
         }
     }
 

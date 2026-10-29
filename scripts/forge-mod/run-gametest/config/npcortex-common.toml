@@ -1,0 +1,4 @@
+#AI backend settings. On a dedicated server, use the server's backend address.
+[backend]
+	#Local HTTP backend URL (no trailing slash)
+	url = "http://127.0.0.1:18766"

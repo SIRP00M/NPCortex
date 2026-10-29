@@ -23,7 +23,10 @@ public final class CPlusTransport {
             // Stage 4 native routes: idempotent by (task, canonical evidence hash); IDENTICAL bytes are re-sent, never new evidence.
             "/v1/cplus/wn/bind","/v1/cplus/wn/saved","/v1/cplus/wn/reserve","/v1/cplus/wn/start","/v1/cplus/wn/finalize",
             "/v1/cplus/wn/cancel","/v1/cplus/wn/hold","/v1/cplus/wn/repair","/v1/cplus/wn/reconcile","/v1/cplus/wn/status",
-            "/v1/cplus/wn/active");
+            "/v1/cplus/wn/active",
+            // PAP-G2 player-action routes (place_block / use_block): the same idempotency by (task, canonical evidence hash).
+            "/v1/cplus/pa/reserve","/v1/cplus/pa/start","/v1/cplus/pa/finalize","/v1/cplus/pa/cancel","/v1/cplus/pa/hold",
+            "/v1/cplus/pa/reconcile","/v1/cplus/pa/status","/v1/cplus/pa/active");
     public static final class Rejected extends IOException {
         public final int status;
         Rejected(int status,String detail){super("C+ HTTP="+status+" "+detail);this.status=status;}
